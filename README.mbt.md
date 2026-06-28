@@ -79,18 +79,17 @@ docs: update official test status
 
 ## 兼容性状态
 
-固定快照：2026-06-28，提交 `bcac9e3` 后。
+固定快照：2026-06-28，P11 日期时间 picture 修复阶段。
 
 ```text
-moon test: 155/155
-official comparable audit: eligible 1251, pass 788, fail 463, skip 431
+moon test: 156/156
+official comparable audit: eligible 1251, pass 827, fail 424, skip 431
 ```
 
 当前剩余失败最多的官方测试分组：
 
 ```text
-function-fromMillis 48
-function-tomillis 40
+function-tomillis 34
 function-signatures 30
 joins 28
 function-formatInteger 26
@@ -98,6 +97,7 @@ function-parseInteger 24
 parent-operator 20
 function-formatNumber 16
 sorting 16
+function-fromMillis 15
 object-constructor 14
 ```
 

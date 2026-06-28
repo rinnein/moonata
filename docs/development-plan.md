@@ -20,26 +20,26 @@
 | P8 | CLI 与集成 | moonata / cmd/main | 2 | 4 | ✅ 完成（CLI native 参数模式可用） |
 | P9 | 语义修复与函数补全 | evaluator / functions / value | 5 | 12 | ✅ 完成 |
 | P10 | 验收收尾与兼容性补齐 | value / evaluator / functions / docs | 4 | 7 | ✅ 完成 |
-| P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | ⏸ 暂停（788/1251 可比对用例通过） |
+| P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | 🚧 推进中（827/1251 可比对用例通过） |
 | 合计 | | | **26** | **66** | |
 
-> 当前固定快照（2026-06-28，提交 `bcac9e3` 后）：`moon test` 为 155/155 通过；`moon check`、`moon info` 通过；`moon fmt` 已执行。JSONata 官方可比对审计为 `eligible 1251 / pass 788 / fail 463 / skip 431`。
+> 当前固定快照（2026-06-28，P11 日期时间 picture 修复阶段）：`moon test` 为 156/156 通过；`moon check`、`moon info` 通过；`moon fmt` 已执行。JSONata 官方可比对审计为 `eligible 1251 / pass 827 / fail 424 / skip 431`。
 
 ### 1.1 当前暂停边界
 
-本轮已完成并提交到 `bcac9e3 feat: add basic formatNumber support`，按要求暂停继续修复。后续恢复时从 P11 继续，优先处理官方失败数最高的 group：
+P11 已完成第一轮日期时间 picture 修复，后续继续优先处理官方失败数最高的 group：
 
 | 排名 | 官方 group | 失败数 |
 | --- | --- | --- |
-| 1 | `function-fromMillis` | 48 |
-| 2 | `function-tomillis` | 40 |
-| 3 | `function-signatures` | 30 |
-| 4 | `joins` | 28 |
-| 5 | `function-formatInteger` | 26 |
-| 6 | `function-parseInteger` | 24 |
-| 7 | `parent-operator` | 20 |
-| 8 | `function-formatNumber` | 16 |
-| 9 | `sorting` | 16 |
+| 1 | `function-tomillis` | 34 |
+| 2 | `function-signatures` | 30 |
+| 3 | `joins` | 28 |
+| 4 | `function-formatInteger` | 26 |
+| 5 | `function-parseInteger` | 24 |
+| 6 | `parent-operator` | 20 |
+| 7 | `function-formatNumber` | 16 |
+| 8 | `sorting` | 16 |
+| 9 | `function-fromMillis` | 15 |
 | 10 | `object-constructor` | 14 |
 
 跳过项仅表示当前 CLI 审计 harness 无法直接比较，不表示通过或失败：`no_result 395`、`expr-file 23`、`timelimit 7`、`bindings 6`。

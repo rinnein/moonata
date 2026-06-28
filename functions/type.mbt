@@ -320,6 +320,7 @@ fn format_date_marker(
     "Y" => dt.year().to_string()
     "Y0001" => pad4(dt.year())
     "Y9,999,*" => group_thousands(dt.year())
+    "X0001" => pad4(iso_week_year(dt))
     "M" | "M#1" => dt.month().to_string()
     "M01" => pad2(dt.month())
     "M1,2" => pad2(dt.month())
@@ -340,6 +341,10 @@ fn format_date_marker(
     "s" | "s#1" => pad2(dt.second())
     "s01" => pad2(dt.second())
     "f" | "f001" => pad3(dt.nanosecond() / 1_000_000)
+    "d" => dt.ordinal().to_string()
+    "d001" => pad3(dt.ordinal())
+    "W" => iso_week(dt).to_string()
+    "W01" => pad2(iso_week(dt))
     "Z" => offset_colon(offset_seconds)
     "Z0" => offset_compact(offset_seconds)
     "Z01:01" => offset_colon(offset_seconds)
@@ -358,6 +363,7 @@ fn format_date_marker(
     "z" => "GMT\{offset_colon(offset_seconds)}"
     "F" => weekday_name(dt, "lower")
     "F0" => weekday_number(dt).to_string()
+    "F1" => weekday_number(dt).to_string()
     "FNn" => weekday_name(dt, "title")
     "FN" => weekday_name(dt, "upper")
     "FNn,3-3" => weekday_name(dt, "title").unsafe_substring(start=0, end=3)
@@ -366,7 +372,7 @@ fn format_date_marker(
     "E" | "C" => "ISO"
     _ =>
       if marker.length() > 0 && marker.get_char(0) == Some('Y') {
-        if marker.contains(",2-2") || marker.contains(",2") {
+        if marker.contains(",2-2") {
           pad2(dt.year() % 100)
         } else {
           dt.year().to_string()
@@ -398,7 +404,14 @@ fn parse_date_picture(
   picture : String,
 ) -> Double raise @error.JsonataError {
   match picture {
+    "[Y1]" => millis_from_date(parse_int_strict(s), 1, 1)
     "[Y0001]-[M01]-[D01]" => parse_iso_millis(s)
+    "[Y]-[M]-[D]" => parse_iso_millis(s)
+    "[Y0001][M01]" => parse_compact_date(s, has_day=false, has_time=false)
+    "[Y,*-4][M01]" => parse_compact_date(s, has_day=false, has_time=false)
+    "[Y0001][M01][D01]" => parse_compact_date(s, has_day=true, has_time=false)
+    "[Y0000][M00][D00][H00][m00][s00]" =>
+      parse_compact_date(s, has_day=true, has_time=true)
     "[D#1]/[M#1]/[Y0001]" => parse_slash_date(s)
     _ => parse_iso_millis(s)
   }
@@ -415,6 +428,9 @@ fn parse_timezone_string(s : String) -> Int {
 ///|
 fn parse_iso_millis(s : String) -> Double raise @error.JsonataError {
   let chars = s.to_array()
+  if chars.length() == 4 && all_digits(chars, 0, 4) {
+    return millis_from_date(parse_digits(chars, 0, 4), 1, 1)
+  }
   if chars.length() < 10 {
     return @strconv.from_str(s) catch { _ => 0.0 }
   }
@@ -443,6 +459,68 @@ fn parse_iso_millis(s : String) -> Double raise @error.JsonataError {
       offset = parse_timezone_offset(chars, pos)
     }
   }
+  let zone = if offset == 0 {
+    @time.utc_zone
+  } else {
+    @time.fixed_zone(offset_id(offset), offset) catch {
+      _ => @time.utc_zone
+    }
+  }
+  let dt = @time.ZonedDateTime::of(
+    year,
+    month,
+    day,
+    hour~,
+    minute~,
+    second~,
+    nanosecond=millis * 1_000_000,
+    zone~,
+  ) catch {
+    _ => raise @error.runtime_error("invalid date time")
+  }
+  dt.to_unix_second().to_double() * 1000.0 + millis.to_double()
+}
+
+///|
+fn parse_compact_date(
+  s : String,
+  has_day~ : Bool,
+  has_time~ : Bool,
+) -> Double raise @error.JsonataError {
+  let chars = s.to_array()
+  let min_len = if has_time { 14 } else if has_day { 8 } else { 6 }
+  if chars.length() < min_len || !all_digits(chars, 0, min_len) {
+    raise @error.runtime_error("invalid date time")
+  }
+  let year = parse_digits(chars, 0, 4)
+  let month = parse_digits(chars, 4, 6)
+  let day = if has_day { parse_digits(chars, 6, 8) } else { 1 }
+  let hour = if has_time { parse_digits(chars, 8, 10) } else { 0 }
+  let minute = if has_time { parse_digits(chars, 10, 12) } else { 0 }
+  let second = if has_time { parse_digits(chars, 12, 14) } else { 0 }
+  millis_from_date_time(year, month, day, hour, minute, second, 0, 0)
+}
+
+///|
+fn millis_from_date(
+  year : Int,
+  month : Int,
+  day : Int,
+) -> Double raise @error.JsonataError {
+  millis_from_date_time(year, month, day, 0, 0, 0, 0, 0)
+}
+
+///|
+fn millis_from_date_time(
+  year : Int,
+  month : Int,
+  day : Int,
+  hour : Int,
+  minute : Int,
+  second : Int,
+  millis : Int,
+  offset : Int,
+) -> Double raise @error.JsonataError {
   let zone = if offset == 0 {
     @time.utc_zone
   } else {
@@ -526,6 +604,28 @@ fn parse_digits(chars : Array[Char], start : Int, end : Int) -> Int {
     i += 1
   }
   value
+}
+
+///|
+fn parse_int_strict(s : String) -> Int raise @error.JsonataError {
+  @string.parse_int(s) catch {
+    _ => raise @error.runtime_error("invalid number")
+  }
+}
+
+///|
+fn all_digits(chars : Array[Char], start : Int, end : Int) -> Bool {
+  if end > chars.length() {
+    return false
+  }
+  let mut i = start
+  while i < end {
+    if !is_digit(chars[i]) {
+      return false
+    }
+    i += 1
+  }
+  true
 }
 
 ///|
@@ -620,6 +720,46 @@ fn weekday_number(dt : @time.ZonedDateTime) -> Int {
     @time.Weekday::Saturday => 6
     @time.Weekday::Sunday => 7
   }
+}
+
+///|
+fn iso_week(dt : @time.ZonedDateTime) -> Int {
+  let week = (dt.ordinal() - weekday_number(dt) + 10) / 7
+  if week < 1 {
+    weeks_in_iso_year(dt.year() - 1)
+  } else if week > weeks_in_iso_year(dt.year()) {
+    1
+  } else {
+    week
+  }
+}
+
+///|
+fn iso_week_year(dt : @time.ZonedDateTime) -> Int {
+  let week = (dt.ordinal() - weekday_number(dt) + 10) / 7
+  if week < 1 {
+    dt.year() - 1
+  } else if week > weeks_in_iso_year(dt.year()) {
+    dt.year() + 1
+  } else {
+    dt.year()
+  }
+}
+
+///|
+fn weeks_in_iso_year(year : Int) -> Int {
+  let jan1 = @time.ZonedDateTime::of(year, 1, 1) catch { _ => return 52 }
+  let jan1_weekday = weekday_number(jan1)
+  if jan1_weekday == 4 || (jan1_weekday == 3 && is_leap_year(year)) {
+    53
+  } else {
+    52
+  }
+}
+
+///|
+fn is_leap_year(year : Int) -> Bool {
+  year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
 }
 
 ///|

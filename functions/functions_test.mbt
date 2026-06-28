@@ -423,6 +423,43 @@ test "P10：$formatDateTime 基础格式化" {
 }
 
 ///|
+test "P11：日期 picture 支持 ISO 周和紧凑解析" {
+  assert_true(
+    eval_fn(
+      "$fromMillis(1521801216617, \"[D#1,2]/[M1,2]/[Y0001,2]\")",
+      Json::null(),
+    ) ==
+    Json::string("23/03/2018"),
+  )
+  assert_true(
+    eval_fn(
+      "$fromMillis($toMillis(\"2005-01-01\", \"[Y]-[M]-[D]\"), \"[X0001]-W[W01]-[F1]\")",
+      Json::null(),
+    ) ==
+    Json::string("2004-W53-6"),
+  )
+  assert_true(
+    eval_fn("$fromMillis(1546257600000, \"[d] days in [Y0001]\")", Json::null()) ==
+    Json::string("365 days in 2018"),
+  )
+  assert_true(
+    eval_fn("$toMillis(\"201802\", \"[Y0001][M01]\")", Json::null()) ==
+    Json::number(1517443200000.0),
+  )
+  assert_true(
+    eval_fn("$toMillis(\"20180205\", \"[Y0001][M01][D01]\")", Json::null()) ==
+    Json::number(1517788800000.0),
+  )
+  assert_true(
+    eval_fn(
+      "$toMillis(\"20240101123849\", \"[Y0000][M00][D00][H00][m00][s00]\")",
+      Json::null(),
+    ) ==
+    Json::number(1704112729000.0),
+  )
+}
+
+///|
 test "P10：标准正则函数名兼容" {
   assert_true(
     eval_fn("$contains(\"hello123\", \"[0-9]+\")", Json::null()) ==
