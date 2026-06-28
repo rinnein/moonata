@@ -43,6 +43,51 @@ test "官方套件：Account 样例 quoted field 与路径映射" {
     d,
     Json::number(336.36),
   )
+  assert_eval(
+    "Account.Order.[Product.Price]",
+    d,
+    data("[[34.45,21.67],[34.45,107.99]]"),
+  )
+}
+
+///|
+test "官方套件：数组构造保留嵌套数组并支持路径映射数组" {
+  assert_eval("[1, 2, [3, 4]]", Json::null(), data("[1,2,[3,4]]"))
+  let d = data(
+    "[{\"epochSeconds\":1578381600,\"value\":3},{\"epochSeconds\":1578381700,\"value\":5}]",
+  )
+  assert_eval(
+    "$.[value,epochSeconds][]",
+    d,
+    data("[[3,1578381600],[5,1578381700]]"),
+  )
+  let single = data("[{\"epochSeconds\":1578381600,\"value\":3}]")
+  assert_eval("$.[value,epochSeconds][]", single, data("[[3,1578381600]]"))
+  let quoted = data(
+    "{\"Address\":{\"City\":\"Winchester\"},\"Other\":{\"Alternative.Address\":{\"City\":\"London\"}}}",
+  )
+  assert_eval(
+    "[Address, Other.`Alternative.Address`].City",
+    quoted,
+    data("[\"Winchester\",\"London\"]"),
+  )
+  assert_eval(
+    "[0,1,2,3,4,5,6,7,8,9][$ % 2 = 0]",
+    Json::null(),
+    data("[0,2,4,6,8]"),
+  )
+  assert_eval("[1, 2, 3].$", Json::null(), data("[1,2,3]"))
+  assert_eval(
+    "and=1 and or=2",
+    data("{\"and\":1,\"or\":2}"),
+    Json::boolean(true),
+  )
+  assert_eval("(1; 2; 3;)", Json::null(), Json::number(3.0))
+  assert_eval(
+    "($a:=1; $b:=2; $c:=($a:=4; $a+$b); $a+$c)",
+    Json::null(),
+    Json::number(7.0),
+  )
 }
 
 ///|
@@ -143,6 +188,23 @@ test "官方套件：比较运算" {
 test "官方套件：逻辑运算" {
   assert_eval("true && false", Json::null(), Json::boolean(false))
   assert_eval("true || false", Json::null(), Json::boolean(true))
+}
+
+///|
+test "官方套件：fallback 运算 ?? 与 ?:" {
+  let d = data("{\"foo\":{\"bar\":42},\"empty\":[],\"zero\":[0]}")
+  assert_eval("foo.bar ?? 98", d, Json::number(42.0))
+  assert_eval("foo.missing ?? 98", d, Json::number(98.0))
+  assert_eval("null ?? 42", Json::null(), Json::null())
+  assert_eval("false ?? 42", Json::null(), Json::boolean(false))
+  assert_eval("false ?: 42", Json::null(), Json::number(42.0))
+  assert_eval("0 ?: 42", Json::null(), Json::number(42.0))
+  assert_eval("\"\" ?: 42", Json::null(), Json::number(42.0))
+  assert_eval("[] ?: 42", Json::null(), Json::number(42.0))
+  assert_eval("[0] ?: 42", Json::null(), Json::number(42.0))
+  assert_eval("[1] ?: 42", Json::null(), data("[1]"))
+  assert_eval("{} ?: 42", Json::null(), Json::number(42.0))
+  assert_eval("{\"a\":1} ?: 42", Json::null(), data("{\"a\":1}"))
 }
 
 ///|

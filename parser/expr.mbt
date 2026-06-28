@@ -4,7 +4,10 @@ fn Parser::parse_block(self : Parser) -> @ast.Ast raise @error.JsonataError {
   let exprs : Array[@ast.Ast] = []
   exprs.push(self.parse_chain())
   while self.match_kind(@lexer.TokenKind::Semicolon) {
-    if self.at_end() {
+    if self.at_end() ||
+      self.peek_kind() == @lexer.TokenKind::RParen ||
+      self.peek_kind() == @lexer.TokenKind::RBracket ||
+      self.peek_kind() == @lexer.TokenKind::RBrace {
       break
     }
     exprs.push(self.parse_chain())
@@ -60,7 +63,24 @@ fn Parser::parse_bind(self : Parser) -> @ast.Ast raise @error.JsonataError {
     // 回退：不是绑定
     self.pos = saved
   }
-  self.parse_sort()
+  self.parse_fallback()
+}
+
+///|
+/// fallback 运算：`??` 只在 undefined 时使用右侧，`?:` 按 EBV 选择右侧。
+fn Parser::parse_fallback(self : Parser) -> @ast.Ast raise @error.JsonataError {
+  let mut left = self.parse_sort()
+  for ;; {
+    let op = match self.peek_kind() {
+      @lexer.TokenKind::Coalesce => "??"
+      @lexer.TokenKind::Default => "?:"
+      _ => break
+    }
+    ignore(self.advance())
+    let right = self.parse_sort()
+    left = @ast.Ast::Binary(op~, lhs=left, rhs=right)
+  }
+  left
 }
 
 ///|
@@ -98,7 +118,7 @@ fn Parser::parse_sort_term(
 /// 逻辑或 `||`
 fn Parser::parse_or(self : Parser) -> @ast.Ast raise @error.JsonataError {
   let mut left = self.parse_and()
-  while self.peek_kind() == @lexer.TokenKind::Or {
+  while self.is_or_operator() {
     ignore(self.advance())
     let right = self.parse_and()
     left = @ast.Ast::Binary(op="||", lhs=left, rhs=right)
@@ -110,12 +130,30 @@ fn Parser::parse_or(self : Parser) -> @ast.Ast raise @error.JsonataError {
 /// 逻辑与 `&&`
 fn Parser::parse_and(self : Parser) -> @ast.Ast raise @error.JsonataError {
   let mut left = self.parse_comparison()
-  while self.peek_kind() == @lexer.TokenKind::And {
+  while self.is_and_operator() {
     ignore(self.advance())
     let right = self.parse_comparison()
     left = @ast.Ast::Binary(op="&&", lhs=left, rhs=right)
   }
   left
+}
+
+///|
+fn Parser::is_or_operator(self : Parser) -> Bool {
+  match self.peek_kind() {
+    @lexer.TokenKind::Or => true
+    @lexer.TokenKind::Ident("or") => true
+    _ => false
+  }
+}
+
+///|
+fn Parser::is_and_operator(self : Parser) -> Bool {
+  match self.peek_kind() {
+    @lexer.TokenKind::And => true
+    @lexer.TokenKind::Ident("and") => true
+    _ => false
+  }
 }
 
 ///|
@@ -232,6 +270,17 @@ fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
             ignore(self.advance())
             let mapped = self.parse_block()
             self.expect(@lexer.TokenKind::RParen, what="')'")
+            expr = append_step(expr, @ast.map_step(mapped))
+          }
+          @lexer.TokenKind::LBracket => {
+            let mapped = self.parse_primary()
+            expr = append_step(expr, @ast.map_step(mapped))
+          }
+          @lexer.TokenKind::Var(_) | @lexer.TokenKind::DollarDollar => {
+            let mut mapped = self.parse_primary()
+            if self.peek_kind() == @lexer.TokenKind::LParen {
+              mapped = self.parse_call(mapped)
+            }
             expr = append_step(expr, @ast.map_step(mapped))
           }
           @lexer.TokenKind::Star => {
@@ -393,13 +442,6 @@ fn append_step(target : @ast.Ast, step : @ast.Step) -> @ast.Ast {
       steps.push(step)
       @ast.Ast::Path(steps)
     }
-    _ =>
-      @ast.Ast::Path([
-        @ast.Step::new(
-          kind=@ast.StepKind::Filter(target),
-          stage=@ast.StepStage::Single,
-        ),
-        step,
-      ])
+    _ => @ast.Ast::Path([@ast.eval_step(target), step])
   }
 }

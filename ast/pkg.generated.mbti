@@ -8,6 +8,8 @@ import {
 // Values
 pub fn arrayify_step() -> Step
 
+pub fn eval_step(Ast) -> Step
+
 pub fn map_step(Ast) -> Step
 
 pub fn name_step(String, recursive? : Bool) -> Step
@@ -54,6 +56,7 @@ pub(all) enum StepKind {
   Wildcard
   Index(Int)
   Slice(Int?, Int?)
+  Eval(Ast)
   Filter(Ast)
   Map(Ast)
   Arrayify

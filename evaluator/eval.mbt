@@ -29,8 +29,8 @@ pub fn eval(
 /// 变量求值：$ / $name / $$ / @ / #
 fn eval_var(name : String, ctx : @value.EvalContext) -> @value.JsonataValue {
   match name {
-    "" => ctx.root() // $ 根
-    "$$" => ctx.parent() // $$ 父级上下文
+    "" => ctx.current() // $ 当前上下文
+    "$$" => ctx.root() // $$ 根上下文
     "@" => ctx.current() // @ 当前项
     "#" =>
       // # 位置变量（谓词过滤中绑定），未绑定时 Undefined
@@ -53,9 +53,15 @@ fn eval_path(
   input : @value.JsonataValue,
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
-  // 若第一步是 Filter(Var(name))，用 Var 作为基值
   let mut current = if steps.length() > 0 {
     match steps[0].kind {
+      @ast.StepKind::Eval(expr) => {
+        let mut base = eval(expr, ctx)
+        for i in 1..<steps.length() {
+          base = eval_step(steps[i], base, ctx)
+        }
+        return base
+      }
       @ast.StepKind::Filter(@ast.Ast::Var(name)) => {
         let base = eval_var(name, ctx)
         // 对剩余步求值
@@ -97,6 +103,7 @@ fn eval_step_single(
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
   match step.kind {
+    @ast.StepKind::Eval(expr) => eval(expr, ctx)
     @ast.StepKind::Name(name) => access_field(input, name)
     @ast.StepKind::Wildcard => access_wildcard(input)
     @ast.StepKind::Index(i) => access_index(input, i)
@@ -341,7 +348,10 @@ fn access_filter(
         }
     }
   }
-  @value.JsonataValue::sequence(results)
+  match results.length() {
+    0 => @value.JsonataValue::Undefined
+    _ => @value.JsonataValue::Sequence(results)
+  }
 }
 
 ///|
@@ -379,5 +389,8 @@ fn access_map(
       _ => results.push(r)
     }
   }
-  @value.JsonataValue::sequence(results)
+  match results.length() {
+    0 => @value.JsonataValue::Undefined
+    _ => @value.JsonataValue::Sequence(results)
+  }
 }

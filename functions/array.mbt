@@ -200,8 +200,19 @@ fn value_to_bool(v : @value.JsonataValue) -> Bool {
     @value.JsonataValue::Json(Json::Number(n, ..)) => n != 0.0
     @value.JsonataValue::Json(Json::String(s)) => s.length() > 0
     @value.JsonataValue::Json(Json::Null) => false
+    @value.JsonataValue::Json(Json::Array(arr)) => {
+      let mut any = false
+      for item in arr {
+        if value_to_bool(@value.JsonataValue::Json(item)) {
+          any = true
+          break
+        }
+      }
+      any
+    }
+    @value.JsonataValue::Json(Json::Object(map)) => map.length() > 0
     @value.JsonataValue::Undefined => false
     @value.JsonataValue::Sequence(arr) => arr.length() > 0
-    _ => true
+    @value.JsonataValue::Func(_) => false
   }
 }

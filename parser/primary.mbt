@@ -51,6 +51,14 @@ fn Parser::parse_primary(self : Parser) -> @ast.Ast raise @error.JsonataError {
       ignore(self.advance())
       @ast.Ast::Path([@ast.name_step(name)])
     }
+    @lexer.TokenKind::And => {
+      ignore(self.advance())
+      @ast.Ast::Path([@ast.name_step("and")])
+    }
+    @lexer.TokenKind::Or => {
+      ignore(self.advance())
+      @ast.Ast::Path([@ast.name_step("or")])
+    }
     @lexer.TokenKind::Star => {
       // * 作为路径第一步 → 通配符
       ignore(self.advance())

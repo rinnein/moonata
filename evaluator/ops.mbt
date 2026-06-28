@@ -7,6 +7,17 @@ fn eval_binary(
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
   let lhs = eval(lhs_ast, ctx)
+  if op == "??" {
+    if lhs is @value.JsonataValue::Undefined {
+      return eval(rhs_ast, ctx)
+    }
+    return lhs
+  } else if op == "?:" {
+    if to_bool(lhs) {
+      return lhs
+    }
+    return eval(rhs_ast, ctx)
+  }
   if op == "&&" {
     if !to_bool(lhs) {
       return @value.JsonataValue::Json(Json::boolean(false))
@@ -57,6 +68,8 @@ fn eval_binary(
     ">=" => compare_gte(lhs, rhs)
     "&&" => logic_and(lhs, rhs)
     "||" => logic_or(lhs, rhs)
+    "??" => if lhs is @value.JsonataValue::Undefined { rhs } else { lhs }
+    "?:" => if to_bool(lhs) { lhs } else { rhs }
     _ => raise @error.runtime_error("未知运算符: \{op}")
   }
 }
@@ -244,20 +257,30 @@ fn eval_unary(
 }
 
 ///|
-/// 序列构造
+/// 数组构造。
+///
+/// JSONata 的数组构造返回 JSON array；运行时序列会展开为数组元素，但已经
+/// 构造出来的 JSON array 作为普通元素保留，避免 `[1, [2, 3]]` 被展平。
 fn eval_construct(
   items : Array[@ast.Ast],
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
-  let results : Array[@value.JsonataValue] = []
+  let results : Array[Json] = []
   for item in items {
     let v = eval(item, ctx)
     match v {
       @value.JsonataValue::Undefined => continue
-      _ => results.push(v)
+      @value.JsonataValue::Sequence(arr) =>
+        for item in arr {
+          match item {
+            @value.JsonataValue::Undefined => ()
+            _ => results.push(item.to_json())
+          }
+        }
+      _ => results.push(v.to_json())
     }
   }
-  @value.JsonataValue::sequence(results)
+  @value.JsonataValue::Json(Json::array(results))
 }
 
 ///|
@@ -269,8 +292,9 @@ fn eval_bind(
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
   let value = eval(value_ast, ctx)
-  ctx.bind(name, value)
-  eval(body_ast, ctx)
+  ctx.with_binding(name, value, fn() -> @value.JsonataValue raise @error.JsonataError {
+    eval(body_ast, ctx)
+  })
 }
 
 ///|

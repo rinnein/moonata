@@ -52,6 +52,8 @@ pub(all) enum TokenKind {
   And
   Or
   Not
+  Coalesce
+  Default
   Arrow
   Caret
   Colon

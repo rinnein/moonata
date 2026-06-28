@@ -120,6 +120,8 @@ fn debug_tok(t : @lexer.Token) -> String {
     @lexer.TokenKind::And => "&&"
     @lexer.TokenKind::Or => "||"
     @lexer.TokenKind::Not => "!"
+    @lexer.TokenKind::Coalesce => "??"
+    @lexer.TokenKind::Default => "?:"
     @lexer.TokenKind::Arrow => "~>"
     @lexer.TokenKind::Caret => "^"
     @lexer.TokenKind::Colon => ":"

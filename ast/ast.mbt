@@ -36,6 +36,7 @@ pub(all) enum StepKind {
   Wildcard
   Index(Int)
   Slice(Int?, Int?)
+  Eval(Ast)
   Filter(Ast)
   Map(Ast)
   Arrayify
@@ -89,6 +90,12 @@ pub fn wildcard_step(recursive? : Bool = false) -> Step {
     kind=StepKind::Wildcard,
     stage=if recursive { StepStage::Recursive } else { StepStage::Single },
   )
+}
+
+///|
+/// 便捷构造路径基值求值步。
+pub fn eval_step(expr : Ast) -> Step {
+  Step::new(kind=StepKind::Eval(expr), stage=StepStage::Single)
 }
 
 ///|

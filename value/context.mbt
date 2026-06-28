@@ -137,6 +137,40 @@ pub fn EvalContext::bind(
 }
 
 ///|
+/// 在局部变量绑定下执行函数，结束后恢复旧绑定。
+pub fn[T] EvalContext::with_binding(
+  self : EvalContext,
+  name : String,
+  value : JsonataValue,
+  f : () -> T raise @error.JsonataError,
+) -> T raise @error.JsonataError {
+  let old = self.bindings.get(name)
+  self.bindings[name] = value
+  try {
+    let r = f()
+    restore_binding(self.bindings, name, old)
+    r
+  } catch {
+    e => {
+      restore_binding(self.bindings, name, old)
+      raise e
+    }
+  }
+}
+
+///|
+fn restore_binding(
+  bindings : Map[String, JsonataValue],
+  name : String,
+  old : JsonataValue?,
+) -> Unit {
+  match old {
+    Some(v) => bindings[name] = v
+    None => ignore(bindings.remove(name))
+  }
+}
+
+///|
 /// 查找绑定，未找到返回 None。
 pub fn EvalContext::lookup(self : EvalContext, name : String) -> JsonataValue? {
   self.bindings.get(name)

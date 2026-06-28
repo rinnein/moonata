@@ -41,6 +41,8 @@ pub(all) enum TokenKind {
   And // &&
   Or // ||
   Not // !
+  Coalesce // ??
+  Default // ?:
   // 箭头与链
   Arrow // ~> (函数链)
   // 排序
@@ -160,7 +162,7 @@ fn Lexer::next_token(self : Lexer) -> Token raise @error.JsonataError {
   let start = self.pos
   let c = self.peek()
   // 字符串
-  if c == '"' || c == '\'' {
+  if c == '"' || c == '\'' || c == '`' {
     return self.lex_string(start)
   }
   // 数字
@@ -378,7 +380,16 @@ fn Lexer::lex_operator(
         TokenKind::Colon
       }
     '^' => TokenKind::Caret
-    '?' => TokenKind::Question
+    '?' =>
+      if self.peek() == '?' {
+        self.pos = self.pos + 1
+        TokenKind::Coalesce
+      } else if self.peek() == ':' {
+        self.pos = self.pos + 1
+        TokenKind::Default
+      } else {
+        TokenKind::Question
+      }
     '@' => TokenKind::At
     '#' => TokenKind::Hash
     '+' => TokenKind::Plus
