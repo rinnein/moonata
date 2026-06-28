@@ -16,7 +16,7 @@ pub(all) enum Ast {
   Construct(Array[Ast])
   Group(Array[(Ast, Ast)])
   Sort(expr~ : Ast, terms~ : Array[SortTerm])
-  Lambda(params~ : Array[String], body~ : Ast)
+  Lambda(params~ : Array[String], body~ : Ast, signature~ : String?)
   Var(String)
   Bind(name~ : String, value~ : Ast, body~ : Ast)
   Apply(func~ : Ast, args~ : Array[Ast])

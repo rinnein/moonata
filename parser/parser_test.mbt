@@ -420,7 +420,11 @@ test "解析：函数调用" {
       #|  func=Var("map"),
       #|  args=[
       #|    Path([{ kind: Name("data"), stage: Single }]),
-      #|    Lambda(params=["x"], body=Binary(op="*", lhs=Var("x"), rhs=Number(2))),
+      #|    Lambda(
+      #|      params=["x"],
+      #|      body=Binary(op="*", lhs=Var("x"), rhs=Number(2)),
+      #|      signature=None,
+      #|    ),
       #|  ],
       #|)
     ),
@@ -432,7 +436,7 @@ test "解析：Lambda" {
   debug_inspect(
     parse_str("function($x) { $x }"),
     content=(
-      #|Lambda(params=["x"], body=Var("x"))
+      #|Lambda(params=["x"], body=Var("x"), signature=None)
     ),
   )
   debug_inspect(
@@ -441,6 +445,43 @@ test "解析：Lambda" {
       #|Lambda(
       #|  params=["a", "b"],
       #|  body=Binary(op="+", lhs=Var("a"), rhs=Var("b")),
+      #|  signature=None,
+      #|)
+    ),
+  )
+  debug_inspect(
+    parse_str("λ($x)<n:n>{ $x }"),
+    content=(
+      #|Lambda(
+      #|  params=["x"],
+      #|  body=Var("x"),
+      #|  signature=Some("<ident(n):ident(n)>"),
+      #|)
+    ),
+  )
+  debug_inspect(
+    parse_str("[1..3].λ($x)<n:n>{ $x }()"),
+    content=(
+      #|Path(
+      #|  [
+      #|    {
+      #|      kind: Eval(Construct([Binary(op="..", lhs=Number(1), rhs=Number(3))])),
+      #|      stage: Single,
+      #|    },
+      #|    {
+      #|      kind: Map(
+      #|        Apply(
+      #|          func=Lambda(
+      #|            params=["x"],
+      #|            body=Var("x"),
+      #|            signature=Some("<ident(n):ident(n)>"),
+      #|          ),
+      #|          args=[Var("")],
+      #|        ),
+      #|      ),
+      #|      stage: Single,
+      #|    },
+      #|  ],
       #|)
     ),
   )

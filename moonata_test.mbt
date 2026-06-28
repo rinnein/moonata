@@ -512,6 +512,26 @@ test "官方套件：部分应用" {
 }
 
 ///|
+test "官方套件：签名 Lambda 语法与范围映射" {
+  assert_eval(
+    "λ($arg)<b:b>{$not($arg)}(true)",
+    Json::null(),
+    Json::boolean(false),
+  )
+  assert_eval("[1..5]", Json::null(), data("[1,2,3,4,5]"))
+  assert_eval(
+    "[1..5].function($x,$y)<n-n:n>{$x+$y}(6)",
+    Json::null(),
+    data("[7,8,9,10,11]"),
+  )
+  assert_eval(
+    "λ($arr, $sep)<a<s>s?:s>{$join($arr, $sep)}([\"a\", \"b\"], \"-\")",
+    Json::null(),
+    Json::string("a-b"),
+  )
+}
+
+///|
 test "官方套件：& 对象合并" {
   let d = data("{\"a\":{\"x\":1},\"b\":2}")
   let result = evaluate("$ & {\"a\":{\"y\":3},\"c\":4}", d)

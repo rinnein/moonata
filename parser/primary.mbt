@@ -152,10 +152,49 @@ fn Parser::parse_lambda(self : Parser) -> @ast.Ast raise @error.JsonataError {
     }
   }
   self.expect(@lexer.TokenKind::RParen, what="')'")
+  let signature = self.parse_signature()
   self.expect(@lexer.TokenKind::LBrace, what="'{' for lambda body")
   let body = self.parse_block()
   self.expect(@lexer.TokenKind::RBrace, what="'}'")
-  @ast.Ast::Lambda(params~, body~)
+  @ast.Ast::Lambda(params~, body~, signature~)
+}
+
+///|
+fn Parser::parse_signature(self : Parser) -> String? raise @error.JsonataError {
+  if self.peek_kind() != @lexer.TokenKind::Lt {
+    return None
+  }
+  let out = StringBuilder::new()
+  let mut depth = 0
+  for ;; {
+    if self.at_end() {
+      raise @error.syntax_error(
+        "未终止的函数签名",
+        position=Some(self.peek().pos),
+        token=None,
+      )
+    }
+    match self.peek_kind() {
+      @lexer.TokenKind::Lt => {
+        depth += 1
+        out.write_string(debug_tok(self.peek()))
+        ignore(self.advance())
+      }
+      @lexer.TokenKind::Gt => {
+        out.write_string(debug_tok(self.peek()))
+        ignore(self.advance())
+        depth -= 1
+        if depth == 0 {
+          break
+        }
+      }
+      _ => {
+        out.write_string(debug_tok(self.peek()))
+        ignore(self.advance())
+      }
+    }
+  }
+  Some(out.to_string())
 }
 
 ///|

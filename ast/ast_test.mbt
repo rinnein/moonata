@@ -72,7 +72,11 @@ test "Ast 表达式节点构造" {
   let sort = Ast::Sort(expr=Ast::Path([name_step("x")]), terms=[
     SortTerm::new(Ast::Path([name_step("y")])),
   ])
-  let lambda = Ast::Lambda(params=["a", "b"], body=Ast::Path([name_step("a")]))
+  let lambda = Ast::Lambda(
+    params=["a", "b"],
+    body=Ast::Path([name_step("a")]),
+    signature=None,
+  )
   let var_ = Ast::Var("x")
   let bind = Ast::Bind(name="x", value=Ast::Number(1.0), body=Ast::Var("x"))
   let apply = Ast::Apply(func=Ast::Var("f"), args=[Ast::Number(1.0)])
@@ -122,6 +126,7 @@ test "Ast 表达式节点构造" {
       #|Lambda(
       #|  params=["a", "b"],
       #|  body=Path([{ kind: Name("a"), stage: Single }]),
+      #|  signature=None,
       #|)
     ),
   )

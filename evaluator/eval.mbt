@@ -21,7 +21,8 @@ pub fn eval(
     @ast.Ast::Bind(name~, value~, body~) => eval_bind(name, value, body, ctx)
     @ast.Ast::Block(exprs) => eval_block(exprs, ctx)
     @ast.Ast::Apply(func~, args~) => eval_apply(func, args, ctx)
-    @ast.Ast::Lambda(params~, body~) => eval_lambda(params, body, ctx)
+    @ast.Ast::Lambda(params~, body~, signature~) =>
+      eval_lambda(params, body, signature, ctx)
     @ast.Ast::Chain(stages) => eval_chain(stages, ctx)
     @ast.Ast::Group(pairs) => eval_group(pairs, ctx)
     @ast.Ast::Sort(expr~, terms~) => eval_sort(expr, terms, ctx)

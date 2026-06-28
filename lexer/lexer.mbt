@@ -12,6 +12,7 @@ pub(all) enum TokenKind {
   Var(String) // $name
   // 路径操作
   Dot
+  Range // ..
   Star // *
   DoubleStar // **
   DotStar // .*
@@ -201,6 +202,10 @@ fn Lexer::next_token(
   // 标识符（字母/下划线开头）
   if is_ident_start(c) {
     return self.lex_ident(start)
+  }
+  if c == 'λ' {
+    self.pos = self.pos + 1
+    return Token::new(kind=TokenKind::Ident("function"), pos=start)
   }
   // 变量 $name 或 $$ 或 $
   if c == '$' {
@@ -536,7 +541,10 @@ fn Lexer::lex_operator(
         TokenKind::Star
       }
     '.' =>
-      if self.peek() == '*' {
+      if self.peek() == '.' {
+        self.pos = self.pos + 1
+        TokenKind::Range
+      } else if self.peek() == '*' {
         if self.peek_at(1) == '*' {
           // .** → Dot + DoubleStar（两个 token）
           TokenKind::Dot

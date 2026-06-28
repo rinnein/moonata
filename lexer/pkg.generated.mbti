@@ -27,6 +27,7 @@ pub(all) enum TokenKind {
   Ident(String)
   Var(String)
   Dot
+  Range
   Star
   DoubleStar
   DotStar

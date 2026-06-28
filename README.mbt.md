@@ -79,18 +79,17 @@ docs: update official test status
 
 ## 兼容性状态
 
-固定快照：2026-06-28，P11 日期时间 picture 修复阶段。
+固定快照：2026-06-28，P11 Lambda 签名与范围修复阶段。
 
 ```text
-moon test: 156/156
-official comparable audit: eligible 1251, pass 827, fail 424, skip 431
+moon test: 157/157
+official comparable audit: eligible 1251, pass 877, fail 374, skip 431
 ```
 
 当前剩余失败最多的官方测试分组：
 
 ```text
 function-tomillis 34
-function-signatures 30
 joins 28
 function-formatInteger 26
 function-parseInteger 24
@@ -99,6 +98,7 @@ function-formatNumber 16
 sorting 16
 function-fromMillis 15
 object-constructor 14
+flattening 13
 ```
 
 官方测试集审计流程与跳过策略记录在 `.codebuddy/rules/moonata_项目实现指南.mdc`。

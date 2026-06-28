@@ -191,7 +191,7 @@ fn Parser::parse_concat(self : Parser) -> @ast.Ast raise @error.JsonataError {
 ///|
 /// 加减 `+ -`
 fn Parser::parse_additive(self : Parser) -> @ast.Ast raise @error.JsonataError {
-  let mut left = self.parse_multiplicative()
+  let mut left = self.parse_range()
   for ;; {
     let op = match self.peek_kind() {
       @lexer.TokenKind::Plus => "+"
@@ -199,8 +199,19 @@ fn Parser::parse_additive(self : Parser) -> @ast.Ast raise @error.JsonataError {
       _ => break
     }
     ignore(self.advance())
-    let right = self.parse_multiplicative()
+    let right = self.parse_range()
     left = @ast.Ast::Binary(op~, lhs=left, rhs=right)
+  }
+  left
+}
+
+///|
+fn Parser::parse_range(self : Parser) -> @ast.Ast raise @error.JsonataError {
+  let mut left = self.parse_multiplicative()
+  while self.peek_kind() == @lexer.TokenKind::Range {
+    ignore(self.advance())
+    let right = self.parse_multiplicative()
+    left = @ast.Ast::Binary(op="..", lhs=left, rhs=right)
   }
   left
 }
@@ -253,11 +264,26 @@ fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
         ignore(self.advance())
         match self.peek_kind() {
           @lexer.TokenKind::Ident(_) => {
-            let name = match self.advance().kind {
+            let saved = self.pos
+            let name = match self.peek_kind() {
               @lexer.TokenKind::Ident(n) => n
-              _ => abort("unreachable")
+              _ => ""
             }
-            expr = append_step(expr, @ast.name_step(name))
+            if name == "function" {
+              let mut mapped = self.parse_primary()
+              if self.peek_kind() == @lexer.TokenKind::LParen {
+                mapped = self.parse_call(mapped)
+              }
+              mapped = inject_current_arg_for_lambda_map(mapped)
+              expr = append_step(expr, @ast.map_step(mapped))
+            } else {
+              self.pos = saved
+              let field = match self.advance().kind {
+                @lexer.TokenKind::Ident(n) => n
+                _ => abort("unreachable")
+              }
+              expr = append_step(expr, @ast.name_step(field))
+            }
           }
           @lexer.TokenKind::String(_) => {
             let name = match self.advance().kind {
@@ -443,5 +469,29 @@ fn append_step(target : @ast.Ast, step : @ast.Step) -> @ast.Ast {
       @ast.Ast::Path(steps)
     }
     _ => @ast.Ast::Path([@ast.eval_step(target), step])
+  }
+}
+
+///|
+fn inject_current_arg_for_lambda_map(expr : @ast.Ast) -> @ast.Ast {
+  match expr {
+    @ast.Ast::Apply(func~, args~) =>
+      match func {
+        @ast.Ast::Lambda(params~, body~, signature~) =>
+          if args.length() < params.length() {
+            let injected : Array[@ast.Ast] = [@ast.Ast::Var("")]
+            for arg in args {
+              injected.push(arg)
+            }
+            @ast.Ast::Apply(
+              func=@ast.Ast::Lambda(params~, body~, signature~),
+              args=injected,
+            )
+          } else {
+            expr
+          }
+        _ => expr
+      }
+    _ => expr
   }
 }

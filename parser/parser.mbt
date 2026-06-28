@@ -96,6 +96,7 @@ fn debug_tok(t : @lexer.Token) -> String {
     @lexer.TokenKind::Var(s) => "var(\{s})"
     @lexer.TokenKind::DollarDollar => "$$"
     @lexer.TokenKind::Dot => "."
+    @lexer.TokenKind::Range => ".."
     @lexer.TokenKind::Star => "*"
     @lexer.TokenKind::DoubleStar => "**"
     @lexer.TokenKind::DotStar => ".*"

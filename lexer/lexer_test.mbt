@@ -136,6 +136,12 @@ test "词法：运算符与标点" {
       #|[Colon, DoubleColon, Semicolon, Comma, Question, At]
     ),
   )
+  debug_inspect(
+    tok_kind(".. λ"),
+    content=(
+      #|[Range, Ident("function")]
+    ),
+  )
 }
 
 ///|

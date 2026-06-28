@@ -59,6 +59,7 @@ fn eval_binary(
     "*" => arith_op(lhs, rhs, "*")
     "/" => arith_op(lhs, rhs, "/")
     "%" => arith_op(lhs, rhs, "%")
+    ".." => range_op(lhs, rhs)
     "&" => concat_or_merge(lhs, rhs)
     "=" => compare_eq(lhs, rhs)
     "!=" => compare_neq(lhs, rhs)
@@ -72,6 +73,22 @@ fn eval_binary(
     "?:" => if to_bool(lhs) { lhs } else { rhs }
     _ => raise @error.runtime_error("未知运算符: \{op}")
   }
+}
+
+///|
+fn range_op(
+  lhs : @value.JsonataValue,
+  rhs : @value.JsonataValue,
+) -> @value.JsonataValue raise @error.JsonataError {
+  let start = to_number(lhs).to_int()
+  let end = to_number(rhs).to_int()
+  let items : Array[@value.JsonataValue] = []
+  if start <= end {
+    for i in start..<=end {
+      items.push(@value.JsonataValue::Json(Json::number(i.to_double())))
+    }
+  }
+  @value.JsonataValue::Sequence(items)
 }
 
 ///|
@@ -330,7 +347,7 @@ fn eval_apply(
         args.push(eval(arg_ast, ctx))
       }
       f.check_args(args)
-      if args.length() < f.arity {
+      if args.length() < f.arity && should_partial_on_missing(f) {
         // 部分应用：返回捕获已提供参数的柯里化函数
         let captured = args
         let remaining = f.arity - args.length()
@@ -379,6 +396,14 @@ fn has_placeholder(args : Array[@ast.Ast]) -> Bool {
     }
   }
   found
+}
+
+///|
+fn should_partial_on_missing(f : @value.JsonataFunc) -> Bool {
+  match f.signature {
+    Some(sig) => !sig.contains(":")
+    None => true
+  }
 }
 
 ///|
@@ -432,6 +457,7 @@ fn make_partial_apply(
 fn eval_lambda(
   params : Array[String],
   body : @ast.Ast,
+  signature : String?,
   _ctx : @value.EvalContext,
 ) -> @value.JsonataValue {
   let arity = params.length()
@@ -442,11 +468,23 @@ fn eval_lambda(
     for i, param in params {
       if i < args.length() {
         ctx2.bind(param, args[i])
+      } else if lambda_missing_arg_uses_context(signature) {
+        ctx2.bind(param, ctx2.current())
       }
     }
     eval(body, ctx2)
   }
-  @value.JsonataValue::Func(@value.JsonataFunc::new(arity~, invoke~))
+  @value.JsonataValue::Func(
+    @value.JsonataFunc::new(arity~, signature~, invoke~),
+  )
+}
+
+///|
+fn lambda_missing_arg_uses_context(signature : String?) -> Bool {
+  match signature {
+    Some(sig) => sig.contains("-")
+    None => false
+  }
 }
 
 ///|
