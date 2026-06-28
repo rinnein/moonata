@@ -1,13 +1,28 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "rinnein/moonata"
 
+import {
+  "rinnein/moonata/ast",
+  "rinnein/moonata/error",
+}
+
 // Values
+pub fn compile(String) -> Compiled raise @error.JsonataError
+
+pub fn evaluate(String, Json) -> Json raise @error.JsonataError
 
 // Errors
 
 // Types and methods
+pub(all) struct Compiled {
+  ast : @ast.Ast
+}
+pub fn Compiled::run(Self, Json) -> Json raise @error.JsonataError
 
 // Type aliases
+pub using @ast {type Ast}
+
+pub using @error {type JsonataError}
 
 // Traits
 

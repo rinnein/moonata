@@ -1,0 +1,10 @@
+// moonata facade 包：对外暴露 evaluate/compile API。
+import {
+  "rinnein/moonata/error",
+  "rinnein/moonata/ast",
+  "rinnein/moonata/value",
+  "rinnein/moonata/lexer",
+  "rinnein/moonata/parser",
+  "rinnein/moonata/evaluator",
+  "rinnein/moonata/functions",
+}
