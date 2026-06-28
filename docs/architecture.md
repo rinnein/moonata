@@ -119,15 +119,8 @@ pub(all) enum Ast {
   Number(Double)
   Boolean(Bool)
   Null
-  // 路径
+  // 路径（所有路径访问统一为 Path+Step，包括单标识符）
   Path(steps : Array[Step])
-  // 标识符片段
-  Name(name : String, recursive~ : Bool)
-  Wildcard(recursive~ : Bool)
-  // 下标/切片/过滤
-  Index(Int)
-  Slice(start~ : Int?, end~ : Int?)
-  Filter(expr : Ast)
   // 表达式
   Binary(op~ : String, lhs~ : Ast, rhs~ : Ast)
   Unary(op~ : String, expr : Ast)
@@ -147,17 +140,25 @@ pub(all) enum Ast {
   Chain(stages : Array[Ast])
   // 块
   Block(exprs : Array[Ast])
-} derive(Debug)
+} derive(Debug, Eq)
 
 pub(all) struct Step {
   kind : StepKind
   stage : StepStage
-} derive(Debug)
+} derive(Debug, Eq)
 
-pub(all) enum StepKind { Name(String); Wildcard; Index(Int); Slice(Int?, Int?); Filter(Ast) }
-pub(all) enum StepStage { Single; Recursive }
-pub(all) struct SortTerm { expr : Ast; descending~ : Bool } derive(Debug)
+pub(all) enum StepKind {
+  Name(String)
+  Wildcard
+  Index(Int)
+  Slice(Int?, Int?)
+  Filter(Ast)
+} derive(Debug, Eq)
+pub(all) enum StepStage { Single; Recursive } derive(Debug, Eq)
+pub(all) struct SortTerm { expr : Ast; descending~ : Bool } derive(Debug, Eq)
 ```
+
+> 说明：路径访问统一用 `Path(Array[Step])` 表示，`Step` 携带 `StepKind`（Name/Wildcard/Index/Slice/Filter）与 `StepStage`（Single/Recursive，对应 `**` 递归降序）。这避免了顶层 `Name`/`Index` 等与 `StepKind` 的冗余，简化求值器的模式匹配。
 
 ### 5.2 JsonataValue（`value` 包）
 
