@@ -1,0 +1,7 @@
+// parser 包：递归下降语法分析。
+// token 流 → AST。依赖 error/ast/lexer。
+import {
+  "rinnein/moonata/error",
+  "rinnein/moonata/ast",
+  "rinnein/moonata/lexer",
+}
