@@ -196,12 +196,20 @@ fn Lexer::lex_string(
         token=None,
       )
     }
-    let c = self.advance()
-    if c == quote {
+    let c = match self.src.get_char(self.pos) {
+      Some(ch) => ch
+      None => {
+        self.pos = self.pos + 1
+        '\u{FFFD}'
+      }
+    }
+    if c.to_int() == quote.to_int() {
+      self.pos = self.pos + 1
       break
     }
     if c == '\\' {
       // 转义
+      self.pos = self.pos + 1
       if self.pos >= self.len {
         raise @error.syntax_error(
           "字符串转义不完整",
@@ -233,7 +241,8 @@ fn Lexer::lex_string(
           )
       }
     } else {
-      buf.write_char(u16_to_char(c))
+      buf.write_char(c)
+      self.pos = self.pos + c.utf16_len()
     }
   }
   Token::new(kind=TokenKind::String(buf.to_string()), pos=start)

@@ -7,9 +7,10 @@ fn register_string_functions(ctx : @value.EvalContext) -> Unit {
   ) {
     let s = value_to_str(args[0])
     let start = value_to_int(args[1])
-    let len = s.length()
-    let actual_start = if start < 0 { len + start } else { start }
-    if actual_start < 0 || actual_start >= len {
+    let chars = s.to_array()
+    let len = chars.length()
+    let actual_start = if start < 0 { (len + start).max(0) } else { start }
+    if actual_start >= len {
       @value.JsonataValue::Json(Json::string(""))
     } else {
       let end = if args.length() > 2 {
@@ -22,7 +23,7 @@ fn register_string_functions(ctx : @value.EvalContext) -> Unit {
       if actual_end <= actual_start {
         @value.JsonataValue::Json(Json::string(""))
       } else {
-        let result = s.unsafe_substring(start=actual_start, end=actual_end)
+        let result = chars_to_string(chars, actual_start, actual_end)
         @value.JsonataValue::Json(Json::string(result))
       }
     }

@@ -246,6 +246,35 @@ test "官方套件：$pad 支持左右填充与循环截断" {
     Json::null(),
     Json::string("foo-+-+-"),
   )
+  assert_eval(
+    "$pad('a𝄞💩', 7)",
+    Json::null(),
+    Json::string("a𝄞💩    "),
+  )
+  assert_eval(
+    "$pad('a𝄞💩', 7, '💩')",
+    Json::null(),
+    Json::string("a𝄞💩💩💩💩💩"),
+  )
+}
+
+///|
+test "官方套件：Unicode 字符串字面量按字符处理" {
+  assert_eval(
+    "$substring('𝄞💩', 0, 2)",
+    Json::null(),
+    Json::string("𝄞💩"),
+  )
+  assert_eval(
+    "$substring('𝄞💩', 0, 1)",
+    Json::null(),
+    Json::string("𝄞"),
+  )
+  assert_eval(
+    "$substring('𝄞💩', 1, 1)",
+    Json::null(),
+    Json::string("💩"),
+  )
 }
 
 ///|
