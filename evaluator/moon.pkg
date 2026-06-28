@@ -1,0 +1,14 @@
+// evaluator 包：AST→值求值、序列语义。
+// 依赖 error/ast/value/strconv。
+import {
+  "rinnein/moonata/error",
+  "rinnein/moonata/ast",
+  "rinnein/moonata/value",
+  "moonbitlang/core/strconv",
+}
+
+import {
+  "rinnein/moonata/lexer",
+  "rinnein/moonata/parser",
+  "moonbitlang/core/json",
+} for "test"

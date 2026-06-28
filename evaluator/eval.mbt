@@ -1,0 +1,320 @@
+///|
+/// 求值器入口：AST → JsonataValue。
+pub fn eval(
+  ast : @ast.Ast,
+  ctx : @value.EvalContext,
+) -> @value.JsonataValue raise @error.JsonataError {
+  ctx.tick()
+  match ast {
+    @ast.Ast::String(s) => @value.JsonataValue::Json(Json::string(s))
+    @ast.Ast::Number(n) => @value.JsonataValue::Json(Json::number(n))
+    @ast.Ast::Boolean(b) => @value.JsonataValue::Json(Json::boolean(b))
+    @ast.Ast::Null => @value.JsonataValue::Json(Json::null())
+    @ast.Ast::Var(name) => eval_var(name, ctx)
+    @ast.Ast::Path(steps) => eval_path(steps, ctx.root(), ctx)
+    @ast.Ast::Binary(op~, lhs~, rhs~) => eval_binary(op, lhs, rhs, ctx)
+    @ast.Ast::Unary(op~, expr~) => eval_unary(op, expr, ctx)
+    @ast.Ast::Construct(items) => eval_construct(items, ctx)
+    @ast.Ast::Bind(name~, value~, body~) => eval_bind(name, value, body, ctx)
+    @ast.Ast::Block(exprs) => eval_block(exprs, ctx)
+    @ast.Ast::Apply(func~, args~) => eval_apply(func, args, ctx)
+    @ast.Ast::Lambda(params~, body~) => eval_lambda(params, body, ctx)
+    @ast.Ast::Chain(stages) => eval_chain(stages, ctx)
+    @ast.Ast::Group(pairs) => eval_group(pairs, ctx)
+    @ast.Ast::Sort(expr~, terms~) => eval_sort(expr, terms, ctx)
+  }
+}
+
+///|
+/// 变量求值：$ / $name / $$ / @
+fn eval_var(
+  name : String,
+  ctx : @value.EvalContext,
+) -> @value.JsonataValue raise @error.JsonataError {
+  match name {
+    "" => ctx.root() // $ 根
+    "$$" => ctx.root() // $$ 父级（简化为根）
+    "@" => ctx.root() // @ 当前（简化为根）
+    _ =>
+      match ctx.lookup(name) {
+        Some(v) => v
+        None => @value.JsonataValue::Undefined
+      }
+  }
+}
+
+///|
+/// 路径求值：逐步遍历
+fn eval_path(
+  steps : Array[@ast.Step],
+  input : @value.JsonataValue,
+  ctx : @value.EvalContext,
+) -> @value.JsonataValue raise @error.JsonataError {
+  // 若第一步是 Filter(Var(name))，用 Var 作为基值
+  let mut current = if steps.length() > 0 {
+    match steps[0].kind {
+      @ast.StepKind::Filter(@ast.Ast::Var(name)) => {
+        let base = eval_var(name, ctx)
+        // 对剩余步求值
+        let mut v = base
+        for i in 1..<steps.length() {
+          v = eval_step(steps[i], v, ctx)
+        }
+        return v
+      }
+      _ => input
+    }
+  } else {
+    input
+  }
+  for step in steps {
+    current = eval_step(step, current, ctx)
+  }
+  current
+}
+
+///|
+/// 单步求值
+fn eval_step(
+  step : @ast.Step,
+  input : @value.JsonataValue,
+  ctx : @value.EvalContext,
+) -> @value.JsonataValue raise @error.JsonataError {
+  match step.stage {
+    @ast.StepStage::Recursive => eval_step_recursive(step, input, ctx)
+    @ast.StepStage::Single => eval_step_single(step, input, ctx)
+  }
+}
+
+///|
+/// 单层步求值
+fn eval_step_single(
+  step : @ast.Step,
+  input : @value.JsonataValue,
+  ctx : @value.EvalContext,
+) -> @value.JsonataValue raise @error.JsonataError {
+  match step.kind {
+    @ast.StepKind::Name(name) => access_field(input, name)
+    @ast.StepKind::Wildcard => access_wildcard(input)
+    @ast.StepKind::Index(i) => access_index(input, i)
+    @ast.StepKind::Slice(start, end) => access_slice(input, start, end)
+    @ast.StepKind::Filter(expr) => access_filter(input, expr, ctx)
+  }
+}
+
+///|
+/// 递归步求值（**）
+fn eval_step_recursive(
+  step : @ast.Step,
+  input : @value.JsonataValue,
+  ctx : @value.EvalContext,
+) -> @value.JsonataValue raise @error.JsonataError {
+  let collected : Array[@value.JsonataValue] = []
+  collect_recursive(input, collected)
+  // 对每个收集到的值应用单层步
+  let results : Array[@value.JsonataValue] = []
+  for v in collected {
+    let r = eval_step_single(step, v, ctx)
+    match r {
+      @value.JsonataValue::Undefined => continue
+      @value.JsonataValue::Sequence(arr) =>
+        for item in arr {
+          results.push(item)
+        }
+      _ => results.push(r)
+    }
+  }
+  @value.JsonataValue::sequence(results)
+}
+
+///|
+/// 递归收集所有子值
+fn collect_recursive(
+  input : @value.JsonataValue,
+  out : Array[@value.JsonataValue],
+) -> Unit {
+  out.push(input)
+  match input {
+    @value.JsonataValue::Json(j) =>
+      match j {
+        Json::Object(map) =>
+          for _, v in map {
+            collect_recursive(@value.JsonataValue::Json(v), out)
+          }
+        Json::Array(arr) =>
+          for v in arr {
+            collect_recursive(@value.JsonataValue::Json(v), out)
+          }
+        _ => ()
+      }
+    @value.JsonataValue::Sequence(arr) =>
+      for v in arr {
+        collect_recursive(v, out)
+      }
+    _ => ()
+  }
+}
+
+///|
+/// 字段访问
+fn access_field(
+  input : @value.JsonataValue,
+  name : String,
+) -> @value.JsonataValue {
+  match input {
+    @value.JsonataValue::Json(Json::Object(map)) =>
+      match map.get(name) {
+        Some(v) => @value.JsonataValue::Json(v)
+        None => @value.JsonataValue::Undefined
+      }
+    @value.JsonataValue::Json(Json::Array(arr)) => {
+      // 对数组元素映射访问字段
+      let results : Array[@value.JsonataValue] = []
+      for v in arr {
+        let r = access_field(@value.JsonataValue::Json(v), name)
+        match r {
+          @value.JsonataValue::Undefined => continue
+          _ => results.push(r)
+        }
+      }
+      @value.JsonataValue::sequence(results)
+    }
+    @value.JsonataValue::Sequence(arr) => {
+      let results : Array[@value.JsonataValue] = []
+      for item in arr {
+        let r = access_field(item, name)
+        match r {
+          @value.JsonataValue::Undefined => continue
+          _ => results.push(r)
+        }
+      }
+      @value.JsonataValue::sequence(results)
+    }
+    _ => @value.JsonataValue::Undefined
+  }
+}
+
+///|
+/// 通配符访问（所有字段或所有元素）
+fn access_wildcard(input : @value.JsonataValue) -> @value.JsonataValue {
+  match input {
+    @value.JsonataValue::Json(Json::Object(map)) => {
+      let results : Array[@value.JsonataValue] = []
+      for _, v in map {
+        results.push(@value.JsonataValue::Json(v))
+      }
+      @value.JsonataValue::sequence(results)
+    }
+    @value.JsonataValue::Json(Json::Array(arr)) => {
+      let results : Array[@value.JsonataValue] = []
+      for v in arr {
+        results.push(@value.JsonataValue::Json(v))
+      }
+      @value.JsonataValue::sequence(results)
+    }
+    @value.JsonataValue::Sequence(arr) => {
+      let results : Array[@value.JsonataValue] = []
+      for item in arr {
+        let r = access_wildcard(item)
+        match r {
+          @value.JsonataValue::Undefined => continue
+          @value.JsonataValue::Sequence(inner) =>
+            for i in inner {
+              results.push(i)
+            }
+          _ => results.push(r)
+        }
+      }
+      @value.JsonataValue::sequence(results)
+    }
+    _ => @value.JsonataValue::Undefined
+  }
+}
+
+///|
+/// 下标访问
+fn access_index(input : @value.JsonataValue, i : Int) -> @value.JsonataValue {
+  match input {
+    @value.JsonataValue::Json(Json::Array(arr)) => {
+      let len = arr.length()
+      let idx = if i < 0 { len + i } else { i }
+      if idx >= 0 && idx < len {
+        @value.JsonataValue::Json(arr[idx])
+      } else {
+        @value.JsonataValue::Undefined
+      }
+    }
+    @value.JsonataValue::Sequence(arr) => {
+      let len = arr.length()
+      let idx = if i < 0 { len + i } else { i }
+      if idx >= 0 && idx < len {
+        arr[idx]
+      } else {
+        @value.JsonataValue::Undefined
+      }
+    }
+    _ => @value.JsonataValue::Undefined
+  }
+}
+
+///|
+/// 切片访问
+fn access_slice(
+  input : @value.JsonataValue,
+  start : Int?,
+  end : Int?,
+) -> @value.JsonataValue {
+  match input {
+    @value.JsonataValue::Json(Json::Array(arr)) => {
+      let len = arr.length()
+      let s = start.unwrap_or(0)
+      let e = end.unwrap_or(len)
+      let results : Array[@value.JsonataValue] = []
+      for i in s..<e.max(0).min(len) {
+        results.push(@value.JsonataValue::Json(arr[i]))
+      }
+      @value.JsonataValue::sequence(results)
+    }
+    @value.JsonataValue::Sequence(arr) => {
+      let len = arr.length()
+      let s = start.unwrap_or(0)
+      let e = end.unwrap_or(len)
+      let results : Array[@value.JsonataValue] = []
+      for i in s..<e.max(0).min(len) {
+        results.push(arr[i])
+      }
+      @value.JsonataValue::sequence(results)
+    }
+    _ => @value.JsonataValue::Undefined
+  }
+}
+
+///|
+/// 谓词过滤
+fn access_filter(
+  input : @value.JsonataValue,
+  expr : @ast.Ast,
+  ctx : @value.EvalContext,
+) -> @value.JsonataValue raise @error.JsonataError {
+  let items = input.to_array()
+  let results : Array[@value.JsonataValue] = []
+  for i, item in items {
+    // 布尔过滤
+    let r = ctx.with_depth(() => eval(expr, ctx))
+    match r {
+      @value.JsonataValue::Json(Json::True) => results.push(item)
+      @value.JsonataValue::Json(Json::False) => continue
+      @value.JsonataValue::Undefined => continue
+      _ =>
+        // 位置过滤：数字匹配索引
+        match r {
+          @value.JsonataValue::Json(Json::Number(n)) =>
+            if n.to_int() == i {
+              results.push(item)
+            }
+          _ => results.push(r)
+        }
+    }
+  }
+  @value.JsonataValue::sequence(results)
+}

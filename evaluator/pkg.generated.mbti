@@ -1,0 +1,20 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "rinnein/moonata/evaluator"
+
+import {
+  "rinnein/moonata/ast",
+  "rinnein/moonata/error",
+  "rinnein/moonata/value",
+}
+
+// Values
+pub fn eval(@ast.Ast, @value.EvalContext) -> @value.JsonataValue raise @error.JsonataError
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits
+
