@@ -2,7 +2,6 @@
 // 依赖 error/ast/value/evaluator/lexer/parser/strconv/json/regexp/env。
 import {
   "rinnein/moonata/error",
-  "rinnein/moonata/ast",
   "rinnein/moonata/value",
   "rinnein/moonata/evaluator",
   "rinnein/moonata/lexer",
@@ -10,5 +9,6 @@ import {
   "moonbitlang/core/strconv",
   "moonbitlang/core/json",
   "moonbitlang/core/env",
+  "moonbitlang/core/math",
   "moonbitlang/regexp",
 }

@@ -25,10 +25,13 @@ fn register(
   ctx : @value.EvalContext,
   name : String,
   arity~ : Int,
+  signature? : String? = None,
   invoke~ : (Array[@value.JsonataValue], @value.EvalContext) -> @value.JsonataValue raise @error.JsonataError,
 ) -> Unit {
   ctx.bind(
     name,
-    @value.JsonataValue::Func(@value.JsonataFunc::new(arity~, invoke~)),
+    @value.JsonataValue::Func(
+      @value.JsonataFunc::new(arity~, signature~, invoke~),
+    ),
   )
 }

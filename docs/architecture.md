@@ -43,7 +43,7 @@
 | 块组织 | 大型代码组织 | `///|` block 风格 | 完美匹配 |
 | 测试 | 快照/断言 | `inspect`/`assert_eq`/`debug_inspect` | 完美匹配 |
 
-**结论**：除正则外，MoonBit 与 JSONata 高度兼容。正则相关函数延后至阶段 6 评估。
+**结论**：MoonBit 与 JSONata 高度兼容。正则相关函数已通过 `moonbitlang/regexp@0.3.5` 实现，保留 `_regex` 显式函数名，并为 `$contains`/`$split`/`$replace` 提供正则模式兼容路径。
 
 ## 4. 包架构
 
@@ -172,6 +172,7 @@ pub enum JsonataValue {
 
 pub(struct) JsonataFunc {
   arity : Int
+  signature : String?
   invoke : (Array[JsonataValue], EvalContext) -> JsonataValue raise JsonataError
 }
 ```
@@ -205,7 +206,7 @@ pub struct EvalContext {
 }
 ```
 
-> `current`/`parent` 在 P9.1 实现，支持 `@`/`$$` 语义。`with_context` 方法在谓词过滤迭代时自动绑定/恢复。
+> `current`/`parent` 支持 `@`/`$$` 语义。`with_context` 方法在谓词过滤迭代时自动绑定/恢复。
 
 ## 6. 处理管线
 

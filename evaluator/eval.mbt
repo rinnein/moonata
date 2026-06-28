@@ -27,10 +27,7 @@ pub fn eval(
 
 ///|
 /// 变量求值：$ / $name / $$ / @ / #
-fn eval_var(
-  name : String,
-  ctx : @value.EvalContext,
-) -> @value.JsonataValue raise @error.JsonataError {
+fn eval_var(name : String, ctx : @value.EvalContext) -> @value.JsonataValue {
   match name {
     "" => ctx.root() // $ 根
     "$$" => ctx.parent() // $$ 父级上下文
@@ -309,7 +306,7 @@ fn access_filter(
   let results : Array[@value.JsonataValue] = []
   for i, item in items {
     // 将当前项绑定为 @，父级设为 input
-    let r = ctx.with_context(current=item, parent=input, fn() {
+    let r = ctx.with_context(current=item, parent=input, fn() -> @value.JsonataValue raise @error.JsonataError {
       // 同时绑定 # 为当前索引
       ctx.bind("#", @value.JsonataValue::Json(Json::number(i.to_double())))
       ctx.with_depth(() => eval(expr, ctx))
@@ -321,7 +318,7 @@ fn access_filter(
       _ =>
         // 位置过滤：数字匹配索引
         match r {
-          @value.JsonataValue::Json(Json::Number(n)) =>
+          @value.JsonataValue::Json(Json::Number(n, ..)) =>
             if n.to_int() == i {
               results.push(item)
             }

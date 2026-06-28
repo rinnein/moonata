@@ -1,7 +1,10 @@
 ///|
 fn register_array_functions(ctx : @value.EvalContext) -> Unit {
   // $map
-  register(ctx, "map", arity=2, invoke=fn(args, ctx) {
+  register(ctx, "map", arity=2, invoke=fn(
+    args : Array[@value.JsonataValue],
+    ctx : @value.EvalContext,
+  ) -> @value.JsonataValue raise @error.JsonataError {
     let items = args[0].to_array()
     let f = match args[1] {
       @value.JsonataValue::Func(f) => f
@@ -22,7 +25,10 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
     @value.JsonataValue::sequence(results)
   })
   // $filter
-  register(ctx, "filter", arity=2, invoke=fn(args, ctx) {
+  register(ctx, "filter", arity=2, invoke=fn(
+    args : Array[@value.JsonataValue],
+    ctx : @value.EvalContext,
+  ) -> @value.JsonataValue raise @error.JsonataError {
     let items = args[0].to_array()
     let f = match args[1] {
       @value.JsonataValue::Func(f) => f
@@ -38,7 +44,10 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
     @value.JsonataValue::sequence(results)
   })
   // $reduce(array, func, init?) — 初始值可选
-  register(ctx, "reduce", arity=2, invoke=fn(args, ctx) {
+  register(ctx, "reduce", arity=2, invoke=fn(
+    args : Array[@value.JsonataValue],
+    ctx : @value.EvalContext,
+  ) -> @value.JsonataValue raise @error.JsonataError {
     let items = args[0].to_array()
     let f = match args[1] {
       @value.JsonataValue::Func(f) => f
@@ -82,7 +91,7 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
     @value.JsonataValue::sequence(args[0].to_array())
   })
   // $sort
-  register(ctx, "sort", arity=1, invoke=fn(args, ctx) {
+  register(ctx, "sort", arity=1, invoke=fn(args, _ctx) {
     let items = args[0].to_array()
     // 简化排序：按数字值
     let keyed : Array[(Double, @value.JsonataValue)] = []
@@ -124,7 +133,7 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
     let results : Array[@value.JsonataValue] = []
     for item in items {
       let key = item.to_json().stringify()
-      if not(seen.contains(key)) {
+      if !seen.contains(key) {
         seen.push(key)
         results.push(item)
       }
@@ -132,7 +141,10 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
     @value.JsonataValue::sequence(results)
   })
   // $single — 返回序列中唯一元素，0 或 >1 个时报错
-  register(ctx, "single", arity=1, invoke=fn(args, _ctx) {
+  register(ctx, "single", arity=1, invoke=fn(
+    args : Array[@value.JsonataValue],
+    _ctx : @value.EvalContext,
+  ) -> @value.JsonataValue raise @error.JsonataError {
     let items = args[0].to_array()
     match items.length() {
       0 => @value.JsonataValue::Undefined
@@ -141,7 +153,10 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
     }
   })
   // $partition — 将序列按谓词分为 [match, non-match]
-  register(ctx, "partition", arity=2, invoke=fn(args, ctx) {
+  register(ctx, "partition", arity=2, invoke=fn(
+    args : Array[@value.JsonataValue],
+    ctx : @value.EvalContext,
+  ) -> @value.JsonataValue raise @error.JsonataError {
     let items = args[0].to_array()
     let f = match args[1] {
       @value.JsonataValue::Func(f) => f
@@ -182,7 +197,7 @@ fn value_to_bool(v : @value.JsonataValue) -> Bool {
   match v {
     @value.JsonataValue::Json(Json::True) => true
     @value.JsonataValue::Json(Json::False) => false
-    @value.JsonataValue::Json(Json::Number(n)) => n != 0.0
+    @value.JsonataValue::Json(Json::Number(n, ..)) => n != 0.0
     @value.JsonataValue::Json(Json::String(s)) => s.length() > 0
     @value.JsonataValue::Json(Json::Null) => false
     @value.JsonataValue::Undefined => false

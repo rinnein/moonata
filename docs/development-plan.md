@@ -1,7 +1,8 @@
 # Moonata 开发计划
 
 > 8 阶段开发计划，含 17 个 Git 提交节点（P1–P8 已完成）。
-> P9 为后续缺口修复阶段，按优先级排序，含 5 个提交节点。
+> P9 为语义修复与函数补全阶段，已完成。
+> P10 为验收收尾阶段，已补齐门禁、兼容性与文档状态。
 > 每阶段须通过验证后才能提交；提交信息遵循约定式提交规范。
 
 ## 1. 总览
@@ -13,13 +14,14 @@
 | P3 | 语法分析 | parser | 2 | 6 | ✅ 完成 |
 | P4 | 求值器核心 | evaluator | 2 | 6 | ✅ 完成 |
 | P5 | 路径与表达式 | evaluator | 2 | 6 | ✅ 完成 |
-| P6 | 内建函数 | functions | 3 | 10 | ✅ 完成（47 函数，待补至 60+） |
-| P7 | 高级特性 | evaluator / functions | 3 | 8 | ✅ 完成（部分应用/签名待补） |
-| P8 | CLI 与集成 | moonata / cmd/main | 2 | 4 | ✅ 完成（CLI 为演示模式） |
+| P6 | 内建函数 | functions | 3 | 10 | ✅ 完成（已注册 60+ 函数） |
+| P7 | 高级特性 | evaluator / functions | 3 | 8 | ✅ 完成（部分应用已实现） |
+| P8 | CLI 与集成 | moonata / cmd/main | 2 | 4 | ✅ 完成（CLI native 参数模式可用） |
 | P9 | 语义修复与函数补全 | evaluator / functions / value | 5 | 12 | ✅ 完成 |
-| 合计 | | | **22** | **59** | |
+| P10 | 验收收尾与兼容性补齐 | value / evaluator / functions / docs | 4 | 7 | ✅ 完成 |
+| 合计 | | | **26** | **66** | |
 
-> P1–P8 现状：94 个测试全绿，`moon check/test/fmt/info` 通过，CLI 端到端可运行（`$sum($.items.price)` → `60`）。
+> 当前验收快照（2026-06-28）：`moon test` 为 144/144 通过；`moon check` 与 `moon info` 均为 0 错误、0 warning；`moon fmt` 已执行。
 
 ## 2. Git 提交规范
 
@@ -132,7 +134,7 @@
 
 | 任务 | 验证 |
 | --- | --- |
-| 函数注册表、签名系统、`$eval`/`$now` 等 | 注册表测试 |
+| 函数注册表、基础元数检查、`$eval`/`$now` 等 | 注册表测试 |
 | 字符串：`$concat`/`$substring`/`$trim`/`$split`/`$length` 等 | 字符串函数测试 |
 | 数值：`$sum`/`$max`/`$min`/`$abs`/`$floor`/`$ceiling`/`$round` | 数值函数测试 |
 | 聚合/数组：`$map`/`$filter`/`$reduce`/`$each`/`$sort`/`$count`/`$append`/`$flatten` | 高阶函数测试 |
@@ -141,7 +143,7 @@
 | 正则相关：`$match`/`$contains`/`$split`（正则模式） | 评估实现路径后补 |
 
 **提交节点：**
-- **C10** `feat(functions): 实现函数注册表与签名系统` — 注册框架
+- **C10** `feat(functions): 实现函数注册表与元数检查` — 注册框架
 - **C11** `feat(functions): 实现字符串、数值与聚合函数` — 基础函数集
 - **C12** `feat(functions): 实现对象、类型转换与正则相关函数` — 完整函数集
 
@@ -205,7 +207,6 @@
 | --- | --- | --- |
 | `&` 对对象执行合并（深度合并），对字符串执行拼接 | evaluator | 对象合并测试 + 字符串拼接测试 |
 | 部分应用：`eval_apply` 支持参数不足时返回柯里化函数 | evaluator | 部分应用测试 |
-| 函数签名系统：`JsonataFunc` 增加可选签名描述，`invoke` 内类型检查 | functions | 签名错误用例 |
 
 **提交节点：**
 - **C19** `feat(evaluator): 实现 & 对象合并与部分应用` — 表达式语义补全
@@ -218,7 +219,7 @@
 | 数值：`$sqrt`/`$pi`/`$e`/`$formatBase` | functions | 数值函数测试 |
 | 数组：`$distinct`/`$single`/`$partition`/`$zip` | functions | 数组函数测试 |
 | 对象/其他：`$assert`/`$shallow`/`$deep` | functions | 对象函数测试 |
-| 修复占位函数：`$random`（真随机）、`$base64encode`/`$base64decode`（真编码） | functions | 占位函数回归测试 |
+| 修复占位函数：`$base64encode`/`$base64decode`（真编码） | functions | 占位函数回归测试 |
 
 **提交节点：**
 - **C20** `feat(functions): 补全字符串、数值与数组函数至 60+` — 函数集完整
@@ -230,9 +231,9 @@
 | 任务 | 包 | 验证 |
 | --- | --- | --- |
 | `$match(str, pattern)`：返回首个匹配及捕获组 | functions | 正则匹配测试 |
-| `$contains(str, pattern)`：正则模式包含判断 | functions | 正则包含测试 |
-| `$split(str, separator)`：支持正则分隔符 | functions | 正则分割测试 |
-| `$replace(str, pattern, replacement)`：正则替换 | functions | 正则替换测试 |
+| `$contains_regex(str, pattern)`：正则模式包含判断 | functions | 正则包含测试 |
+| `$split_regex(str, separator)`：支持正则分隔符 | functions | 正则分割测试 |
+| `$replace_regex(str, pattern, replacement)`：正则替换 | functions | 正则替换测试 |
 | `$matches`（可选）：返回所有匹配 | functions | 多匹配测试 |
 
 **提交节点：**
@@ -244,12 +245,62 @@
 | --- | --- | --- |
 | CLI 切换 native 目标，支持 `moonata '<expr>' --data file.json` 命令行参数 | cmd/main | CLI 冒烟测试 |
 | JSONata 官方测试套件核心用例移植（选取 path/predicate/function 分类） | moonata_test | 集成回归测试 |
-| 日期函数完善：`$fromMillis`/`$toMillis`/`$formatDateTime`（native 目标） | functions | 日期函数测试 |
-| 文档同步：修正 `architecture.md`/`design-decisions.md` 中过时的 derive/构造语法 | docs | 文档检查 |
+| 日期函数完善：`$fromMillis`/`$toMillis`（native 目标，`$formatDateTime` 转 P10） | functions | 日期函数测试 |
+| 文档同步：修正核心设计文档中的过时状态 | docs | 文档检查 |
 | README 与 API 文档完善 | docs | 文档检查 |
 
 **提交节点：**
 - **C22** `test(core): 移植官方测试套件并完善 CLI 与文档` — 集成完成
+
+### P10 — 验收收尾与兼容性补齐（value / evaluator / functions / docs）
+
+**目标**：解决 P9 审查中发现的严格验收缺口，使计划状态、代码实现与阶段门禁一致。
+
+> P10 不扩大 JSONata 范围，只补齐已写入计划但当前实现未满足的项目，并清理 MoonBit 工具链 warning。当前已完成。
+
+#### P10.1 🔴 门禁与文档状态修正
+
+| 任务 | 包 | 验证 |
+| --- | --- | --- |
+| 清理 `moon check` / `moon info` warning：废弃 API、未使用变量、缺失模式参数、未标注 raise 闭包等 | evaluator / functions / value | `moon check` / `moon info` 0 warning |
+| 移除或修正 `docs/architecture.md`、`docs/design-decisions.md` 中 P9 已完成但状态未同步的残留 | docs | 文档审查 |
+| 将正则函数命名、日期函数范围、随机函数状态同步到所有 docs | docs | `rg` 无过时状态 |
+
+**提交节点：**
+- **C23** `chore(core): 清理工具链警告并同步文档状态` — 门禁收尾
+
+#### P10.2 🔴 函数签名系统补齐
+
+| 任务 | 包 | 验证 |
+| --- | --- | --- |
+| `JsonataFunc` 增加可选签名描述，保留现有 `arity` 兼容字段 | value | `.mbti` 变更符合预期 |
+| `register` 支持签名元数据，内建函数按需声明参数/返回类型 | functions | 注册表测试 |
+| 在函数调用入口执行类型检查，错误统一抛 `SignatureError` | evaluator / functions | 签名错误用例 |
+
+**提交节点：**
+- **C24** `feat(functions,value): 补齐函数签名系统` — 签名验收
+
+#### P10.3 🟡 函数兼容性补齐
+
+| 任务 | 包 | 验证 |
+| --- | --- | --- |
+| `$random` 从固定 `0.5` 改为真实随机值，范围为 `[0, 1)` | functions | 随机范围测试 |
+| 实现 `$formatDateTime`，至少覆盖已文档化的 native 基础格式能力 | functions | 日期函数测试 |
+| 评估正则标准函数名兼容：在保持 `$contains_regex` 等现有函数的同时，为 `$contains`/`$split`/`$replace` 提供正则模式路径或明确文档化差异 | functions / docs | 正则回归测试 |
+
+**提交节点：**
+- **C25** `feat(functions): 补齐随机日期与正则兼容接口` — 函数兼容性
+
+#### P10.4 🟢 最终验收
+
+| 任务 | 包 | 验证 |
+| --- | --- | --- |
+| 增补 P10 对应黑盒测试与核心集成测试 | functions / moonata | `moon test` |
+| 执行完整门禁：`moon check`、`moon test`、`moon fmt`、`moon info` | 全部 | 0 错误、warning 已处理 |
+| 更新本计划的总览、里程碑与风险状态为最终验收完成 | docs | 文档检查 |
+
+**提交节点：**
+- **C26** `test(core): 完成最终验收回归` — P10 完成
 
 ## 4. 里程碑验收标准
 
@@ -262,8 +313,12 @@
 | C17 完成 | 官方测试套件核心用例通过，CLI 可用 |
 | **C18 完成** | `@`/`$$` 上下文与谓词过滤语义正确，现有谓词用例通过 |
 | **C19 完成** | `&` 对象合并与部分应用可用 |
-| **C21 完成** | 正则函数（`$match`/`$contains`/`$split`/`$replace`）可用 |
+| **C21 完成** | 正则函数（`$match`/`$contains_regex`/`$split_regex`/`$replace_regex`）可用 |
 | **C22 完成** | 官方测试套件核心用例通过，CLI 支持命令行参数 |
+| **C23 完成** | `moon check` / `moon info` warning 已清理，docs 状态无残留 |
+| **C24 完成** | 函数签名系统可用，签名错误用例通过 |
+| **C25 完成** | `$random`、`$formatDateTime` 与正则兼容接口达到计划要求 |
+| **C26 完成** | 完整门禁通过，P1–P10 进入最终验收完成态 |
 
 ## 5. 风险与缓解
 
@@ -272,5 +327,8 @@
 | MoonBit 无正则库 | `$match`/`$contains` 受限 | ~~P6 评估第三方库~~ **已引入 `moonbitlang/regexp@0.3.5`**，P9.4 实现 | ✅ 已解决 |
 | 序列语义复杂 | 求值器易出 bug | P1 在 value 包集中实现展平/提升，单测覆盖 | ✅ 已实现 |
 | 递归过深 | 栈溢出/性能 | `EvalContext` 护栏（depth/steps） | ✅ 已实现 |
-| 官方测试套件庞大 | P8/P9.5 工作量膨胀 | 选取核心分类用例，非核心用例按优先级滚动补齐 | ⏳ P9.5 |
-| `@`/`$$` 上下文缺失 | 谓词过滤语义错误 | P9.1 在 `EvalContext` 增加 `current`/`parent` 字段 | ⏳ P9.1 |
+| 官方测试套件庞大 | P8/P9.5 工作量膨胀 | 已移植核心分类用例，非核心用例按优先级滚动补齐 | ✅ 核心完成 |
+| `@`/`$$` 上下文缺失 | 谓词过滤语义错误 | P9.1 已在 `EvalContext` 增加 `current`/`parent` 字段 | ✅ 已实现 |
+| 工具链 warning 未清理 | 不满足阶段门禁“警告已处理” | P10.1 已清理 deprecated / unused / pattern warning | ✅ 已解决 |
+| 函数签名系统缺失 | 类型错误无法统一映射为 `SignatureError` | P10.2 已增加签名元数据与调用入口检查 | ✅ 已实现 |
+| `$random` 与日期格式函数不完整 | 与 P9 计划不一致 | P10.3 已补齐随机范围与 `$formatDateTime` | ✅ 已实现 |

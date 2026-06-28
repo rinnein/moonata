@@ -82,7 +82,10 @@ fn register_object_functions(ctx : @value.EvalContext) -> Unit {
     }
   })
   // $each
-  register(ctx, "each", arity=2, invoke=fn(args, ctx) {
+  register(ctx, "each", arity=2, invoke=fn(
+    args : Array[@value.JsonataValue],
+    ctx : @value.EvalContext,
+  ) -> @value.JsonataValue raise @error.JsonataError {
     let f = match args[1] {
       @value.JsonataValue::Func(f) => f
       _ => return @value.JsonataValue::Undefined
@@ -109,7 +112,10 @@ fn register_object_functions(ctx : @value.EvalContext) -> Unit {
     }
   })
   // $sift
-  register(ctx, "sift", arity=2, invoke=fn(args, ctx) {
+  register(ctx, "sift", arity=2, invoke=fn(
+    args : Array[@value.JsonataValue],
+    ctx : @value.EvalContext,
+  ) -> @value.JsonataValue raise @error.JsonataError {
     let f = match args[1] {
       @value.JsonataValue::Func(f) => f
       _ => return @value.JsonataValue::Undefined

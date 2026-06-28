@@ -14,6 +14,21 @@ fn eval_fn(expr : String, data : Json) -> Json {
 }
 
 ///|
+fn eval_signature_error(expr : String) -> Bool {
+  try {
+    let tokens = @lexer.lex(expr)
+    let ast = @parser.parse(tokens)
+    let ctx = @value.EvalContext::new(@value.JsonataValue::Json(Json::null()))
+    @functions.register_builtins(ctx)
+    ignore(@evaluator.eval(ast, ctx))
+    false
+  } catch {
+    @error.JsonataError::SignatureError(..) => true
+    _ => false
+  }
+}
+
+///|
 test "函数：$sum" {
   let data = @json.parse("[1,2,3,4,5]")
   assert_true(eval_fn("$sum($)", data) == Json::number(15.0))
@@ -300,7 +315,6 @@ test "P9.3：$partition 分区" {
 ///|
 test "P9.3：$zip 配对" {
   let data1 = @json.parse("[1,2,3]")
-  let data2 = @json.parse("[\"a\",\"b\",\"c\"]")
   let result = eval_fn("$zip($, [\"a\",\"b\",\"c\"])", data1)
   debug_inspect(
     result,
@@ -370,4 +384,46 @@ test "P9.4：$replace_regex 正则替换" {
     Json::null(),
   )
   assert_true(result == Json::string("hello moonbit"))
+}
+
+///|
+test "P10：签名系统报告 SignatureError" {
+  assert_true(eval_signature_error("$substring(1, 0)"))
+}
+
+///|
+test "P10：$random 返回 0 到 1 之间的数" {
+  let result = eval_fn("$random()", Json::null())
+  match result {
+    Json::Number(n, ..) => assert_true(n >= 0.0 && n < 1.0)
+    _ => fail("$random 应返回 number")
+  }
+}
+
+///|
+test "P10：$formatDateTime 基础格式化" {
+  let result = eval_fn("$formatDateTime(0)", Json::null())
+  match result {
+    Json::String(s) => assert_true(s.contains("T") && s.contains("Z"))
+    _ => fail("$formatDateTime 应返回 string")
+  }
+}
+
+///|
+test "P10：标准正则函数名兼容" {
+  assert_true(
+    eval_fn("$contains(\"hello123\", \"[0-9]+\")", Json::null()) ==
+    Json::boolean(true),
+  )
+  let split_result = eval_fn("$split(\"a1b\", \"[0-9]\")", Json::null())
+  debug_inspect(
+    split_result,
+    content=(
+      #|Array([String("a"), String("b")])
+    ),
+  )
+  assert_true(
+    eval_fn("$replace(\"hello 123\", \"[0-9]+\", \"x\")", Json::null()) ==
+    Json::string("hello x"),
+  )
 }

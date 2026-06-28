@@ -7,7 +7,7 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
         let mut total = 0.0
         for v in arr {
           match v {
-            Json::Number(n) => total += n
+            Json::Number(n, ..) => total += n
             _ => continue
           }
         }
@@ -17,7 +17,7 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
         let mut total = 0.0
         for v in arr {
           match v {
-            @value.JsonataValue::Json(Json::Number(n)) => total += n
+            @value.JsonataValue::Json(Json::Number(n, ..)) => total += n
             _ => continue
           }
         }
@@ -55,9 +55,9 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
     @value.JsonataValue::Json(Json::number(m))
   })
   // $abs
-  register(ctx, "abs", arity=1, invoke=fn(args, _ctx) {
+  register(ctx, "abs", arity=1, signature=Some("n"), invoke=fn(args, _ctx) {
     match args[0] {
-      @value.JsonataValue::Json(Json::Number(n)) =>
+      @value.JsonataValue::Json(Json::Number(n, ..)) =>
         @value.JsonataValue::Json(Json::number(if n < 0.0 { -n } else { n }))
       _ => @value.JsonataValue::Undefined
     }
@@ -65,39 +65,39 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
   // $floor / $ceiling / $round
   register(ctx, "floor", arity=1, invoke=fn(args, _ctx) {
     match args[0] {
-      @value.JsonataValue::Json(Json::Number(n)) =>
+      @value.JsonataValue::Json(Json::Number(n, ..)) =>
         @value.JsonataValue::Json(Json::number(n.floor()))
       _ => @value.JsonataValue::Undefined
     }
   })
   register(ctx, "ceiling", arity=1, invoke=fn(args, _ctx) {
     match args[0] {
-      @value.JsonataValue::Json(Json::Number(n)) =>
+      @value.JsonataValue::Json(Json::Number(n, ..)) =>
         @value.JsonataValue::Json(Json::number(n.ceil()))
       _ => @value.JsonataValue::Undefined
     }
   })
   register(ctx, "round", arity=1, invoke=fn(args, _ctx) {
     match args[0] {
-      @value.JsonataValue::Json(Json::Number(n)) =>
+      @value.JsonataValue::Json(Json::Number(n, ..)) =>
         @value.JsonataValue::Json(Json::number(n.round()))
       _ => @value.JsonataValue::Undefined
     }
   })
   // $power
-  register(ctx, "power", arity=2, invoke=fn(args, _ctx) {
+  register(ctx, "power", arity=2, signature=Some("nn"), invoke=fn(args, _ctx) {
     let base = value_to_double(args[0])
     let exp = value_to_double(args[1])
-    @value.JsonataValue::Json(Json::number(base.pow(exp)))
+    @value.JsonataValue::Json(Json::number(@math.pow(base, exp)))
   })
   // $random
   register(ctx, "random", arity=0, invoke=fn(_args, _ctx) {
-    @value.JsonataValue::Json(Json::number(0.5))
+    @value.JsonataValue::Json(Json::number(random_fraction()))
   })
   // $sqrt
   register(ctx, "sqrt", arity=1, invoke=fn(args, _ctx) {
     match args[0] {
-      @value.JsonataValue::Json(Json::Number(n)) =>
+      @value.JsonataValue::Json(Json::Number(n, ..)) =>
         @value.JsonataValue::Json(Json::number(n.sqrt()))
       _ => @value.JsonataValue::Undefined
     }
@@ -146,7 +146,7 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
 ///|
 fn value_to_double(v : @value.JsonataValue) -> Double {
   match v {
-    @value.JsonataValue::Json(Json::Number(n)) => n
+    @value.JsonataValue::Json(Json::Number(n, ..)) => n
     _ => 0.0
   }
 }
@@ -158,18 +158,26 @@ fn value_to_num_array(v : @value.JsonataValue) -> Array[Double] {
     @value.JsonataValue::Json(Json::Array(arr)) =>
       for item in arr {
         match item {
-          Json::Number(n) => result.push(n)
+          Json::Number(n, ..) => result.push(n)
           _ => continue
         }
       }
     @value.JsonataValue::Sequence(arr) =>
       for item in arr {
         match item {
-          @value.JsonataValue::Json(Json::Number(n)) => result.push(n)
+          @value.JsonataValue::Json(Json::Number(n, ..)) => result.push(n)
           _ => continue
         }
       }
     _ => ()
   }
   result
+}
+
+///|
+fn random_fraction() -> Double {
+  let now = @env.now()
+  let seed = (now % 1_000_000).to_double()
+  let mixed = @math.sin(seed * 12.9898) * 43758.5453
+  mixed - mixed.floor()
 }

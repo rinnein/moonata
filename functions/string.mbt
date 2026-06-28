@@ -1,7 +1,10 @@
 ///|
 fn register_string_functions(ctx : @value.EvalContext) -> Unit {
   // $substring(str, start, length?)
-  register(ctx, "substring", arity=2, invoke=fn(args, _ctx) {
+  register(ctx, "substring", arity=2, signature=Some("sn"), invoke=fn(
+    args,
+    _ctx,
+  ) {
     let s = value_to_str(args[0])
     let start = value_to_int(args[1])
     let len = s.length()
@@ -34,7 +37,7 @@ fn register_string_functions(ctx : @value.EvalContext) -> Unit {
       @value.JsonataValue::Json(Json::Array(arr)) =>
         @value.JsonataValue::Json(Json::number(arr.length().to_double()))
       @value.JsonataValue::Json(Json::Object(map)) =>
-        @value.JsonataValue::Json(Json::number(map.size().to_double()))
+        @value.JsonataValue::Json(Json::number(map.length().to_double()))
       @value.JsonataValue::Sequence(arr) =>
         @value.JsonataValue::Json(Json::number(arr.length().to_double()))
       _ => @value.JsonataValue::Undefined
@@ -43,7 +46,7 @@ fn register_string_functions(ctx : @value.EvalContext) -> Unit {
   // $trim
   register(ctx, "trim", arity=1, invoke=fn(args, _ctx) {
     @value.JsonataValue::Json(
-      Json::string(value_to_str(args[0]).trim().to_string()),
+      Json::string(value_to_str(args[0]).trim().to_owned()),
     )
   })
   // $split
@@ -52,7 +55,7 @@ fn register_string_functions(ctx : @value.EvalContext) -> Unit {
     let sep = value_to_str(args[1])
     let arr : Array[Json] = []
     for p in s.split(sep) {
-      arr.push(Json::string(p.to_string()))
+      arr.push(Json::string(p.to_owned()))
     }
     @value.JsonataValue::Json(Json::array(arr))
   })
@@ -80,13 +83,19 @@ fn register_string_functions(ctx : @value.EvalContext) -> Unit {
     @value.JsonataValue::Json(Json::string(value_to_str(args[0]).to_lower()))
   })
   // $contains
-  register(ctx, "contains", arity=2, invoke=fn(args, _ctx) {
+  register(ctx, "contains", arity=2, signature=Some("ss"), invoke=fn(
+    args,
+    _ctx,
+  ) {
     let s = value_to_str(args[0])
     let sub = value_to_str(args[1])
     @value.JsonataValue::Json(Json::boolean(s.contains(sub)))
   })
   // $replace(str, pattern, replacement?)
-  register(ctx, "replace", arity=3, invoke=fn(args, _ctx) {
+  register(ctx, "replace", arity=3, signature=Some("sss"), invoke=fn(
+    args,
+    _ctx,
+  ) {
     let s = value_to_str(args[0])
     let pattern = value_to_str(args[1])
     let replacement = if args.length() > 2 { value_to_str(args[2]) } else { "" }
@@ -100,7 +109,7 @@ fn register_string_functions(ctx : @value.EvalContext) -> Unit {
     let chars = value_to_str(args[1])
     let idx = s.find(chars)
     match idx {
-      Some(i) => @value.JsonataValue::Json(Json::string(s[:i].to_string()))
+      Some(i) => @value.JsonataValue::Json(Json::string(s[:i].to_owned()))
       None => @value.JsonataValue::Json(Json::string(s))
     }
   })
@@ -112,7 +121,7 @@ fn register_string_functions(ctx : @value.EvalContext) -> Unit {
     match idx {
       Some(i) =>
         @value.JsonataValue::Json(
-          Json::string(s[i + chars.length():].to_string()),
+          Json::string(s[i + chars.length():].to_owned()),
         )
       None => @value.JsonataValue::Json(Json::string(s))
     }
@@ -136,7 +145,7 @@ fn register_string_functions(ctx : @value.EvalContext) -> Unit {
 fn value_to_str(v : @value.JsonataValue) -> String {
   match v {
     @value.JsonataValue::Json(Json::String(s)) => s
-    @value.JsonataValue::Json(Json::Number(n)) => n.to_string()
+    @value.JsonataValue::Json(Json::Number(n, ..)) => n.to_string()
     @value.JsonataValue::Json(Json::True) => "true"
     @value.JsonataValue::Json(Json::False) => "false"
     @value.JsonataValue::Json(Json::Null) => "null"
@@ -148,7 +157,7 @@ fn value_to_str(v : @value.JsonataValue) -> String {
 ///|
 fn value_to_int(v : @value.JsonataValue) -> Int {
   match v {
-    @value.JsonataValue::Json(Json::Number(n)) => n.to_int()
+    @value.JsonataValue::Json(Json::Number(n, ..)) => n.to_int()
     _ => 0
   }
 }

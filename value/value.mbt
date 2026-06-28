@@ -18,22 +18,66 @@ pub(all) enum JsonataValue {
 /// 内建函数与用户 Lambda 统一为 `JsonataFunc`，闭包接收参数数组与上下文。
 pub struct JsonataFunc {
   arity : Int
+  signature : String?
   invoke : (Array[JsonataValue], EvalContext) -> JsonataValue raise @error.JsonataError
 }
 
 ///|
 /// 为 `JsonataFunc` 手动实现 Debug（闭包不可打印，仅显示元数）。
 pub impl Debug for JsonataFunc with fn to_repr(self) {
-  Repr::string("#<func arity=\{self.arity}>")
+  match self.signature {
+    Some(sig) => Repr::string("#<func arity=\{self.arity} sig=\{sig}>")
+    None => Repr::string("#<func arity=\{self.arity}>")
+  }
 }
 
 ///|
 /// 构造函数值。
 pub fn JsonataFunc::new(
   arity~ : Int,
+  signature? : String? = None,
   invoke~ : (Array[JsonataValue], EvalContext) -> JsonataValue raise @error.JsonataError,
 ) -> JsonataFunc {
-  { arity, invoke }
+  { arity, signature, invoke }
+}
+
+///|
+/// 按简化签名检查已提供参数。
+///
+/// 支持的类型码：`s` string、`n` number、`b` boolean、`a` array、`o` object、
+/// `f` function、`j` any JSON/value。未提供签名时跳过检查。
+pub fn JsonataFunc::check_args(
+  self : JsonataFunc,
+  args : Array[JsonataValue],
+) -> Unit raise @error.JsonataError {
+  match self.signature {
+    Some(sig) => {
+      let chars = sig.to_array()
+      let limit = args.length().min(chars.length())
+      for i in 0..<limit {
+        if !matches_signature(args[i], chars[i]) {
+          raise @error.signature_error(
+            "函数参数类型不匹配: 第 \{i + 1} 个参数期望 \{chars[i]}",
+          )
+        }
+      }
+    }
+    None => ()
+  }
+}
+
+///|
+fn matches_signature(value : JsonataValue, sig : Char) -> Bool {
+  match sig {
+    'j' => true
+    's' => value is Json(Json::String(_))
+    'n' => value is Json(Json::Number(_, ..))
+    'b' => value is Json(Json::True) || value is Json(Json::False)
+    'a' => value is Json(Json::Array(_)) || value is Sequence(_)
+    'o' => value is Json(Json::Object(_))
+    'f' => value is Func(_)
+    _ => true
+  }
 }
 
 ///|
@@ -147,7 +191,7 @@ pub fn JsonataValue::sequence(items : Array[JsonataValue]) -> JsonataValue {
 pub fn JsonataValue::equal(self : JsonataValue, other : JsonataValue) -> Bool {
   match (self, other) {
     (Undefined, Undefined) => true
-    (Func(a), Func(b)) => a.arity == b.arity
+    (Func(a), Func(b)) => a.arity == b.arity && a.signature == b.signature
     (Json(a), Json(b)) => a == b
     (Sequence(a), Sequence(b)) =>
       if a.length() != b.length() {

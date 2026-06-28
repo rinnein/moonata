@@ -39,9 +39,11 @@ pub fn[T] EvalContext::with_depth(Self, () -> T raise @error.JsonataError) -> T 
 
 pub struct JsonataFunc {
   arity : Int
+  signature : String?
   invoke : (Array[JsonataValue], EvalContext) -> JsonataValue raise @error.JsonataError
 }
-pub fn JsonataFunc::new(arity~ : Int, invoke~ : (Array[JsonataValue], EvalContext) -> JsonataValue raise @error.JsonataError) -> Self
+pub fn JsonataFunc::check_args(Self, Array[JsonataValue]) -> Unit raise @error.JsonataError
+pub fn JsonataFunc::new(arity~ : Int, signature? : String?, invoke~ : (Array[JsonataValue], EvalContext) -> JsonataValue raise @error.JsonataError) -> Self
 pub impl @debug.Debug for JsonataFunc
 
 pub(all) enum JsonataValue {

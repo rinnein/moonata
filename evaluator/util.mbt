@@ -2,7 +2,7 @@
 /// 值转数字
 fn to_number(v : @value.JsonataValue) -> Double raise @error.JsonataError {
   match v {
-    @value.JsonataValue::Json(Json::Number(n)) => n
+    @value.JsonataValue::Json(Json::Number(n, ..)) => n
     @value.JsonataValue::Json(Json::String(s)) =>
       @strconv.from_str(s) catch {
         _ =>
@@ -28,7 +28,7 @@ fn to_number(v : @value.JsonataValue) -> Double raise @error.JsonataError {
 fn to_str(v : @value.JsonataValue) -> String {
   match v {
     @value.JsonataValue::Json(Json::String(s)) => s
-    @value.JsonataValue::Json(Json::Number(n)) => n.to_string()
+    @value.JsonataValue::Json(Json::Number(n, ..)) => n.to_string()
     @value.JsonataValue::Json(Json::True) => "true"
     @value.JsonataValue::Json(Json::False) => "false"
     @value.JsonataValue::Json(Json::Null) => "null"
@@ -43,7 +43,7 @@ fn to_bool(v : @value.JsonataValue) -> Bool {
   match v {
     @value.JsonataValue::Json(Json::True) => true
     @value.JsonataValue::Json(Json::False) => false
-    @value.JsonataValue::Json(Json::Number(n)) => n != 0.0
+    @value.JsonataValue::Json(Json::Number(n, ..)) => n != 0.0
     @value.JsonataValue::Json(Json::String(s)) => s.length() > 0
     @value.JsonataValue::Json(Json::Null) => false
     @value.JsonataValue::Undefined => false

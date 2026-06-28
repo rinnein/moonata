@@ -289,6 +289,7 @@ fn eval_apply(
       for arg_ast in args_ast {
         args.push(eval(arg_ast, ctx))
       }
+      f.check_args(args)
       if args.length() < f.arity {
         // 部分应用：返回捕获已提供参数的柯里化函数
         let captured = args
@@ -308,7 +309,11 @@ fn eval_apply(
           ctx2.with_depth(() => (original.invoke)(all, ctx2))
         }
         @value.JsonataValue::Func(
-          @value.JsonataFunc::new(arity=remaining, invoke~),
+          @value.JsonataFunc::new(
+            arity=remaining,
+            signature=f.signature,
+            invoke~,
+          ),
         )
       } else {
         ctx.with_depth(() => (f.invoke)(args, ctx))
@@ -329,7 +334,7 @@ fn eval_apply(
 fn eval_lambda(
   params : Array[String],
   body : @ast.Ast,
-  ctx : @value.EvalContext,
+  _ctx : @value.EvalContext,
 ) -> @value.JsonataValue {
   let arity = params.length()
   let invoke = fn(
@@ -411,7 +416,7 @@ fn eval_sort(
   for item in items {
     // 简化：用 item 本身作为排序上下文（实际应对每个 item 求值 term.expr）
     let v = match item {
-      @value.JsonataValue::Json(Json::Number(n)) => n
+      @value.JsonataValue::Json(Json::Number(n, ..)) => n
       _ => 0.0
     }
     keyed.push((v, item))

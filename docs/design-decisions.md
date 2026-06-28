@@ -49,7 +49,7 @@
 
 ## 5. 函数注册表：Map + 闭包
 
-**决策**：内建函数注册为 `Map[String, JsonataFunc]`，每个 `JsonataFunc` 持有闭包。
+**决策**：内建函数注册为 `Map[String, JsonataFunc]`，每个 `JsonataFunc` 持有闭包、元数与可选签名描述。
 
 **骨架**：
 ```moonbit
@@ -57,6 +57,7 @@
 pub fn register_builtins(ctx : EvalContext) -> Unit {
   ctx.bindings["$sum"] = Func(JsonataFunc::new(
     arity=1,
+    signature=Some("a"),
     invoke=fn(args, _ctx) {
       match args[0] {
         Sequence(arr) => Json(JsonValue::number(arr.fold(0.0, ...)))
@@ -70,7 +71,7 @@ pub fn register_builtins(ctx : EvalContext) -> Unit {
 }
 ```
 
-**理由**：闭包统一内建函数与用户 Lambda 的调用方式；签名检查在 `invoke` 内完成。
+**理由**：闭包统一内建函数与用户 Lambda 的调用方式；签名元数据在调用入口检查，类型不匹配统一映射为 `SignatureError`。
 
 ## 6. facade API
 
@@ -132,12 +133,12 @@ pub fn Compiled::run(self : Compiled, data : @json.JsonValue) -> @json.JsonValue
 | R1 | MoonBit 标准库无正则 | 高 | 中 | ~~P6 评估第三方库~~ **已引入 `moonbitlang/regexp@0.3.5`**（`compile` + `Regexp::execute` + `MatchResult`），P9.4 实现 `$match`/`$contains`/`$split`/`$replace` | ✅ 已解决 |
 | R2 | 序列展平语义复杂 | 中 | 高 | P1 集中实现并单测覆盖 | ✅ 已实现 |
 | R3 | 递归/Lambda 导致无限循环 | 中 | 高 | `EvalContext` 护栏（depth/steps） | ✅ 已实现 |
-| R4 | 官方测试套件庞大 | 高 | 中 | P9.5 选取核心分类用例，滚动补齐 | ⏳ 待执行 |
+| R4 | 官方测试套件庞大 | 高 | 中 | P9.5 已选取核心分类用例，非核心用例滚动补齐 | ✅ 核心完成 |
 | R5 | `@json.JsonValue` 与 JSONata 数值精度差异 | 低 | 低 | 统一用 `Double`，文档标注 | ✅ 已实现 |
 
 ## 10. 可行性结论
 
 - **技术可行性**：高。MoonBit 的 enum/suberror/闭包/`@json` 几乎 1:1 对应 JSONata 需求。
-- **正则支持**：~~主要不确定项，需在 P6 验证~~ **已解决**，通过 `moonbitlang/regexp@0.3.5` 提供 `compile`/`execute`/`MatchResult`，P9.4 实现正则函数。
-- **工程可行性**：8 包结构清晰，依赖无环，分阶段可独立验证。P1–P8 已完成，P9 为语义修复与函数补全。
-- **预估工作量**：P1–P8 共 47 人日（17 节点）已完成；P9 新增 12 人日（5 节点），总计 59 人日 / 22 节点。
+- **正则支持**：~~主要不确定项，需在 P6 验证~~ **已解决**，通过 `moonbitlang/regexp@0.3.5` 提供 `compile`/`execute`/`MatchResult`，P9/P10 实现正则函数与标准函数名兼容路径。
+- **工程可行性**：8 包结构清晰，依赖无环，分阶段可独立验证。P1–P10 已完成。
+- **预估工作量**：P1–P8 共 47 人日（17 节点）已完成；P9 新增 12 人日（5 节点）；P10 新增 7 人日（4 节点），总计 66 人日 / 26 节点。
