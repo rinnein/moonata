@@ -13,6 +13,8 @@ let default_max_steps : Int = 1_000_000
 /// - `bindings`：变量绑定表（含内建函数），Map 本身可变，字段无需 `mut`。
 /// - `depth`/`max_depth`：递归深度护栏。
 /// - `steps`/`max_steps`：求值步数护栏。
+/// - `current`：`@` 当前项（谓词过滤/路径迭代时绑定）。
+/// - `parent`：`$$` 父级上下文。
 pub struct EvalContext {
   root : JsonataValue
   bindings : Map[String, JsonataValue]
@@ -20,6 +22,8 @@ pub struct EvalContext {
   max_depth : Int
   mut steps : Int
   max_steps : Int
+  mut current : JsonataValue
+  mut parent : JsonataValue
 }
 
 ///|
@@ -32,6 +36,8 @@ pub fn EvalContext::new(root : JsonataValue) -> EvalContext {
     max_depth: default_max_depth,
     steps: 0,
     max_steps: default_max_steps,
+    current: root,
+    parent: root,
   }
 }
 
@@ -42,13 +48,82 @@ pub fn EvalContext::new_with_limits(
   max_depth? : Int = default_max_depth,
   max_steps? : Int = default_max_steps,
 ) -> EvalContext {
-  { root, bindings: {}, depth: 0, max_depth, steps: 0, max_steps }
+  {
+    root,
+    bindings: {},
+    depth: 0,
+    max_depth,
+    steps: 0,
+    max_steps,
+    current: root,
+    parent: root,
+  }
 }
 
 ///|
 /// 获取根数据（`$`）。
 pub fn EvalContext::root(self : EvalContext) -> JsonataValue {
   self.root
+}
+
+///|
+/// 获取当前项（`@`）。
+pub fn EvalContext::current(self : EvalContext) -> JsonataValue {
+  self.current
+}
+
+///|
+/// 获取父级上下文（`$$`）。
+pub fn EvalContext::parent(self : EvalContext) -> JsonataValue {
+  self.parent
+}
+
+///|
+/// 设置当前项（`@`），返回旧值以便恢复。
+pub fn EvalContext::set_current(
+  self : EvalContext,
+  v : JsonataValue,
+) -> JsonataValue {
+  let old = self.current
+  self.current = v
+  old
+}
+
+///|
+/// 设置父级上下文（`$$`），返回旧值以便恢复。
+pub fn EvalContext::set_parent(
+  self : EvalContext,
+  v : JsonataValue,
+) -> JsonataValue {
+  let old = self.parent
+  self.parent = v
+  old
+}
+
+///|
+/// 在指定当前项与父级下执行函数，自动恢复（含异常路径）。
+pub fn[T] EvalContext::with_context(
+  self : EvalContext,
+  current~ : JsonataValue,
+  parent~ : JsonataValue,
+  f : () -> T raise @error.JsonataError,
+) -> T raise @error.JsonataError {
+  let old_current = self.current
+  let old_parent = self.parent
+  self.current = current
+  self.parent = parent
+  try {
+    let r = f()
+    self.current = old_current
+    self.parent = old_parent
+    r
+  } catch {
+    e => {
+      self.current = old_current
+      self.parent = old_parent
+      raise e
+    }
+  }
 }
 
 ///|

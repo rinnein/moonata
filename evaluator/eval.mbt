@@ -26,15 +26,21 @@ pub fn eval(
 }
 
 ///|
-/// 变量求值：$ / $name / $$ / @
+/// 变量求值：$ / $name / $$ / @ / #
 fn eval_var(
   name : String,
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
   match name {
     "" => ctx.root() // $ 根
-    "$$" => ctx.root() // $$ 父级（简化为根）
-    "@" => ctx.root() // @ 当前（简化为根）
+    "$$" => ctx.parent() // $$ 父级上下文
+    "@" => ctx.current() // @ 当前项
+    "#" =>
+      // # 位置变量（谓词过滤中绑定），未绑定时 Undefined
+      match ctx.lookup("#") {
+        Some(v) => v
+        None => @value.JsonataValue::Undefined
+      }
     _ =>
       match ctx.lookup(name) {
         Some(v) => v
@@ -291,6 +297,9 @@ fn access_slice(
 
 ///|
 /// 谓词过滤
+///
+/// 迭代每个元素时将其绑定为 `@`（当前项），父级 `$$` 设为输入序列。
+/// 谓词表达式可引用 `@` 访问当前项字段，引用 `#` 访问当前索引。
 fn access_filter(
   input : @value.JsonataValue,
   expr : @ast.Ast,
@@ -299,8 +308,12 @@ fn access_filter(
   let items = input.to_array()
   let results : Array[@value.JsonataValue] = []
   for i, item in items {
-    // 布尔过滤
-    let r = ctx.with_depth(() => eval(expr, ctx))
+    // 将当前项绑定为 @，父级设为 input
+    let r = ctx.with_context(current=item, parent=input, fn() {
+      // 同时绑定 # 为当前索引
+      ctx.bind("#", @value.JsonataValue::Json(Json::number(i.to_double())))
+      ctx.with_depth(() => eval(expr, ctx))
+    })
     match r {
       @value.JsonataValue::Json(Json::True) => results.push(item)
       @value.JsonataValue::Json(Json::False) => continue

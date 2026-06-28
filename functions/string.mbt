@@ -85,6 +85,51 @@ fn register_string_functions(ctx : @value.EvalContext) -> Unit {
     let sub = value_to_str(args[1])
     @value.JsonataValue::Json(Json::boolean(s.contains(sub)))
   })
+  // $replace(str, pattern, replacement?)
+  register(ctx, "replace", arity=3, invoke=fn(args, _ctx) {
+    let s = value_to_str(args[0])
+    let pattern = value_to_str(args[1])
+    let replacement = if args.length() > 2 { value_to_str(args[2]) } else { "" }
+    @value.JsonataValue::Json(
+      Json::string(s.replace_all(old=pattern, new=replacement)),
+    )
+  })
+  // $substringBefore(str, chars)
+  register(ctx, "substringBefore", arity=2, invoke=fn(args, _ctx) {
+    let s = value_to_str(args[0])
+    let chars = value_to_str(args[1])
+    let idx = s.find(chars)
+    match idx {
+      Some(i) => @value.JsonataValue::Json(Json::string(s[:i].to_string()))
+      None => @value.JsonataValue::Json(Json::string(s))
+    }
+  })
+  // $substringAfter(str, chars)
+  register(ctx, "substringAfter", arity=2, invoke=fn(args, _ctx) {
+    let s = value_to_str(args[0])
+    let chars = value_to_str(args[1])
+    let idx = s.find(chars)
+    match idx {
+      Some(i) =>
+        @value.JsonataValue::Json(
+          Json::string(s[i + chars.length():].to_string()),
+        )
+      None => @value.JsonataValue::Json(Json::string(s))
+    }
+  })
+  // $pad(str, width, char?)
+  register(ctx, "pad", arity=2, invoke=fn(args, _ctx) {
+    let s = value_to_str(args[0])
+    let width = value_to_int(args[1])
+    let len = s.length()
+    if len >= width {
+      @value.JsonataValue::Json(Json::string(s))
+    } else {
+      let pad_char = if args.length() > 2 { value_to_str(args[2]) } else { " " }
+      let pad_str = pad_char.repeat(width - len)
+      @value.JsonataValue::Json(Json::string(s + pad_str))
+    }
+  })
 }
 
 ///|

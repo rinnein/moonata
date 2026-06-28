@@ -127,6 +127,7 @@ fn debug_tok(t : @lexer.Token) -> String {
     @lexer.TokenKind::Comma => ","
     @lexer.TokenKind::Question => "?"
     @lexer.TokenKind::At => "@"
+    @lexer.TokenKind::Hash => "#"
   }
 }
 

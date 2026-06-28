@@ -59,6 +59,7 @@ pub(all) enum TokenKind {
   Comma
   Question
   At
+  Hash
   DollarDollar
 } derive(Eq, @debug.Debug)
 

@@ -16,7 +16,7 @@
 | P6 | 内建函数 | functions | 3 | 10 | ✅ 完成（47 函数，待补至 60+） |
 | P7 | 高级特性 | evaluator / functions | 3 | 8 | ✅ 完成（部分应用/签名待补） |
 | P8 | CLI 与集成 | moonata / cmd/main | 2 | 4 | ✅ 完成（CLI 为演示模式） |
-| P9 | 语义修复与函数补全 | evaluator / functions / value | 5 | 12 | ⏳ 待开始 |
+| P9 | 语义修复与函数补全 | evaluator / functions / value | 5 | 12 | 🔄 C18-C21 完成 |
 | 合计 | | | **22** | **59** | |
 
 > P1–P8 现状：94 个测试全绿，`moon check/test/fmt/info` 通过，CLI 端到端可运行（`$sum($.items.price)` → `60`）。

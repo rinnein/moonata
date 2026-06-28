@@ -113,6 +113,64 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
     }
     @value.JsonataValue::Json(Json::string(parts.join(sep)))
   })
+  // $distinct — 去重（按 JSON 表示）
+  register(ctx, "distinct", arity=1, invoke=fn(args, _ctx) {
+    let items = args[0].to_array()
+    let seen : Array[String] = []
+    let results : Array[@value.JsonataValue] = []
+    for item in items {
+      let key = item.to_json().stringify()
+      if not(seen.contains(key)) {
+        seen.push(key)
+        results.push(item)
+      }
+    }
+    @value.JsonataValue::sequence(results)
+  })
+  // $single — 返回序列中唯一元素，0 或 >1 个时报错
+  register(ctx, "single", arity=1, invoke=fn(args, _ctx) {
+    let items = args[0].to_array()
+    match items.length() {
+      0 => @value.JsonataValue::Undefined
+      1 => items[0]
+      _ => raise @error.runtime_error("$single: 序列包含多个元素")
+    }
+  })
+  // $partition — 将序列按谓词分为 [match, non-match]
+  register(ctx, "partition", arity=2, invoke=fn(args, ctx) {
+    let items = args[0].to_array()
+    let f = match args[1] {
+      @value.JsonataValue::Func(f) => f
+      _ => return @value.JsonataValue::Undefined
+    }
+    let matched : Array[@value.JsonataValue] = []
+    let unmatched : Array[@value.JsonataValue] = []
+    for item in items {
+      let r = (f.invoke)([item], ctx)
+      if value_to_bool(r) {
+        matched.push(item)
+      } else {
+        unmatched.push(item)
+      }
+    }
+    let arr : Array[Json] = [
+      @value.JsonataValue::sequence(matched).to_json(),
+      @value.JsonataValue::sequence(unmatched).to_json(),
+    ]
+    @value.JsonataValue::Json(Json::array(arr))
+  })
+  // $zip — 将两个序列按位置配对
+  register(ctx, "zip", arity=2, invoke=fn(args, _ctx) {
+    let a = args[0].to_array()
+    let b = args[1].to_array()
+    let len = a.length().min(b.length())
+    let arr : Array[Json] = []
+    for i in 0..<len {
+      let pair : Array[Json] = [a[i].to_json(), b[i].to_json()]
+      arr.push(Json::array(pair))
+    }
+    @value.JsonataValue::Json(Json::array(arr))
+  })
 }
 
 ///|

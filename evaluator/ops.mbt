@@ -35,7 +35,7 @@ fn eval_binary(
     "*" => arith_op(lhs, rhs, "*")
     "/" => arith_op(lhs, rhs, "/")
     "%" => arith_op(lhs, rhs, "%")
-    "&" => concat_str(lhs, rhs)
+    "&" => concat_or_merge(lhs, rhs)
     "=" => compare_eq(lhs, rhs)
     "!=" => compare_neq(lhs, rhs)
     "<" => compare_lt(lhs, rhs)
@@ -82,6 +82,47 @@ fn concat_str(
   let l = to_str(lhs)
   let r = to_str(rhs)
   @value.JsonataValue::Json(Json::string(l + r))
+}
+
+///|
+/// `&` 运算：对象深度合并或字符串拼接
+///
+/// - 两边均为对象 → 深度合并（递归合并同键的对象，否则右侧覆盖）
+/// - 其他情况 → 字符串拼接
+fn concat_or_merge(
+  lhs : @value.JsonataValue,
+  rhs : @value.JsonataValue,
+) -> @value.JsonataValue {
+  match (lhs, rhs) {
+    (
+      @value.JsonataValue::Json(Json::Object(a)),
+      @value.JsonataValue::Json(Json::Object(b)),
+    ) => {
+      let result : Map[String, Json] = {}
+      // 先复制左侧
+      for k, v in a {
+        result[k] = v
+      }
+      // 合并右侧：同键且均为对象则递归合并，否则右侧覆盖
+      for k, v in b {
+        match (result.get(k), @value.JsonataValue::Json(v)) {
+          (
+            Some(Json::Object(left_obj)),
+            @value.JsonataValue::Json(Json::Object(right_obj)),
+          ) => {
+            let merged = concat_or_merge(
+              @value.JsonataValue::Json(Json::object(left_obj)),
+              @value.JsonataValue::Json(Json::object(right_obj)),
+            )
+            result[k] = merged.to_json()
+          }
+          _ => result[k] = v
+        }
+      }
+      @value.JsonataValue::Json(Json::object(result))
+    }
+    _ => concat_str(lhs, rhs)
+  }
 }
 
 ///|
@@ -234,6 +275,8 @@ fn eval_block(
 
 ///|
 /// 函数调用
+///
+/// 支持部分应用：当提供参数少于元数时，返回捕获已提供参数的柯里化函数。
 fn eval_apply(
   func_ast : @ast.Ast,
   args_ast : Array[@ast.Ast],
@@ -246,14 +289,30 @@ fn eval_apply(
       for arg_ast in args_ast {
         args.push(eval(arg_ast, ctx))
       }
-      // 检查元数（最小元数：允许更多参数）
       if args.length() < f.arity {
-        raise @error.signature_error(
-          "函数参数数量不足: 期望至少 \{f.arity}，得到 \{args.length()}",
-          func=None,
+        // 部分应用：返回捕获已提供参数的柯里化函数
+        let captured = args
+        let remaining = f.arity - args.length()
+        let original = f
+        let invoke = fn(
+          more_args : Array[@value.JsonataValue],
+          ctx2 : @value.EvalContext,
+        ) -> @value.JsonataValue raise @error.JsonataError {
+          let all : Array[@value.JsonataValue] = []
+          for a in captured {
+            all.push(a)
+          }
+          for a in more_args {
+            all.push(a)
+          }
+          ctx2.with_depth(() => (original.invoke)(all, ctx2))
+        }
+        @value.JsonataValue::Func(
+          @value.JsonataFunc::new(arity=remaining, invoke~),
         )
+      } else {
+        ctx.with_depth(() => (f.invoke)(args, ctx))
       }
-      ctx.with_depth(() => (f.invoke)(args, ctx))
     }
     @value.JsonataValue::Undefined => @value.JsonataValue::Undefined
     _ =>

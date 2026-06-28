@@ -134,4 +134,30 @@ fn register_object_functions(ctx : @value.EvalContext) -> Unit {
       _ => @value.JsonataValue::Undefined
     }
   })
+  // $shallow — 浅拷贝对象/数组
+  register(ctx, "shallow", arity=1, invoke=fn(args, _ctx) {
+    match args[0] {
+      @value.JsonataValue::Json(Json::Object(map)) => {
+        let result : Map[String, Json] = {}
+        for k, v in map {
+          result[k] = v
+        }
+        @value.JsonataValue::Json(Json::object(result))
+      }
+      @value.JsonataValue::Json(Json::Array(arr)) => {
+        let result : Array[Json] = []
+        for v in arr {
+          result.push(v)
+        }
+        @value.JsonataValue::Json(Json::array(result))
+      }
+      _ => args[0]
+    }
+  })
+  // $deep — 深拷贝（JSON 序列化/反序列化）
+  register(ctx, "deep", arity=1, invoke=fn(args, _ctx) {
+    let s = args[0].to_json().stringify()
+    let parsed = @json.parse(s) catch { _ => Json::null() }
+    @value.JsonataValue::Json(parsed)
+  })
 }

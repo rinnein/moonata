@@ -13,6 +13,8 @@ pub fn register_builtins(ctx : @value.EvalContext) -> Unit {
   register_type_functions(ctx)
   // 高阶函数
   register_higher_order_functions(ctx)
+  // 正则相关函数
+  register_regex_functions(ctx)
   // 特殊函数
   register_special_functions(ctx)
 }

@@ -52,6 +52,7 @@ pub(all) enum TokenKind {
   // 其他
   Question // ?
   At // @
+  Hash // # （位置变量，谓词过滤中表示当前索引）
   DollarDollar // $$
 } derive(Debug, Eq)
 
@@ -377,6 +378,7 @@ fn Lexer::lex_operator(
     '^' => TokenKind::Caret
     '?' => TokenKind::Question
     '@' => TokenKind::At
+    '#' => TokenKind::Hash
     '+' => TokenKind::Plus
     '-' => TokenKind::Minus
     '/' => TokenKind::Slash

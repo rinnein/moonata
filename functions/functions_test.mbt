@@ -224,3 +224,150 @@ test "函数：$merge" {
     ),
   )
 }
+
+///|
+test "P9.3：$replace 字符串替换" {
+  assert_true(
+    eval_fn("$replace(\"hello world\", \"world\", \"moonbit\")", Json::null()) ==
+    Json::string("hello moonbit"),
+  )
+}
+
+///|
+test "P9.3：$distinct 去重" {
+  let data = @json.parse("[1,2,2,3,3,3,4]")
+  let result = eval_fn("$distinct($)", data)
+  debug_inspect(
+    result,
+    content=(
+      #|Array([Number(1), Number(2), Number(3), Number(4)])
+    ),
+  )
+}
+
+///|
+test "P9.3：$sqrt $pi $e" {
+  assert_true(eval_fn("$sqrt(16)", Json::null()) == Json::number(4.0))
+  let pi = eval_fn("$pi", Json::null())
+  debug_inspect(
+    pi,
+    content=(
+      #|Null
+    ),
+  )
+  let e = eval_fn("$e", Json::null())
+  debug_inspect(
+    e,
+    content=(
+      #|Null
+    ),
+  )
+}
+
+///|
+test "P9.3：$formatBase 进制转换" {
+  assert_true(
+    eval_fn("$formatBase(255, 16)", Json::null()) == Json::string("ff"),
+  )
+  assert_true(
+    eval_fn("$formatBase(10, 2)", Json::null()) == Json::string("1010"),
+  )
+}
+
+///|
+test "P9.3：$single 唯一元素" {
+  let data = @json.parse("[42]")
+  assert_true(eval_fn("$single($)", data) == Json::number(42.0))
+}
+
+///|
+test "P9.3：$partition 分区" {
+  let data = @json.parse("[1,2,3,4,5]")
+  let result = eval_fn("$partition($, function($x) { $x > 3 })", data)
+  debug_inspect(
+    result,
+    content=(
+      #|Array(
+      #|  [
+      #|    Array([Number(4), Number(5)]),
+      #|    Array([Number(1), Number(2), Number(3)]),
+      #|  ],
+      #|)
+    ),
+  )
+}
+
+///|
+test "P9.3：$zip 配对" {
+  let data1 = @json.parse("[1,2,3]")
+  let data2 = @json.parse("[\"a\",\"b\",\"c\"]")
+  let result = eval_fn("$zip($, [\"a\",\"b\",\"c\"])", data1)
+  debug_inspect(
+    result,
+    content=(
+      #|Array(
+      #|  [
+      #|    Array([Number(1), String("a")]),
+      #|    Array([Number(2), String("b")]),
+      #|    Array([Number(3), String("c")]),
+      #|  ],
+      #|)
+    ),
+  )
+}
+
+///|
+test "P9.3：$base64encode $base64decode" {
+  let encoded = eval_fn("$base64encode(\"hello\")", Json::null())
+  debug_inspect(
+    encoded,
+    content=(
+      #|String("aGVsbG8=")
+    ),
+  )
+  let decoded = eval_fn("$base64decode($base64encode(\"hello\"))", Json::null())
+  assert_true(decoded == Json::string("hello"))
+}
+
+///|
+test "P9.4：$match 正则匹配" {
+  let result = eval_fn("$match(\"abc123def\", \"[0-9]+\")", Json::null())
+  debug_inspect(
+    result,
+    content=(
+      #|Object({ "match": String("123"), "groups": Array([]) })
+    ),
+  )
+}
+
+///|
+test "P9.4：$contains_regex 正则包含" {
+  assert_true(
+    eval_fn("$contains_regex(\"hello world\", \"world\")", Json::null()) ==
+    Json::boolean(true),
+  )
+  assert_true(
+    eval_fn("$contains_regex(\"hello\", \"[0-9]+\")", Json::null()) ==
+    Json::boolean(false),
+  )
+}
+
+///|
+test "P9.4：$split_regex 正则分割" {
+  let result = eval_fn("$split_regex(\"a1b2c3d\", \"[0-9]\")", Json::null())
+  debug_inspect(
+    result,
+    content=(
+      #|Array([String("a"), String("b"), String("c"), String("d")])
+    ),
+  )
+}
+
+///|
+test "P9.4：$replace_regex 正则替换" {
+  let result = eval_fn(
+    "$replace_regex(\"hello world\", \"world\", \"moonbit\")",
+    Json::null(),
+  )
+  assert_true(result == Json::string("hello moonbit"))
+}
