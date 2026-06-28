@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "moonbit-agent-guide": {
+      "source": "moonbitlang/skills",
+      "sourceType": "github",
+      "skillPath": "skills/moonbit-agent-guide/SKILL.md",
+      "computedHash": "f1933048004a030defa272f3c14eca32b279930c6217fdbc4e6b04f836e054a3"
+    }
+  }
+}

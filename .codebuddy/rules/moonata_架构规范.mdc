@@ -1,0 +1,80 @@
+---
+description: Moonata 架构规范——包边界、依赖方向、类型所有权与命名约定。在新增/修改包、moon.pkg 或公开类型时遵循。
+globs: "**/moon.pkg,moon.mod,**/types.mbt,**/api.mbt"
+alwaysApply: false
+---
+
+# Moonata 架构规范
+
+## 1. 依赖方向（单向无环）
+
+```
+error (底层)
+  ├─ ast
+  ├─ value
+  └─ lexer
+       └─ parser
+            └─ evaluator
+                 └─ functions
+                      └─ moonata (facade)
+                           └─ cmd/main
+```
+
+- 依赖只能自底向上。
+- `ast` 与 `value` 互不依赖。
+- `parser` 不依赖 `value`/`evaluator`。
+- 新增依赖须在 `docs/architecture.md` 登记并确认无环。
+
+## 2. 包职责与类型所有权
+
+| 包 | 拥有的公开类型 | 禁止 |
+| --- | --- | --- |
+| `error` | `JsonataError` | 依赖任何内部包 |
+| `ast` | `Ast`、`Step`、`SortTerm` | 依赖 `value`/`lexer`/`parser` |
+| `value` | `JsonataValue`、`JsonataFunc`、`EvalContext` | 依赖 `ast`/`lexer`/`parser` |
+| `lexer` | `Token`、`Lexer` | 依赖 `ast`/`value`/`parser` |
+| `parser` | `Parser`、`parse` | 依赖 `value`/`evaluator` |
+| `evaluator` | `Evaluator`、`eval` | 依赖 `functions` |
+| `functions` | `register_builtins`、签名 | — |
+| `moonata` | `evaluate`、`compile`、`Compiled` | 被其他内部包依赖 |
+
+公开具体类型定义在其所属包；facade 用 `pub using` 再导出，禁止把公开具体类型放进 `internal/*`。
+
+## 3. moon.pkg 配置规范
+
+- 每个包目录必须有 `moon.pkg`。
+- 导入格式：`"rinnein/moonata/<pkg>"`，默认别名为末段。
+- 测试专用依赖用 `for "test"` / `for "wbtest"` 块。
+- CLI 包设置 `options("is-main": true)`。
+
+示例：
+```
+import {
+  "rinnein/moonata/error",
+  "rinnein/moonata/ast",
+  "rinnein/moonata/value",
+}
+```
+
+## 4. 类型设计约定
+
+- AST 节点：统一 `enum Ast`，标签字段命名（`op~`/`lhs~`/`rhs~`），`derive(Debug)`。
+- 运行时值：`JsonataValue` 四态，`Sequence` 元素恒为 `Json`。
+- 错误：单一 `suberror JsonataError`，变体携带结构化字段。
+- 函数值：`JsonataFunc` 持有闭包，`arity` + `invoke`。
+- 可变状态：`EvalContext` 字段按需加 `mut`，数组/Map 引用本身可变无需 `mut`。
+
+## 5. 文件组织
+
+- 同特性聚合到一个文件（如 `string_functions.mbt`、`numeric_functions.mbt`）。
+- 弃用代码放 `deprecated.mbt`。
+- 文件名纯组织性，不定义模块/命名空间。
+- 每个顶层定义以 `///|` 分隔。
+
+## 6. 新增包流程
+
+1. 在 `docs/architecture.md` 登记包名、职责、依赖、公开类型。
+2. 创建目录与 `moon.pkg`。
+3. 实现 `.mbt` 文件与 `*_test.mbt`。
+4. 在 facade 按需 `pub using` 再导出。
+5. 运行 `moon info` 确认 `.mbti` 变更预期。

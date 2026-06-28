@@ -1,0 +1,85 @@
+---
+description: Moonata Git 提交流程——提交信息规范、阶段门禁与验证清单。在执行 git commit 或完成一个开发阶段时遵循。
+globs: "**/*.mbt,**/moon.pkg,docs/**"
+alwaysApply: false
+---
+
+# Moonata Git 提交流程
+
+## 1. 提交信息格式
+
+```
+<type>(<scope>): <subject>
+
+<可选正文：动机、验证结果、风险、BREAKING 标注>
+```
+
+### type（必填）
+`feat` / `fix` / `refactor` / `test` / `docs` / `chore` / `perf`
+
+### scope（必填）
+`ast` / `lexer` / `parser` / `evaluator` / `functions` / `value` / `error` / `cli` / `core`
+
+- 跨多个 scope 用 `core`。
+- 仅文档用 `docs`。
+
+### subject
+- 祈使句，中文或英文均可。
+- ≤50 字符，首字母不大写（英文时），不加句号。
+
+## 2. 17 个提交节点（对应 `docs/development-plan.md`）
+
+| 节点 | 阶段 | 提交信息 |
+| --- | --- | --- |
+| C1 | P1 | `feat(error): 定义 JSONata 错误类型层级` |
+| C2 | P1 | `feat(ast,value): 定义 AST 节点与运行时值类型` |
+| C3 | P2 | `feat(lexer): 实现词法分析器与 token 流生成` |
+| C4 | P3 | `feat(parser): 实现表达式与路径解析` |
+| C5 | P3 | `feat(parser): 实现分组、排序、Lambda 与函数链` |
+| C6 | P4 | `feat(evaluator): 实现字面量、变量与上下文求值` |
+| C7 | P4 | `feat(evaluator): 实现 undefined 传播与递归护栏` |
+| C8 | P5 | `feat(evaluator): 实现路径遍历与谓词过滤` |
+| C9 | P5 | `feat(evaluator): 实现运算符与序列构造` |
+| C10 | P6 | `feat(functions): 实现函数注册表与签名系统` |
+| C11 | P6 | `feat(functions): 实现字符串、数值与聚合函数` |
+| C12 | P6 | `feat(functions): 实现对象、类型转换与正则相关函数` |
+| C13 | P7 | `feat(evaluator): 实现分组与排序表达式` |
+| C14 | P7 | `feat(evaluator): 实现 Lambda 与部分应用` |
+| C15 | P7 | `feat(functions): 实现函数链与自定义函数扩展` |
+| C16 | P8 | `feat(core): 实现 facade API 与 CLI 入口` |
+| C17 | P8 | `test(core): 移植 JSONata 测试套件并完成集成回归` |
+
+## 3. 阶段门禁（提交前必须通过）
+
+```bash
+moon check           # 零错误，警告已处理
+moon test            # 本阶段相关测试全绿
+moon fmt             # 代码已格式化
+moon info            # .mbti 变更符合预期
+```
+
+四项全绿方可提交。任一失败须修复后再提交。
+
+## 4. 禁止事项
+
+- 禁止 `git commit --no-verify` 跳过 pre-commit 钩子（钩子执行 `moon check`）。
+- 禁止 `--amend` 除非用户明确要求。
+- 禁止 `--force` 推送至 master/main。
+- 禁止跳过测试提交"半成品"——每提交节点须是可验证里程碑。
+
+## 5. 破坏性变更
+
+涉及公开 API 破坏性变更时，提交信息正文须以 `BREAKING:` 开头说明影响，例如：
+
+```
+feat(ast): 重构 Path 节点结构
+
+BREAKING: Ast::Path 字段由 Array[Step] 改为 steps~ : Array[Step]，
+影响 parser/evaluator 对 Path 的构造与匹配。
+```
+
+## 6. 提交粒度
+
+- 一个提交节点 = 一个阶段里程碑，可包含多个文件。
+- 节点内的细粒度提交（如调试过程中的小步提交）允许，但最终节点须满足门禁。
+- 跨阶段的大改动应拆分为对应节点，而非合并提交。

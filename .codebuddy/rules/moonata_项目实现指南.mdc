@@ -1,0 +1,68 @@
+---
+description: Moonata 项目（JSONata→MoonBit 移植）实现指南。在开发 moonata 任何包或修改架构相关代码时强制遵循。
+globs: "**/*.mbt,**/moon.pkg,moon.mod,docs/**"
+alwaysApply: true
+---
+
+# Moonata 项目实现指南
+
+本项目是将 JSONata（JSON 查询/转换语言）移植至 MoonBit 的工程。所有实现须以 `docs/` 下的设计文档为权威依据。
+
+## 1. 必读文档（动手前先读）
+
+- `docs/architecture.md` — 包架构、依赖图、关键类型设计
+- `docs/development-plan.md` — 8 阶段开发计划与 17 个 Git 提交节点
+- `docs/design-decisions.md` — 设计决策、代码骨架、风险登记
+
+遇到设计取舍时，以 `docs/design-decisions.md` 为准；若需偏离，先更新文档再改代码。
+
+## 2. 包结构（严格遵循）
+
+```
+error → ast, value, lexer → parser → evaluator → functions → moonata → cmd/main
+```
+
+- `error`：最底层，禁止依赖任何内部包。
+- `ast` 与 `value`：只依赖 `error`，二者互不依赖。
+- `parser`：不依赖 `value`/`evaluator`。
+- 禁止任何反向依赖或循环依赖。
+- 新增包须先在 `docs/architecture.md` 登记职责与依赖。
+
+## 3. 关键类型约定
+
+- AST 节点统一为 `@ast.Ast` enum，子结构用 `Step`/`SortTerm`，禁止用 struct+trait 表示节点。
+- 运行时值统一为 `@value.JsonataValue`（`Json`/`Sequence`/`Func`/`Undefined` 四态）。
+- 错误统一为 `@error.JsonataError` suberror，单一类型 + 变体模式匹配。
+- 序列元素恒为 `Json`（已展平），单例在标量上下文提升，`Undefined` 按 JSONata 规则传播。
+
+## 4. 开发节奏（阶段门禁）
+
+每阶段提交前必须通过：
+1. `moon check`（零错误，警告已处理）
+2. `moon test`（本阶段相关测试全绿）
+3. `moon fmt`（已格式化）
+4. `moon info`（`.mbti` 变更符合预期）
+
+未通过门禁不得提交。禁止 `--no-verify` 跳过 pre-commit 钩子。
+
+## 5. MoonBit 编码约定
+
+- block 风格：顶层定义以 `///|` 分隔，按 block 重构。
+- 文件小而内聚：同特性聚合到一个文件，避免巨型 `util`/`impl` 文件。
+- 命名：值/函数 lower_snake；类型/enum UpperCamel。
+- 错误：可能失败的函数声明 `raise JsonataError`，调用方自动传播，仅本地处理用 `catch`。
+- 测试：稳定结果用 `assert_eq`；结构化调试用 `debug_inspect` + `derive(Debug)`；不为调试派生 `Show`。
+- 公开类型所有权：公开具体类型定义在其所属包，facade 用 `pub using` 再导出，不放进 `internal/*`。
+
+## 6. 探索优先
+
+编码前先用 `moon ide doc` 发现现有 API，而非凭记忆。优先用 `moon ide outline`/`peek-def`/`find-references` 做语义导航，而非 grep。
+
+## 7. 完成检查清单
+
+每次完成任务后自检：
+- [ ] 是否更新了相关 `docs/` 文档（若涉及架构/计划变更）
+- [ ] `moon check && moon test && moon fmt && moon info` 是否全绿
+- [ ] `.mbti` 变更是否预期
+- [ ] 是否补充了对应测试
+- [ ] Git 提交信息是否符合 `<type>(<scope>): <subject>` 规范

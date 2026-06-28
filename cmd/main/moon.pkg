@@ -1,0 +1,7 @@
+// import {
+//   "rinnein/moonata" @lib,
+// }
+
+options(
+  "is-main": true,
+)
