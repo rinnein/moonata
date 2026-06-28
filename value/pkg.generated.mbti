@@ -1,0 +1,58 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "rinnein/moonata/value"
+
+import {
+  "moonbitlang/core/debug",
+  "rinnein/moonata/error",
+}
+
+// Values
+pub fn flatten_sequence(Array[JsonataValue]) -> Array[JsonataValue]
+
+// Errors
+
+// Types and methods
+pub struct EvalContext {
+  root : JsonataValue
+  bindings : Map[String, JsonataValue]
+  mut depth : Int
+  max_depth : Int
+  mut steps : Int
+  max_steps : Int
+}
+pub fn EvalContext::bind(Self, String, JsonataValue) -> Unit
+pub fn EvalContext::enter(Self) -> Unit raise @error.JsonataError
+pub fn EvalContext::exit(Self) -> Unit
+pub fn EvalContext::lookup(Self, String) -> JsonataValue?
+pub fn EvalContext::new(JsonataValue) -> Self
+pub fn EvalContext::new_with_limits(JsonataValue, max_depth? : Int, max_steps? : Int) -> Self
+pub fn EvalContext::root(Self) -> JsonataValue
+pub fn EvalContext::tick(Self) -> Unit raise @error.JsonataError
+pub fn[T] EvalContext::with_depth(Self, () -> T raise @error.JsonataError) -> T raise @error.JsonataError
+
+pub struct JsonataFunc {
+  arity : Int
+  invoke : (Array[JsonataValue], EvalContext) -> JsonataValue raise @error.JsonataError
+}
+pub fn JsonataFunc::new(arity~ : Int, invoke~ : (Array[JsonataValue], EvalContext) -> JsonataValue raise @error.JsonataError) -> Self
+pub impl @debug.Debug for JsonataFunc
+
+pub(all) enum JsonataValue {
+  Json(Json)
+  Sequence(Array[JsonataValue])
+  Func(JsonataFunc)
+  Undefined
+} derive(@debug.Debug)
+pub fn JsonataValue::equal(Self, Self) -> Bool
+pub fn JsonataValue::from_json(Json) -> Self
+pub fn JsonataValue::is_sequence(Self) -> Bool
+pub fn JsonataValue::is_undefined(Self) -> Bool
+pub fn JsonataValue::lift_singleton(Self) -> Self
+pub fn JsonataValue::sequence(Array[Self]) -> Self
+pub fn JsonataValue::to_array(Self) -> Array[Self]
+pub fn JsonataValue::to_json(Self) -> Json
+
+// Type aliases
+
+// Traits
+
