@@ -167,7 +167,7 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
   })
   // $formatInteger(number, picture)
   register(ctx, "formatInteger", arity=2, invoke=fn(args, _ctx) {
-    let n = value_to_int(args[0])
+    let n = value_to_double(args[0])
     let picture = value_to_str(args[1])
     @value.JsonataValue::Json(Json::string(format_integer(n, picture)))
   })
@@ -175,9 +175,7 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
   register(ctx, "parseInteger", arity=2, invoke=fn(args, _ctx) {
     let s = value_to_str(args[0])
     let picture = value_to_str(args[1])
-    @value.JsonataValue::Json(
-      Json::number(parse_integer(s, picture).to_double()),
-    )
+    @value.JsonataValue::Json(Json::number(parse_integer(s, picture)))
   })
 }
 
@@ -430,38 +428,51 @@ fn apply_fraction_grouping(digits : String, pic : String) -> String {
 }
 
 ///|
-fn format_integer(n : Int, picture : String) -> String {
+fn format_integer(n : Double, picture : String) -> String {
   let ordinal = picture.contains(";o")
   let pic = base_picture(picture)
   if pic == "I" || pic == "i" {
-    let r = to_roman(n)
+    let r = to_roman(n.to_int())
     if pic == "i" {
       r.to_lower()
     } else {
       r
     }
+  } else if pic == "A" || pic == "a" {
+    let letters = to_letters(n.to_int())
+    if pic == "a" {
+      letters.to_lower()
+    } else {
+      letters
+    }
   } else if pic.contains("w") || pic.contains("W") {
-    let words = number_to_words(n)
+    let words = if ordinal {
+      number_to_ordinal_words(n)
+    } else {
+      number_to_words(n)
+    }
     if pic == "W" {
       words.to_upper()
     } else if pic == "Ww" {
-      title_words(words)
+      title_words(words).replace_all(old=" And ", new=" and ")
     } else {
       words
     }
   } else {
-    let mut digits = int_abs(n).to_string()
+    let negative = n < 0.0
+    let abs_n = if negative { -n } else { n }
+    let mut digits = integer_digits(abs_n)
     let min_width = min_integer_width(pic)
     while digits.length() < min_width {
       digits = "0" + digits
     }
     digits = apply_grouping(digits, pic)
     digits = translate_digits(digits, pic)
-    if n < 0 {
+    if negative {
       digits = "-" + digits
     }
     if ordinal {
-      digits + ordinal_suffix(n)
+      digits + ordinal_suffix(n.to_int())
     } else {
       digits
     }
@@ -469,10 +480,13 @@ fn format_integer(n : Int, picture : String) -> String {
 }
 
 ///|
-fn parse_integer(s : String, picture : String) -> Int {
+fn parse_integer(s : String, picture : String) -> Double {
   let pic = base_picture(picture)
   if pic == "I" || pic == "i" {
-    return from_roman(s)
+    return from_roman(s).to_double()
+  }
+  if pic == "A" || pic == "a" {
+    return from_letters(s).to_double()
   }
   if pic.contains("w") || pic.contains("W") {
     return words_to_number(s)
@@ -485,7 +499,7 @@ fn parse_integer(s : String, picture : String) -> Int {
     }
   }
   @strconv.from_str(buf.to_string()) catch {
-    _ => 0
+    _ => 0.0
   }
 }
 
@@ -536,10 +550,11 @@ fn apply_grouping(digits : String, pic : String) -> String {
   let mut pos = digits.length()
   let mut group_index = 0
   let parts : Array[String] = []
+  let repeat = should_repeat_grouping(groups)
   while pos > 0 {
     let (size, sep) = if group_index < groups.length() {
       groups[group_index]
-    } else if groups.length() == 1 {
+    } else if groups.length() == 1 || repeat {
       groups[0]
     } else {
       parts.push(digits[0:pos].to_owned())
@@ -562,6 +577,21 @@ fn apply_grouping(digits : String, pic : String) -> String {
     j -= 1
   }
   out.to_string()
+}
+
+///|
+fn should_repeat_grouping(groups : Array[(Int, Char)]) -> Bool {
+  if groups.length() <= 1 {
+    return true
+  }
+  let (size0, sep0) = groups[0]
+  for group in groups {
+    let (size, sep) = group
+    if size != size0 || sep != sep0 {
+      return false
+    }
+  }
+  true
 }
 
 ///|
@@ -608,6 +638,36 @@ fn int_abs(n : Int) -> Int {
     -n
   } else {
     n
+  }
+}
+
+///|
+fn integer_digits(n : Double) -> String {
+  let int_part = n.floor()
+  if int_part <= 9_007_199_254_740_991.0 {
+    return int_part.to_int64().to_string()
+  }
+  format_large_integer_digits(int_part)
+}
+
+///|
+fn format_large_integer_digits(n : Double) -> String {
+  if n < 1000.0 {
+    return n.round().to_int().to_string()
+  }
+  let high = (n / 1000.0).floor()
+  let group = (n - high * 1000.0).round().to_int()
+  format_large_integer_digits(high) + pad3_int(group)
+}
+
+///|
+fn pad3_int(n : Int) -> String {
+  if n < 10 {
+    "00\{n}"
+  } else if n < 100 {
+    "0\{n}"
+  } else {
+    n.to_string()
   }
 }
 
@@ -675,28 +735,150 @@ fn from_roman(s : String) -> Int {
 }
 
 ///|
-fn number_to_words(n : Int) -> String {
-  if n == 0 {
+fn number_to_words(n : Double) -> String {
+  if n == 0.0 {
     return "zero"
   }
-  let scales = [
-    (1_000_000_000, "billion"),
-    (1_000_000, "million"),
-    (1000, "thousand"),
-  ]
   let parts : Array[String] = []
-  let mut rest = n
-  for scale in scales {
-    let (value, name) = scale
-    if rest >= value {
-      parts.push(number_under_thousand(rest / value) + " " + name)
-      rest = rest % value
+  let mut value = n.floor()
+  let mut scale_index = 0
+  while value >= 1.0 {
+    let high = (value / 1000.0).floor()
+    let group = (value - high * 1000.0).round().to_int()
+    if group > 0 {
+      let scale = scale_name(scale_index)
+      let words = number_under_thousand(group)
+      if scale == "" {
+        parts.push(words)
+      } else {
+        parts.push(words + " " + scale)
+      }
+    }
+    value = high
+    scale_index += 1
+  }
+  normalize_large_word_join(reverse_strings(parts).join(", "))
+}
+
+///|
+fn normalize_large_word_join(words : String) -> String {
+  let collapsed = words.replace_all(
+    old=" thousand trillion, ",
+    new=" thousand, ",
+  )
+  let chars = collapsed.to_array()
+  let mut comma = -1
+  for i, c in chars {
+    if c == ',' {
+      comma = i
     }
   }
-  if rest > 0 {
-    parts.push(number_under_thousand(rest))
+  if comma < 0 || comma + 2 >= chars.length() {
+    return collapsed
   }
-  parts.join(", ")
+  let tail = chars_to_string(chars, comma + 2, chars.length())
+  if tail.contains(" ") {
+    collapsed
+  } else {
+    chars_to_string(chars, 0, comma) + " and " + tail
+  }
+}
+
+///|
+fn number_to_ordinal_words(n : Double) -> String {
+  let words = number_to_words(n)
+  let chars = words.to_array()
+  let mut i = chars.length() - 1
+  while i >= 0 {
+    if (chars[i] >= 'a' && chars[i] <= 'z') ||
+      (chars[i] >= 'A' && chars[i] <= 'Z') {
+      break
+    }
+    i -= 1
+  }
+  let end = i + 1
+  while i >= 0 &&
+        (
+          (chars[i] >= 'a' && chars[i] <= 'z') ||
+          (chars[i] >= 'A' && chars[i] <= 'Z')
+        ) {
+    i -= 1
+  }
+  let start = i + 1
+  chars_to_string(chars, 0, start) +
+  ordinal_word(chars_to_string(chars, start, end)) +
+  chars_to_string(chars, end, chars.length())
+}
+
+///|
+fn reverse_strings(items : Array[String]) -> Array[String] {
+  let out : Array[String] = []
+  let mut i = items.length() - 1
+  while i >= 0 {
+    out.push(items[i])
+    i -= 1
+  }
+  out
+}
+
+///|
+fn scale_name(index : Int) -> String {
+  if index == 0 {
+    return ""
+  }
+  let base = match (index - 1) % 4 {
+    0 => "thousand"
+    1 => "million"
+    2 => "billion"
+    _ => "trillion"
+  }
+  let trillion_count = (index - 1) / 4
+  if trillion_count == 0 {
+    base
+  } else {
+    let out = StringBuilder::new()
+    out.write_string(base)
+    for _ in 0..<trillion_count {
+      out.write_string(" trillion")
+    }
+    out.to_string()
+  }
+}
+
+///|
+fn to_letters(n : Int) -> String {
+  if n <= 0 {
+    return ""
+  }
+  let out : Array[Char] = []
+  let mut value = n
+  while value > 0 {
+    value -= 1
+    out.push(Int::unsafe_to_char('A'.to_int() + value % 26))
+    value = value / 26
+  }
+  let rev = out.rev()
+  let buf = StringBuilder::new()
+  for c in rev {
+    buf.write_char(c)
+  }
+  buf.to_string()
+}
+
+///|
+fn from_letters(s : String) -> Int {
+  let mut value = 0
+  for _, c0 in s {
+    let c = if c0 >= 'a' && c0 <= 'z' {
+      Int::unsafe_to_char(c0.to_int() - 32)
+    } else {
+      c0
+    }
+    if c >= 'A' && c <= 'Z' {
+      value = value * 26 + (c.to_int() - 'A'.to_int() + 1)
+    }
+  }
+  value
 }
 
 ///|
@@ -744,24 +926,29 @@ fn title_words(s : String) -> String {
 }
 
 ///|
-fn words_to_number(s : String) -> Int {
+fn words_to_number(s : String) -> Double {
   let cleaned = s
     .to_lower()
     .replace_all(old=",", new="")
     .replace_all(old="-", new=" ")
-  let mut total = 0
-  let mut current = 0
-  for part in cleaned.split(" ") {
+  let normalized = normalize_ordinal_words(cleaned)
+  let mut total = 0.0
+  let mut current = 0.0
+  for part in normalized.split(" ") {
     let w = part.to_owned()
     if w == "" || w == "and" {
       continue
     }
     let value = word_value(w)
-    if value == 100 {
+    if value == 100.0 {
       current *= 100
     } else if value >= 1000 {
-      total += current * value
-      current = 0
+      if current == 0.0 && total > 0.0 {
+        total *= value
+      } else {
+        total += current * value
+      }
+      current = 0.0
     } else {
       current += value
     }
@@ -770,39 +957,124 @@ fn words_to_number(s : String) -> Int {
 }
 
 ///|
-fn word_value(w : String) -> Int {
+fn normalize_ordinal_words(s : String) -> String {
+  let out = StringBuilder::new()
+  let mut first = true
+  for part in s.split(" ") {
+    let w = part.to_owned()
+    if w == "" {
+      continue
+    }
+    if !first {
+      out.write_char(' ')
+    }
+    out.write_string(ordinal_to_cardinal(w))
+    first = false
+  }
+  out.to_string()
+}
+
+///|
+fn ordinal_word(w : String) -> String {
   match w {
-    "one" => 1
-    "two" => 2
-    "three" => 3
-    "four" => 4
-    "five" => 5
-    "six" => 6
-    "seven" => 7
-    "eight" => 8
-    "nine" => 9
-    "ten" => 10
-    "eleven" => 11
-    "twelve" => 12
-    "thirteen" => 13
-    "fourteen" => 14
-    "fifteen" => 15
-    "sixteen" => 16
-    "seventeen" => 17
-    "eighteen" => 18
-    "nineteen" => 19
-    "twenty" => 20
-    "thirty" => 30
-    "forty" => 40
-    "fifty" => 50
-    "sixty" => 60
-    "seventy" => 70
-    "eighty" => 80
-    "ninety" => 90
-    "hundred" => 100
-    "thousand" => 1000
-    "million" => 1_000_000
-    "billion" => 1_000_000_000
-    _ => 0
+    "one" => "first"
+    "two" => "second"
+    "three" => "third"
+    "five" => "fifth"
+    "eight" => "eighth"
+    "nine" => "ninth"
+    "twelve" => "twelfth"
+    "twenty" => "twentieth"
+    "thirty" => "thirtieth"
+    "forty" => "fortieth"
+    "fifty" => "fiftieth"
+    "sixty" => "sixtieth"
+    "seventy" => "seventieth"
+    "eighty" => "eightieth"
+    "ninety" => "ninetieth"
+    "hundred" => "hundredth"
+    "thousand" => "thousandth"
+    "million" => "millionth"
+    "billion" => "billionth"
+    "trillion" => "trillionth"
+    _ => w + "th"
+  }
+}
+
+///|
+fn ordinal_to_cardinal(w : String) -> String {
+  match w {
+    "first" => "one"
+    "second" => "two"
+    "third" => "three"
+    "fourth" => "four"
+    "fifth" => "five"
+    "sixth" => "six"
+    "seventh" => "seven"
+    "eighth" => "eight"
+    "ninth" => "nine"
+    "tenth" => "ten"
+    "eleventh" => "eleven"
+    "twelfth" => "twelve"
+    "thirteenth" => "thirteen"
+    "fourteenth" => "fourteen"
+    "fifteenth" => "fifteen"
+    "sixteenth" => "sixteen"
+    "seventeenth" => "seventeen"
+    "eighteenth" => "eighteen"
+    "nineteenth" => "nineteen"
+    "twentieth" => "twenty"
+    "thirtieth" => "thirty"
+    "fortieth" => "forty"
+    "fiftieth" => "fifty"
+    "sixtieth" => "sixty"
+    "seventieth" => "seventy"
+    "eightieth" => "eighty"
+    "ninetieth" => "ninety"
+    "hundredth" => "hundred"
+    "thousandth" => "thousand"
+    "millionth" => "million"
+    "billionth" => "billion"
+    "trillionth" => "trillion"
+    _ => w
+  }
+}
+
+///|
+fn word_value(w : String) -> Double {
+  match w {
+    "one" => 1.0
+    "two" => 2.0
+    "three" => 3.0
+    "four" => 4.0
+    "five" => 5.0
+    "six" => 6.0
+    "seven" => 7.0
+    "eight" => 8.0
+    "nine" => 9.0
+    "ten" => 10.0
+    "eleven" => 11.0
+    "twelve" => 12.0
+    "thirteen" => 13.0
+    "fourteen" => 14.0
+    "fifteen" => 15.0
+    "sixteen" => 16.0
+    "seventeen" => 17.0
+    "eighteen" => 18.0
+    "nineteen" => 19.0
+    "twenty" => 20.0
+    "thirty" => 30.0
+    "forty" => 40.0
+    "fifty" => 50.0
+    "sixty" => 60.0
+    "seventy" => 70.0
+    "eighty" => 80.0
+    "ninety" => 90.0
+    "hundred" => 100.0
+    "thousand" => 1000.0
+    "million" => 1_000_000.0
+    "billion" => 1_000_000_000.0
+    "trillion" => 1_000_000_000_000.0
+    _ => 0.0
   }
 }

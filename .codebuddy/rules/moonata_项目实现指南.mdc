@@ -115,21 +115,21 @@ _build/native/debug/build/cmd/main/main.exe '<expr>' --file '<tmp-json-data>'
 - 失败最多的前 10 个 group。
 - skip 原因计数。
 
-当前固定快照（2026-06-28，P11 Lambda 签名与范围修复阶段）：
+当前固定快照（2026-06-28，P11 整数 picture 修复阶段）：
 
 ```text
-eligible 1251 pass 877 fail 374 skip 431
+eligible 1251 pass 927 fail 324 skip 431
 top_failures
 function-tomillis 34
 joins 28
-function-formatInteger 26
-function-parseInteger 24
 parent-operator 20
 function-formatNumber 16
 sorting 16
 function-fromMillis 15
 object-constructor 14
 flattening 13
+function-string 11
+transforms 11
 skip_reasons
 no_result 395
 expr-file 23

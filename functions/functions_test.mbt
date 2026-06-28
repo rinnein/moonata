@@ -460,6 +460,36 @@ test "P11：日期 picture 支持 ISO 周和紧凑解析" {
 }
 
 ///|
+test "P11：整数 picture 支持英文序数大数与字母序号" {
+  assert_true(
+    eval_fn("$formatInteger(1000000000001, \"w\")", Json::null()) ==
+    Json::string("one trillion and one"),
+  )
+  assert_true(
+    eval_fn("$formatInteger(555, \"Ww\")", Json::null()) ==
+    Json::string("Five Hundred and Fifty-Five"),
+  )
+  assert_true(
+    eval_fn("$formatInteger(34, \"w;o\")", Json::null()) ==
+    Json::string("thirty-fourth"),
+  )
+  assert_true(
+    eval_fn("$formatInteger(300, \"A\")", Json::null()) == Json::string("KN"),
+  )
+  assert_true(
+    eval_fn("$parseInteger(\"one trillion and one\", \"w\")", Json::null()) ==
+    Json::number(1000000000001.0),
+  )
+  assert_true(
+    eval_fn("$parseInteger(\"thirty-fourth\", \"w;o\")", Json::null()) ==
+    Json::number(34.0),
+  )
+  assert_true(
+    eval_fn("$parseInteger(\"KN\", \"A\")", Json::null()) == Json::number(300.0),
+  )
+}
+
+///|
 test "P10：标准正则函数名兼容" {
   assert_true(
     eval_fn("$contains(\"hello123\", \"[0-9]+\")", Json::null()) ==
