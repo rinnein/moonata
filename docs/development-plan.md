@@ -2,7 +2,8 @@
 
 > 8 阶段开发计划，含 17 个 Git 提交节点（P1–P8 已完成）。
 > P9 为语义修复与函数补全阶段，已完成。
-> P10 为验收收尾阶段，已补齐门禁、兼容性与文档状态。
+> P10 为本地验收收尾阶段，已补齐门禁、兼容性基础与文档状态。
+> P11 为 JSONata 官方测试集全量兼容推进阶段，当前暂停在已验证快照。
 > 每阶段须通过验证后才能提交；提交信息遵循约定式提交规范。
 
 ## 1. 总览
@@ -19,9 +20,29 @@
 | P8 | CLI 与集成 | moonata / cmd/main | 2 | 4 | ✅ 完成（CLI native 参数模式可用） |
 | P9 | 语义修复与函数补全 | evaluator / functions / value | 5 | 12 | ✅ 完成 |
 | P10 | 验收收尾与兼容性补齐 | value / evaluator / functions / docs | 4 | 7 | ✅ 完成 |
+| P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | ⏸ 暂停（788/1251 可比对用例通过） |
 | 合计 | | | **26** | **66** | |
 
-> 当前验收快照（2026-06-28）：`moon test` 为 144/144 通过；`moon check` 与 `moon info` 均为 0 错误、0 warning；`moon fmt` 已执行。
+> 当前固定快照（2026-06-28，提交 `bcac9e3` 后）：`moon test` 为 155/155 通过；`moon check`、`moon info` 通过；`moon fmt` 已执行。JSONata 官方可比对审计为 `eligible 1251 / pass 788 / fail 463 / skip 431`。
+
+### 1.1 当前暂停边界
+
+本轮已完成并提交到 `bcac9e3 feat: add basic formatNumber support`，按要求暂停继续修复。后续恢复时从 P11 继续，优先处理官方失败数最高的 group：
+
+| 排名 | 官方 group | 失败数 |
+| --- | --- | --- |
+| 1 | `function-fromMillis` | 48 |
+| 2 | `function-tomillis` | 40 |
+| 3 | `function-signatures` | 30 |
+| 4 | `joins` | 28 |
+| 5 | `function-formatInteger` | 26 |
+| 6 | `function-parseInteger` | 24 |
+| 7 | `parent-operator` | 20 |
+| 8 | `function-formatNumber` | 16 |
+| 9 | `sorting` | 16 |
+| 10 | `object-constructor` | 14 |
+
+跳过项仅表示当前 CLI 审计 harness 无法直接比较，不表示通过或失败：`no_result 395`、`expr-file 23`、`timelimit 7`、`bindings 6`。
 
 ## 2. Git 提交规范
 
@@ -328,7 +349,12 @@
 | 序列语义复杂 | 求值器易出 bug | P1 在 value 包集中实现展平/提升，单测覆盖 | ✅ 已实现 |
 | 递归过深 | 栈溢出/性能 | `EvalContext` 护栏（depth/steps） | ✅ 已实现 |
 | 官方测试套件庞大 | P8/P9.5 工作量膨胀 | 已移植核心分类用例，非核心用例按优先级滚动补齐 | ✅ 核心完成 |
+| 官方全量兼容仍有失败 | 与 jsonata-js 行为存在差距 | P11 按审计快照优先处理失败最多 group，每个阶段提交前固定新快照 | ⏸ 推进中 |
 | `@`/`$$` 上下文缺失 | 谓词过滤语义错误 | P9.1 已在 `EvalContext` 增加 `current`/`parent` 字段 | ✅ 已实现 |
 | 工具链 warning 未清理 | 不满足阶段门禁“警告已处理” | P10.1 已清理 deprecated / unused / pattern warning | ✅ 已解决 |
 | 函数签名系统缺失 | 类型错误无法统一映射为 `SignatureError` | P10.2 已增加签名元数据与调用入口检查 | ✅ 已实现 |
 | `$random` 与日期格式函数不完整 | 与 P9 计划不一致 | P10.3 已补齐随机范围与 `$formatDateTime` | ✅ 已实现 |
+
+## 6. 官方测试集审计流程
+
+官方测试集审计流程以 `.codebuddy/rules/moonata_项目实现指南.mdc` 第 8 节为准。更新完成度时必须复跑 native CLI 审计，并同步本文件的固定快照、失败前 10 group 与 skip 原因。
