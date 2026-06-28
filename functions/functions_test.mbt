@@ -403,10 +403,23 @@ test "P10：$random 返回 0 到 1 之间的数" {
 ///|
 test "P10：$formatDateTime 基础格式化" {
   let result = eval_fn("$formatDateTime(0)", Json::null())
-  match result {
-    Json::String(s) => assert_true(s.contains("T") && s.contains("Z"))
-    _ => fail("$formatDateTime 应返回 string")
-  }
+  assert_true(result == Json::string("1970-01-01T00:00:00.000Z"))
+  assert_true(
+    eval_fn("$fromMillis(1)", Json::null()) ==
+    Json::string("1970-01-01T00:00:00.001Z"),
+  )
+  assert_true(
+    eval_fn("$fromMillis(1521801216617, \"[Y0001]-[M01]-[D01]\")", Json::null()) ==
+    Json::string("2018-03-23"),
+  )
+  assert_true(
+    eval_fn("$toMillis(\"1970-01-01T00:00:00.001Z\")", Json::null()) ==
+    Json::number(1.0),
+  )
+  assert_true(
+    eval_fn("$toMillis(\"2017-10-30\")", Json::null()) ==
+    Json::number(1509321600000.0),
+  )
 }
 
 ///|

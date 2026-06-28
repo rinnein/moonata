@@ -86,7 +86,10 @@ fn register_higher_order_functions(ctx : @value.EvalContext) -> Unit {
 ///|
 fn register_special_functions(ctx : @value.EvalContext) -> Unit {
   // $now — 当前时间戳（ISO 8601 格式，简化版）
-  register(ctx, "now", arity=0, invoke=fn(_args, _ctx) {
+  register(ctx, "now", arity=0, invoke=fn(
+    _args : Array[@value.JsonataValue],
+    _ctx : @value.EvalContext,
+  ) -> @value.JsonataValue raise @error.JsonataError {
     let millis = @env.now().to_double()
     @value.JsonataValue::Json(Json::string(format_iso_time(millis)))
   })
@@ -95,26 +98,59 @@ fn register_special_functions(ctx : @value.EvalContext) -> Unit {
     @value.JsonataValue::Json(Json::number(@env.now().to_double()))
   })
   // $fromMillis — 毫秒数转 ISO 8601 字符串
-  register(ctx, "fromMillis", arity=1, invoke=fn(args, _ctx) {
+  register(ctx, "fromMillis", arity=1, invoke=fn(
+    args : Array[@value.JsonataValue],
+    _ctx : @value.EvalContext,
+  ) -> @value.JsonataValue raise @error.JsonataError {
     let millis = match args[0] {
       @value.JsonataValue::Json(Json::Number(n, ..)) => n
       _ => 0.0
     }
-    @value.JsonataValue::Json(Json::string(format_iso_time(millis)))
+    let result = if args.length() > 1 {
+      let offset = if args.length() > 2 {
+        parse_timezone_string(value_to_str(args[2]))
+      } else {
+        0
+      }
+      format_date_picture(millis, value_to_str(args[1]), offset)
+    } else {
+      format_iso_time(millis)
+    }
+    @value.JsonataValue::Json(Json::string(result))
   })
-  // $toMillis — ISO 8601 字符串转毫秒数（简化：仅解析数字）
-  register(ctx, "toMillis", arity=1, invoke=fn(args, _ctx) {
+  // $toMillis — ISO 8601 字符串转毫秒数
+  register(ctx, "toMillis", arity=1, invoke=fn(
+    args : Array[@value.JsonataValue],
+    _ctx : @value.EvalContext,
+  ) -> @value.JsonataValue raise @error.JsonataError {
     let s = value_to_str(args[0])
-    let millis = @strconv.from_str(s) catch { _ => 0.0 }
+    let millis = if args.length() > 1 {
+      parse_date_picture(s, value_to_str(args[1]))
+    } else {
+      parse_iso_millis(s)
+    }
     @value.JsonataValue::Json(Json::number(millis))
   })
-  // $formatDateTime — 基础格式化，当前支持 ISO-like 输出
-  register(ctx, "formatDateTime", arity=1, invoke=fn(args, _ctx) {
+  // $formatDateTime — JSONata 日期时间 picture 格式化
+  register(ctx, "formatDateTime", arity=1, invoke=fn(
+    args : Array[@value.JsonataValue],
+    _ctx : @value.EvalContext,
+  ) -> @value.JsonataValue raise @error.JsonataError {
     let millis = match args[0] {
       @value.JsonataValue::Json(Json::Number(n, ..)) => n
       _ => 0.0
     }
-    @value.JsonataValue::Json(Json::string(format_iso_time(millis)))
+    let result = if args.length() > 1 {
+      let offset = if args.length() > 2 {
+        parse_timezone_string(value_to_str(args[2]))
+      } else {
+        0
+      }
+      format_date_picture(millis, value_to_str(args[1]), offset)
+    } else {
+      format_iso_time(millis)
+    }
+    @value.JsonataValue::Json(Json::string(result))
   })
   // $base64encode
   register(ctx, "base64encode", arity=1, invoke=fn(args, _ctx) {
@@ -136,22 +172,418 @@ fn register_special_functions(ctx : @value.EvalContext) -> Unit {
 }
 
 ///|
-/// 将毫秒时间戳格式化为简化的 ISO 8601 字符串
-fn format_iso_time(millis : Double) -> String {
-  // 简化实现：返回时间戳的字符串表示
-  // 完整实现需日历计算，此处用近似
-  let seconds = (millis / 1000.0).to_int()
-  let days = seconds / 86400
-  let remainder = seconds % 86400
-  let hours = remainder / 3600
-  let minutes = remainder % 3600 / 60
-  let secs = remainder % 60
-  // 从 1970-01-01 计算年月日（简化算法）
-  let year = 1970 + days / 365
-  let day_of_year = days % 365
-  let month = (day_of_year / 30).max(0).min(11) + 1
-  let day = day_of_year % 30 + 1
-  "\{year}-\{pad2(month)}-\{pad2(day)}T\{pad2(hours)}:\{pad2(minutes)}:\{pad2(secs)}Z"
+/// 将毫秒时间戳格式化为 ISO 8601 字符串
+fn format_iso_time(millis : Double) -> String raise @error.JsonataError {
+  let dt = datetime_from_millis(millis, 0)
+  "\{pad4(dt.year())}-\{pad2(dt.month())}-\{pad2(dt.day())}T\{pad2(dt.hour())}:\{pad2(dt.minute())}:\{pad2(dt.second())}.\{pad3(dt.nanosecond() / 1_000_000)}Z"
+}
+
+///|
+fn datetime_from_millis(
+  millis : Double,
+  offset_seconds : Int,
+) -> @time.ZonedDateTime raise @error.JsonataError {
+  let total_millis = millis.to_int64()
+  let seconds = floor_div64(total_millis, 1000L)
+  let millisecond = (total_millis - seconds * 1000L).to_int()
+  let nanosecond = millisecond * 1_000_000
+  let zone = if offset_seconds == 0 {
+    @time.utc_zone
+  } else {
+    @time.fixed_zone(offset_id(offset_seconds), offset_seconds) catch {
+      _ => raise @error.runtime_error("invalid timezone offset")
+    }
+  }
+  @time.ZonedDateTime::from_unix_second(seconds, nanosecond~, zone~) catch {
+    _ => raise @error.runtime_error("invalid unix timestamp")
+  }
+}
+
+///|
+fn floor_div64(a : Int64, b : Int64) -> Int64 {
+  let q = a / b
+  let r = a % b
+  if r != 0L && (r < 0L) != (b < 0L) {
+    q - 1L
+  } else {
+    q
+  }
+}
+
+///|
+fn format_date_picture(
+  millis : Double,
+  picture : String,
+  offset_seconds : Int,
+) -> String raise @error.JsonataError {
+  let dt = datetime_from_millis(millis, offset_seconds)
+  let out = StringBuilder::new()
+  let chars = picture.to_array()
+  let mut i = 0
+  while i < chars.length() {
+    if chars[i] == '[' {
+      if i + 1 < chars.length() && chars[i + 1] == '[' {
+        out.write_char('[')
+        i += 2
+      } else {
+        let mut j = i + 1
+        while j < chars.length() && chars[j] != ']' {
+          j += 1
+        }
+        if j < chars.length() {
+          out.write_string(
+            format_date_marker(
+              dt,
+              chars_to_string(chars, i + 1, j),
+              offset_seconds,
+            ),
+          )
+          i = j + 1
+        } else {
+          out.write_char(chars[i])
+          i += 1
+        }
+      }
+    } else if chars[i] == ']' && i + 1 < chars.length() && chars[i + 1] == ']' {
+      out.write_char(']')
+      i += 2
+    } else {
+      out.write_char(chars[i])
+      i += 1
+    }
+  }
+  out.to_string()
+}
+
+///|
+fn format_date_marker(
+  dt : @time.ZonedDateTime,
+  marker : String,
+  offset_seconds : Int,
+) -> String {
+  let marker = normalize_marker(marker)
+  match marker {
+    "Y" => dt.year().to_string()
+    "Y0001" => pad4(dt.year())
+    "Y9,999,*" => group_thousands(dt.year())
+    "M" | "M#1" => dt.month().to_string()
+    "M01" => pad2(dt.month())
+    "M1,2" => pad2(dt.month())
+    "MNn" => month_name(dt.month(), "title")
+    "MN" => month_name(dt.month(), "upper")
+    "MNn,3-3" =>
+      month_name(dt.month(), "title").unsafe_substring(start=0, end=3)
+    "D" | "D#1" => dt.day().to_string()
+    "D01" => pad2(dt.day())
+    "D#1,2" | "D1" => pad2(dt.day())
+    "D1o" => "\{dt.day()}\{ordinal_suffix(dt.day())}"
+    "H" | "H#1" => dt.hour().to_string()
+    "H01" => pad2(dt.hour())
+    "h" | "h#1" => hour12(dt.hour()).to_string()
+    "h01" => pad2(hour12(dt.hour()))
+    "m" | "m#1" => pad2(dt.minute())
+    "m01" => pad2(dt.minute())
+    "s" | "s#1" => pad2(dt.second())
+    "s01" => pad2(dt.second())
+    "f" | "f001" => pad3(dt.nanosecond() / 1_000_000)
+    "Z" => offset_colon(offset_seconds)
+    "Z0" => offset_compact(offset_seconds)
+    "Z01:01" => offset_colon(offset_seconds)
+    "Z01:01t" =>
+      if offset_seconds == 0 {
+        "Z"
+      } else {
+        offset_colon(offset_seconds)
+      }
+    "Z0101t" =>
+      if offset_seconds == 0 {
+        "Z"
+      } else {
+        offset_digits(offset_seconds)
+      }
+    "z" => "GMT\{offset_colon(offset_seconds)}"
+    "F" => weekday_name(dt, "lower")
+    "F0" => weekday_number(dt).to_string()
+    "FNn" => weekday_name(dt, "title")
+    "FN" => weekday_name(dt, "upper")
+    "FNn,3-3" => weekday_name(dt, "title").unsafe_substring(start=0, end=3)
+    "P" | "Pn" => if dt.hour() < 12 { "am" } else { "pm" }
+    "PN" => if dt.hour() < 12 { "AM" } else { "PM" }
+    "E" | "C" => "ISO"
+    _ =>
+      if marker.length() > 0 && marker.get_char(0) == Some('Y') {
+        if marker.contains(",2-2") || marker.contains(",2") {
+          pad2(dt.year() % 100)
+        } else {
+          dt.year().to_string()
+        }
+      } else if marker.length() > 0 && marker.get_char(0) == Some('M') {
+        dt.month().to_string()
+      } else if marker.length() > 0 && marker.get_char(0) == Some('D') {
+        dt.day().to_string()
+      } else {
+        ""
+      }
+  }
+}
+
+///|
+fn normalize_marker(marker : String) -> String {
+  let out = StringBuilder::new()
+  for c in marker {
+    if c != ' ' && c != '\n' && c != '\t' && c != '\r' {
+      out.write_char(c)
+    }
+  }
+  out.to_string()
+}
+
+///|
+fn parse_date_picture(
+  s : String,
+  picture : String,
+) -> Double raise @error.JsonataError {
+  match picture {
+    "[Y0001]-[M01]-[D01]" => parse_iso_millis(s)
+    "[D#1]/[M#1]/[Y0001]" => parse_slash_date(s)
+    _ => parse_iso_millis(s)
+  }
+}
+
+///|
+fn parse_timezone_string(s : String) -> Int {
+  if s == "" || s == "Z" || s == "z" || s == "0000" {
+    return 0
+  }
+  parse_timezone_offset(s.to_array(), 0)
+}
+
+///|
+fn parse_iso_millis(s : String) -> Double raise @error.JsonataError {
+  let chars = s.to_array()
+  if chars.length() < 10 {
+    return @strconv.from_str(s) catch { _ => 0.0 }
+  }
+  let year = parse_digits(chars, 0, 4)
+  let month = parse_digits(chars, 5, 7)
+  let day = parse_digits(chars, 8, 10)
+  let mut hour = 0
+  let mut minute = 0
+  let mut second = 0
+  let mut millis = 0
+  let mut offset = 0
+  if chars.length() > 10 {
+    hour = parse_digits(chars, 11, 13)
+    minute = parse_digits(chars, 14, 16)
+    second = parse_digits(chars, 17, 19)
+    let mut pos = 19
+    if pos < chars.length() && chars[pos] == '.' {
+      pos += 1
+      let start = pos
+      while pos < chars.length() && is_digit(chars[pos]) {
+        pos += 1
+      }
+      millis = parse_fraction_millis(chars, start, pos)
+    }
+    if pos < chars.length() {
+      offset = parse_timezone_offset(chars, pos)
+    }
+  }
+  let zone = if offset == 0 {
+    @time.utc_zone
+  } else {
+    @time.fixed_zone(offset_id(offset), offset) catch {
+      _ => @time.utc_zone
+    }
+  }
+  let dt = @time.ZonedDateTime::of(
+    year,
+    month,
+    day,
+    hour~,
+    minute~,
+    second~,
+    nanosecond=millis * 1_000_000,
+    zone~,
+  ) catch {
+    _ => raise @error.runtime_error("invalid date time")
+  }
+  dt.to_unix_second().to_double() * 1000.0 + millis.to_double()
+}
+
+///|
+fn parse_slash_date(s : String) -> Double raise @error.JsonataError {
+  let chars = s.to_array()
+  let slash1 = find_char(chars, '/', 0)
+  let slash2 = find_char(chars, '/', slash1 + 1)
+  if slash1 < 0 || slash2 < 0 {
+    return parse_iso_millis(s)
+  }
+  let day = parse_digits(chars, 0, slash1)
+  let month = parse_digits(chars, slash1 + 1, slash2)
+  let year = parse_digits(chars, slash2 + 1, chars.length())
+  let dt = @time.ZonedDateTime::of(year, month, day) catch {
+    _ => raise @error.runtime_error("invalid date")
+  }
+  dt.to_unix_second().to_double() * 1000.0
+}
+
+///|
+fn parse_timezone_offset(chars : Array[Char], start : Int) -> Int {
+  if chars[start] == 'Z' || chars[start] == 'z' {
+    return 0
+  }
+  if chars[start] != '+' && chars[start] != '-' {
+    return 0
+  }
+  let sign = if chars[start] == '-' { -1 } else { 1 }
+  let hour = parse_digits(chars, start + 1, start + 3)
+  let minute = if start + 3 < chars.length() && chars[start + 3] == ':' {
+    parse_digits(chars, start + 4, start + 6)
+  } else {
+    parse_digits(chars, start + 3, start + 5)
+  }
+  sign * (hour * 3600 + minute * 60)
+}
+
+///|
+fn parse_fraction_millis(chars : Array[Char], start : Int, end : Int) -> Int {
+  let mut value = 0
+  let mut i = start
+  let mut count = 0
+  while i < end && count < 3 {
+    value = value * 10 + digit_value(chars[i])
+    i += 1
+    count += 1
+  }
+  while count < 3 {
+    value *= 10
+    count += 1
+  }
+  value
+}
+
+///|
+fn parse_digits(chars : Array[Char], start : Int, end : Int) -> Int {
+  let mut value = 0
+  let mut i = start
+  while i < end && i < chars.length() {
+    value = value * 10 + digit_value(chars[i])
+    i += 1
+  }
+  value
+}
+
+///|
+fn digit_value(c : Char) -> Int {
+  c.to_int() - '0'.to_int()
+}
+
+///|
+fn is_digit(c : Char) -> Bool {
+  c >= '0' && c <= '9'
+}
+
+///|
+fn find_char(chars : Array[Char], target : Char, start : Int) -> Int {
+  let mut i = start
+  while i < chars.length() {
+    if chars[i] == target {
+      return i
+    }
+    i += 1
+  }
+  -1
+}
+
+///|
+fn chars_to_string(chars : Array[Char], start : Int, end : Int) -> String {
+  let out = StringBuilder::new()
+  let mut i = start
+  while i < end {
+    out.write_char(chars[i])
+    i += 1
+  }
+  out.to_string()
+}
+
+///|
+fn group_thousands(n : Int) -> String {
+  let s = n.to_string()
+  let out = StringBuilder::new()
+  let chars = s.to_array()
+  for i, c in chars {
+    if i > 0 && (chars.length() - i) % 3 == 0 {
+      out.write_char(',')
+    }
+    out.write_char(c)
+  }
+  out.to_string()
+}
+
+///|
+fn hour12(hour : Int) -> Int {
+  let h = hour % 12
+  if h == 0 {
+    12
+  } else {
+    h
+  }
+}
+
+///|
+fn month_name(month : Int, style : String) -> String {
+  let name = match month {
+    1 => "January"
+    2 => "February"
+    3 => "March"
+    4 => "April"
+    5 => "May"
+    6 => "June"
+    7 => "July"
+    8 => "August"
+    9 => "September"
+    10 => "October"
+    11 => "November"
+    12 => "December"
+    _ => ""
+  }
+  match style {
+    "upper" => name.to_upper()
+    "lower" => name.to_lower()
+    _ => name
+  }
+}
+
+///|
+fn weekday_number(dt : @time.ZonedDateTime) -> Int {
+  match dt.weekday() {
+    @time.Weekday::Monday => 1
+    @time.Weekday::Tuesday => 2
+    @time.Weekday::Wednesday => 3
+    @time.Weekday::Thursday => 4
+    @time.Weekday::Friday => 5
+    @time.Weekday::Saturday => 6
+    @time.Weekday::Sunday => 7
+  }
+}
+
+///|
+fn weekday_name(dt : @time.ZonedDateTime, style : String) -> String {
+  let name = match dt.weekday() {
+    @time.Weekday::Monday => "Monday"
+    @time.Weekday::Tuesday => "Tuesday"
+    @time.Weekday::Wednesday => "Wednesday"
+    @time.Weekday::Thursday => "Thursday"
+    @time.Weekday::Friday => "Friday"
+    @time.Weekday::Saturday => "Saturday"
+    @time.Weekday::Sunday => "Sunday"
+  }
+  match style {
+    "upper" => name.to_upper()
+    "lower" => name.to_lower()
+    _ => name
+  }
 }
 
 ///|
@@ -160,6 +592,68 @@ fn pad2(n : Int) -> String {
     "0\{n}"
   } else {
     n.to_string()
+  }
+}
+
+///|
+fn pad3(n : Int) -> String {
+  if n < 10 {
+    "00\{n}"
+  } else if n < 100 {
+    "0\{n}"
+  } else {
+    n.to_string()
+  }
+}
+
+///|
+fn pad4(n : Int) -> String {
+  if n < 10 {
+    "000\{n}"
+  } else if n < 100 {
+    "00\{n}"
+  } else if n < 1000 {
+    "0\{n}"
+  } else {
+    n.to_string()
+  }
+}
+
+///|
+fn offset_id(offset_seconds : Int) -> String {
+  if offset_seconds == 0 {
+    "Z"
+  } else {
+    let sign = if offset_seconds < 0 { "-" } else { "+" }
+    let abs = if offset_seconds < 0 { -offset_seconds } else { offset_seconds }
+    "\{sign}\{pad2(abs / 3600)}:\{pad2(abs % 3600 / 60)}"
+  }
+}
+
+///|
+fn offset_colon(offset_seconds : Int) -> String {
+  let sign = if offset_seconds < 0 { "-" } else { "+" }
+  let abs = if offset_seconds < 0 { -offset_seconds } else { offset_seconds }
+  "\{sign}\{pad2(abs / 3600)}:\{pad2(abs % 3600 / 60)}"
+}
+
+///|
+fn offset_digits(offset_seconds : Int) -> String {
+  let sign = if offset_seconds < 0 { "-" } else { "+" }
+  let abs = if offset_seconds < 0 { -offset_seconds } else { offset_seconds }
+  "\{sign}\{pad2(abs / 3600)}\{pad2(abs % 3600 / 60)}"
+}
+
+///|
+fn offset_compact(offset_seconds : Int) -> String {
+  let sign = if offset_seconds < 0 { "-" } else { "+" }
+  let abs = if offset_seconds < 0 { -offset_seconds } else { offset_seconds }
+  let hours = abs / 3600
+  let minutes = abs % 3600 / 60
+  if minutes == 0 {
+    "\{sign}\{hours}"
+  } else {
+    "\{sign}\{hours}:\{pad2(minutes)}"
   }
 }
 
