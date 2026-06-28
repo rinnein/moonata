@@ -1,0 +1,6 @@
+// lexer 包：词法分析。
+// 将源码切分为 token 流。依赖 error 与 strconv。
+import {
+  "rinnein/moonata/error",
+  "moonbitlang/core/strconv",
+}
