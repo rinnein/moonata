@@ -1,0 +1,64 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "rinnein/moonata/ast"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn name_step(String, recursive? : Bool) -> Step
+
+pub fn wildcard_step(recursive? : Bool) -> Step
+
+// Errors
+
+// Types and methods
+pub(all) enum Ast {
+  String(String)
+  Number(Double)
+  Boolean(Bool)
+  Null
+  Path(Array[Step])
+  Binary(op~ : String, lhs~ : Ast, rhs~ : Ast)
+  Unary(op~ : String, expr~ : Ast)
+  Construct(Array[Ast])
+  Group(Array[(Ast, Ast)])
+  Sort(expr~ : Ast, terms~ : Array[SortTerm])
+  Lambda(params~ : Array[String], body~ : Ast)
+  Var(String)
+  Bind(name~ : String, value~ : Ast, body~ : Ast)
+  Apply(func~ : Ast, args~ : Array[Ast])
+  Chain(Array[Ast])
+  Block(Array[Ast])
+} derive(Eq, @debug.Debug)
+pub fn Ast::path1(Step) -> Self
+
+pub(all) struct SortTerm {
+  expr : Ast
+  descending : Bool
+} derive(Eq, @debug.Debug)
+pub fn SortTerm::new(Ast, descending? : Bool) -> Self
+
+pub(all) struct Step {
+  kind : StepKind
+  stage : StepStage
+} derive(Eq, @debug.Debug)
+pub fn Step::new(kind~ : StepKind, stage~ : StepStage) -> Self
+
+pub(all) enum StepKind {
+  Name(String)
+  Wildcard
+  Index(Int)
+  Slice(Int?, Int?)
+  Filter(Ast)
+} derive(Eq, @debug.Debug)
+
+pub(all) enum StepStage {
+  Single
+  Recursive
+} derive(Eq, @debug.Debug)
+
+// Type aliases
+
+// Traits
+
