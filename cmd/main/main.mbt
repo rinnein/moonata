@@ -4,8 +4,9 @@
 /// 用法：
 ///   moonata '<expr>'                    # 对 null 求值
 ///   moonata '<expr>' --data '<json>'   # 对指定 JSON 数据求值
+///   moonata '<expr>' --file '<file>'   # 对指定 JSON 文件求值
 ///   moonata --help                      # 显示帮助
-fn main {
+async fn main {
   let args = @env.args()
   if args.length() < 2 {
     print_usage()
@@ -26,6 +27,19 @@ fn main {
         i += 1
         if i < args.length() {
           data_str = args[i]
+        }
+      }
+      "--file" => {
+        i += 1
+        if i < args.length() {
+          let file_path = args[i]
+          let file_content = @fs.read_file(file_path) catch {
+            _ => {
+              println("错误: 无法读取文件 \{file_path}")
+              return
+            }
+          }
+          data_str = file_content.text()
         }
       }
       _ => if expr == "" { expr = arg }
@@ -62,6 +76,7 @@ fn print_usage() -> Unit {
   println("用法:")
   println("  moonata '<expr>'                    对 null 求值表达式")
   println("  moonata '<expr>' --data '<json>'    对指定 JSON 数据求值")
+  println("  moonata '<expr>' --file '<file>'    对指定 JSON 文件求值")
   println("  moonata --help                      显示此帮助")
   println("")
   println("示例:")

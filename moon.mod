@@ -27,4 +27,5 @@ description = ""
 
 import {
   "moonbitlang/regexp@0.3.5",
+  "moonbitlang/async@0.20.0",
 }
