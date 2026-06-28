@@ -129,15 +129,15 @@ pub fn Compiled::run(self : Compiled, data : @json.JsonValue) -> @json.JsonValue
 
 | 编号 | 风险 | 概率 | 影响 | 缓解 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| R1 | MoonBit 标准库无正则 | 高 | 中 | P6 评估第三方库；否则简化 `$match` 为字面量匹配并标注 | 待评估 |
-| R2 | 序列展平语义复杂 | 中 | 高 | P1 集中实现并单测覆盖 | 已规划 |
-| R3 | 递归/Lambda 导致无限循环 | 中 | 高 | `EvalContext` 护栏（depth/steps） | 已规划 |
-| R4 | 官方测试套件庞大 | 高 | 中 | P8 选取核心分类用例，滚动补齐 | 已规划 |
-| R5 | `@json.JsonValue` 与 JSONata 数值精度差异 | 低 | 低 | 统一用 `Double`，文档标注 | 已规划 |
+| R1 | MoonBit 标准库无正则 | 高 | 中 | ~~P6 评估第三方库~~ **已引入 `moonbitlang/regexp@0.3.5`**（`compile` + `Regexp::execute` + `MatchResult`），P9.4 实现 `$match`/`$contains`/`$split`/`$replace` | ✅ 已解决 |
+| R2 | 序列展平语义复杂 | 中 | 高 | P1 集中实现并单测覆盖 | ✅ 已实现 |
+| R3 | 递归/Lambda 导致无限循环 | 中 | 高 | `EvalContext` 护栏（depth/steps） | ✅ 已实现 |
+| R4 | 官方测试套件庞大 | 高 | 中 | P9.5 选取核心分类用例，滚动补齐 | ⏳ 待执行 |
+| R5 | `@json.JsonValue` 与 JSONata 数值精度差异 | 低 | 低 | 统一用 `Double`，文档标注 | ✅ 已实现 |
 
 ## 10. 可行性结论
 
 - **技术可行性**：高。MoonBit 的 enum/suberror/闭包/`@json` 几乎 1:1 对应 JSONata 需求。
-- **主要不确定项**：正则支持（R1），需在 P6 验证。
-- **工程可行性**：8 包结构清晰，依赖无环，分阶段可独立验证。
-- **预估工作量**：47 人日，17 个提交节点，节奏可控。
+- **正则支持**：~~主要不确定项，需在 P6 验证~~ **已解决**，通过 `moonbitlang/regexp@0.3.5` 提供 `compile`/`execute`/`MatchResult`，P9.4 实现正则函数。
+- **工程可行性**：8 包结构清晰，依赖无环，分阶段可独立验证。P1–P8 已完成，P9 为语义修复与函数补全。
+- **预估工作量**：P1–P8 共 47 人日（17 节点）已完成；P9 新增 12 人日（5 节点），总计 59 人日 / 22 节点。

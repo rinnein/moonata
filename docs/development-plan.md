@@ -1,21 +1,25 @@
 # Moonata 开发计划
 
-> 8 阶段开发计划，含 17 个 Git 提交节点。
+> 8 阶段开发计划，含 17 个 Git 提交节点（P1–P8 已完成）。
+> P9 为后续缺口修复阶段，按优先级排序，含 5 个提交节点。
 > 每阶段须通过验证后才能提交；提交信息遵循约定式提交规范。
 
 ## 1. 总览
 
-| 阶段 | 主题 | 涉及包 | 提交节点数 | 预估人日 |
-| --- | --- | --- | --- | --- |
-| P1 | 基础类型层 | error / ast / value | 2 | 4 |
-| P2 | 词法分析 | lexer | 1 | 3 |
-| P3 | 语法分析 | parser | 2 | 6 |
-| P4 | 求值器核心 | evaluator | 2 | 6 |
-| P5 | 路径与表达式 | evaluator | 2 | 6 |
-| P6 | 内建函数 | functions | 3 | 10 |
-| P7 | 高级特性 | evaluator / functions | 3 | 8 |
-| P8 | CLI 与集成 | moonata / cmd/main | 2 | 4 |
-| 合计 | | | **17** | **47** |
+| 阶段 | 主题 | 涉及包 | 提交节点数 | 预估人日 | 状态 |
+| --- | --- | --- | --- | --- | --- |
+| P1 | 基础类型层 | error / ast / value | 2 | 4 | ✅ 完成 |
+| P2 | 词法分析 | lexer | 1 | 3 | ✅ 完成 |
+| P3 | 语法分析 | parser | 2 | 6 | ✅ 完成 |
+| P4 | 求值器核心 | evaluator | 2 | 6 | ✅ 完成 |
+| P5 | 路径与表达式 | evaluator | 2 | 6 | ✅ 完成 |
+| P6 | 内建函数 | functions | 3 | 10 | ✅ 完成（47 函数，待补至 60+） |
+| P7 | 高级特性 | evaluator / functions | 3 | 8 | ✅ 完成（部分应用/签名待补） |
+| P8 | CLI 与集成 | moonata / cmd/main | 2 | 4 | ✅ 完成（CLI 为演示模式） |
+| P9 | 语义修复与函数补全 | evaluator / functions / value | 5 | 12 | ⏳ 待开始 |
+| 合计 | | | **22** | **59** | |
+
+> P1–P8 现状：94 个测试全绿，`moon check/test/fmt/info` 通过，CLI 端到端可运行（`$sum($.items.price)` → `60`）。
 
 ## 2. Git 提交规范
 
@@ -172,6 +176,81 @@
 - **C16** `feat(core): 实现 facade API 与 CLI 入口` — facade + CLI
 - **C17** `test(core): 移植 JSONata 测试套件并完成集成回归` — 集成完成
 
+### P9 — 语义修复与函数补全（evaluator / functions / value）
+
+**目标**：修复影响 JSONata 兼容性的语义缺口，补全内建函数至 60+，引入正则支持。
+
+> 任务按优先级排序。正则依赖 `moonbitlang/regexp@0.3.5`（已加入 `moon.mod`）。
+
+**优先级说明**：
+- 🔴 高：影响核心 JSONata 兼容性，现有表达式语义错误
+- 🟡 中：函数完整性，影响可用性
+- 🟢 低：工程化与集成
+
+#### P9.1 🔴 上下文与谓词语义修复（value / evaluator）
+
+| 任务 | 包 | 验证 |
+| --- | --- | --- |
+| `EvalContext` 增加 `current`/`parent` 字段，支持 `@` 当前项、`$$` 父级 | value | `@`/`$$` 上下文测试 |
+| `eval_var` 正确解析 `@`（当前项）与 `$$`（父级），不再简化为根 | evaluator | 上下文断言测试 |
+| `access_filter` 迭代时将 item 绑定为当前上下文，使谓词可访问当前项字段 | evaluator | 谓词过滤用例（`$x.age > 25`） |
+| 路径求值链中维护 `current`/`parent` 的压栈与恢复 | evaluator | 嵌套路径上下文测试 |
+
+**提交节点：**
+- **C18** `fix(evaluator,value): 修复 @/$$ 上下文与谓词过滤语义` — 核心语义修复
+
+#### P9.2 🔴 `&` 合并运算符与表达式补全（evaluator）
+
+| 任务 | 包 | 验证 |
+| --- | --- | --- |
+| `&` 对对象执行合并（深度合并），对字符串执行拼接 | evaluator | 对象合并测试 + 字符串拼接测试 |
+| 部分应用：`eval_apply` 支持参数不足时返回柯里化函数 | evaluator | 部分应用测试 |
+| 函数签名系统：`JsonataFunc` 增加可选签名描述，`invoke` 内类型检查 | functions | 签名错误用例 |
+
+**提交节点：**
+- **C19** `feat(evaluator): 实现 & 对象合并与部分应用` — 表达式语义补全
+
+#### P9.3 🟡 内建函数补全至 60+（functions）
+
+| 任务 | 包 | 验证 |
+| --- | --- | --- |
+| 字符串：`$replace`/`$substringBefore`/`$substringAfter`/`$pad`/`$formatNumber` | functions | 字符串函数测试 |
+| 数值：`$sqrt`/`$pi`/`$e`/`$formatBase` | functions | 数值函数测试 |
+| 数组：`$distinct`/`$single`/`$partition`/`$zip` | functions | 数组函数测试 |
+| 对象/其他：`$assert`/`$shallow`/`$deep` | functions | 对象函数测试 |
+| 修复占位函数：`$random`（真随机）、`$base64encode`/`$base64decode`（真编码） | functions | 占位函数回归测试 |
+
+**提交节点：**
+- **C20** `feat(functions): 补全字符串、数值与数组函数至 60+` — 函数集完整
+
+#### P9.4 🟡 正则函数实现（functions）
+
+> 依赖 `moonbitlang/regexp@0.3.5`：`compile` + `Regexp::execute` + `MatchResult`。
+
+| 任务 | 包 | 验证 |
+| --- | --- | --- |
+| `$match(str, pattern)`：返回首个匹配及捕获组 | functions | 正则匹配测试 |
+| `$contains(str, pattern)`：正则模式包含判断 | functions | 正则包含测试 |
+| `$split(str, separator)`：支持正则分隔符 | functions | 正则分割测试 |
+| `$replace(str, pattern, replacement)`：正则替换 | functions | 正则替换测试 |
+| `$matches`（可选）：返回所有匹配 | functions | 多匹配测试 |
+
+**提交节点：**
+- **C21** `feat(functions): 基于 moonbitlang/regexp 实现正则函数` — 正则支持完成
+
+#### P9.5 🟢 集成与文档（moonata / cmd/main / docs）
+
+| 任务 | 包 | 验证 |
+| --- | --- | --- |
+| CLI 切换 native 目标，支持 `moonata '<expr>' --data file.json` 命令行参数 | cmd/main | CLI 冒烟测试 |
+| JSONata 官方测试套件核心用例移植（选取 path/predicate/function 分类） | moonata_test | 集成回归测试 |
+| 日期函数完善：`$fromMillis`/`$toMillis`/`$formatDateTime`（native 目标） | functions | 日期函数测试 |
+| 文档同步：修正 `architecture.md`/`design-decisions.md` 中过时的 derive/构造语法 | docs | 文档检查 |
+| README 与 API 文档完善 | docs | 文档检查 |
+
+**提交节点：**
+- **C22** `test(core): 移植官方测试套件并完善 CLI 与文档` — 集成完成
+
 ## 4. 里程碑验收标准
 
 | 里程碑 | 验收 |
@@ -181,12 +260,17 @@
 | C12 完成 | 60+ 内建函数可用，核心用例通过 |
 | C15 完成 | 分组、排序、Lambda、函数链全部可用 |
 | C17 完成 | 官方测试套件核心用例通过，CLI 可用 |
+| **C18 完成** | `@`/`$$` 上下文与谓词过滤语义正确，现有谓词用例通过 |
+| **C19 完成** | `&` 对象合并与部分应用可用 |
+| **C21 完成** | 正则函数（`$match`/`$contains`/`$split`/`$replace`）可用 |
+| **C22 完成** | 官方测试套件核心用例通过，CLI 支持命令行参数 |
 
 ## 5. 风险与缓解
 
-| 风险 | 影响 | 缓解 |
-| --- | --- | --- |
-| MoonBit 无正则库 | `$match`/`$contains` 受限 | P6 评估第三方库或简化匹配；必要时标记为实验特性 |
-| 序列语义复杂 | 求值器易出 bug | P1 在 value 包集中实现展平/提升，单测覆盖 |
-| 递归过深 | 栈溢出/性能 | `EvalContext` 护栏（depth/steps） |
-| 官方测试套件庞大 | P8 工作量膨胀 | 选取核心分类用例，非核心用例按优先级滚动补齐 |
+| 风险 | 影响 | 缓解 | 状态 |
+| --- | --- | --- | --- |
+| MoonBit 无正则库 | `$match`/`$contains` 受限 | ~~P6 评估第三方库~~ **已引入 `moonbitlang/regexp@0.3.5`**，P9.4 实现 | ✅ 已解决 |
+| 序列语义复杂 | 求值器易出 bug | P1 在 value 包集中实现展平/提升，单测覆盖 | ✅ 已实现 |
+| 递归过深 | 栈溢出/性能 | `EvalContext` 护栏（depth/steps） | ✅ 已实现 |
+| 官方测试套件庞大 | P8/P9.5 工作量膨胀 | 选取核心分类用例，非核心用例按优先级滚动补齐 | ⏳ P9.5 |
+| `@`/`$$` 上下文缺失 | 谓词过滤语义错误 | P9.1 在 `EvalContext` 增加 `current`/`parent` 字段 | ⏳ P9.1 |

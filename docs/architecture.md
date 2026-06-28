@@ -67,7 +67,7 @@ moonata/                       # facade 包（根），对外暴露 evaluate/com
 ├── evaluator/                 # 求值器
 │   └── moon.pkg               # 依赖 error/ast/value
 ├── functions/                 # 60+ 内建函数
-│   └── moon.pkg               # 依赖 error/ast/value/evaluator
+│   └── moon.pkg               # 依赖 error/ast/value/evaluator（P9.4 增 regexp）
 └── cmd/
     └── main/                  # CLI 入口
         ├── moon.pkg           # is-main，依赖 moonata
@@ -187,7 +187,7 @@ pub(all) suberror JsonataError {
   TypeError(message~ : String, expected~ : String?, actual~ : String?)
   SignatureError(message~ : String, func~ : String?)
   GuardrailError(message~ : String, limit~ : String?)
-} derive(Debug, Show)
+} derive(Debug, Eq)
 ```
 
 ### 5.4 EvalContext（`value` 包）
@@ -200,8 +200,13 @@ pub struct EvalContext {
   max_depth : Int
   mut steps : Int                // 求值步数（护栏）
   max_steps : Int
+  // P9.1 待补：支持 @ 当前项与 $$ 父级
+  // current : JsonataValue?      // @ 当前项（谓词过滤迭代时绑定）
+  // parent : JsonataValue?       // $$ 父级上下文
 }
 ```
+
+> 说明：P9.1 将增加 `current`/`parent` 字段以正确实现 `@`/`$$` 语义。当前实现将其简化为 `root`，属已知缺口。
 
 ## 6. 处理管线
 
