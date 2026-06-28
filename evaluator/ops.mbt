@@ -291,10 +291,10 @@ fn eval_construct(
         for item in arr {
           match item {
             @value.JsonataValue::Undefined => ()
-            _ => results.push(item.to_json())
+            _ => results.push(json_for_constructor(item))
           }
         }
-      _ => results.push(v.to_json())
+      _ => results.push(json_for_constructor(v))
     }
   }
   @value.JsonataValue::Json(Json::array(results))
@@ -554,9 +554,25 @@ fn eval_group(
       @value.JsonataValue::Json(Json::String(s)) => s
       _ => to_str(key)
     }
-    map[key_str] = val.to_json()
+    map[key_str] = json_for_constructor(val)
   }
   @value.JsonataValue::Json(Json::object(map))
+}
+
+///|
+fn json_for_constructor(value : @value.JsonataValue) -> Json {
+  match value {
+    @value.JsonataValue::Func(_) => Json::string("")
+    @value.JsonataValue::Regex(_) => Json::string("")
+    @value.JsonataValue::Sequence(arr) => {
+      let out : Array[Json] = []
+      for item in arr {
+        out.push(json_for_constructor(item))
+      }
+      Json::array(out)
+    }
+    _ => value.to_json()
+  }
 }
 
 ///|

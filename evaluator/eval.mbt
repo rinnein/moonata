@@ -363,7 +363,7 @@ fn access_filter(
 fn access_arrayify(input : @value.JsonataValue) -> @value.JsonataValue {
   let arr : Array[Json] = []
   for item in input.to_array() {
-    arr.push(item.to_json())
+    arr.push(json_for_constructor(item))
   }
   @value.JsonataValue::Json(Json::array(arr))
 }

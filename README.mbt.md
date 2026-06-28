@@ -79,11 +79,11 @@ docs: update official test status
 
 ## 兼容性状态
 
-固定快照：2026-06-28，P11 整数 picture 修复阶段。
+固定快照：2026-06-28，P11 `$string` 序列化修复阶段。
 
 ```text
 moon test: 158/158
-official comparable audit: eligible 1251, pass 927, fail 324, skip 431
+official comparable audit: eligible 1251, pass 940, fail 311, skip 431
 ```
 
 当前剩余失败最多的官方测试分组：
@@ -97,8 +97,8 @@ sorting 16
 function-fromMillis 15
 object-constructor 14
 flattening 13
-function-string 11
 transforms 11
+lambdas 9
 ```
 
 官方测试集审计流程与跳过策略记录在 `.codebuddy/rules/moonata_项目实现指南.mdc`。

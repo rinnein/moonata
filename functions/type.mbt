@@ -1,8 +1,10 @@
 ///|
 fn register_type_functions(ctx : @value.EvalContext) -> Unit {
   // $string
-  register(ctx, "string", arity=1, invoke=fn(args, _ctx) {
-    @value.JsonataValue::Json(Json::string(value_to_str(args[0])))
+  register(ctx, "string", arity=0, invoke=fn(args, ctx) {
+    let value = if args.length() == 0 { ctx.current() } else { args[0] }
+    let pretty = args.length() > 1 && value_to_bool(args[1])
+    @value.JsonataValue::Json(Json::string(jsonata_string(value, pretty)))
   })
   // $number
   register(ctx, "number", arity=1, invoke=fn(args, _ctx) {
@@ -41,6 +43,145 @@ fn register_type_functions(ctx : @value.EvalContext) -> Unit {
     }
     @value.JsonataValue::Json(Json::string(type_name))
   })
+}
+
+///|
+fn jsonata_string(value : @value.JsonataValue, pretty : Bool) -> String {
+  match value {
+    @value.JsonataValue::Json(Json::String(s)) => s
+    @value.JsonataValue::Json(Json::Number(n, ..)) => jsonata_string_number(n)
+    @value.JsonataValue::Json(Json::True) => "true"
+    @value.JsonataValue::Json(Json::False) => "false"
+    @value.JsonataValue::Json(Json::Null) => "null"
+    @value.JsonataValue::Undefined => ""
+    @value.JsonataValue::Func(_) => ""
+    @value.JsonataValue::Regex(_) => ""
+    _ => {
+      let json = jsonata_string_json(value)
+      if pretty {
+        json.stringify(indent=2)
+      } else {
+        json.stringify()
+      }
+    }
+  }
+}
+
+///|
+fn jsonata_string_json(value : @value.JsonataValue) -> Json {
+  match value {
+    @value.JsonataValue::Func(_) => Json::string("")
+    @value.JsonataValue::Regex(_) => Json::string("")
+    @value.JsonataValue::Undefined => Json::null()
+    @value.JsonataValue::Sequence(arr) => {
+      let out : Array[Json] = []
+      for item in arr {
+        out.push(jsonata_string_json(item))
+      }
+      Json::array(out)
+    }
+    @value.JsonataValue::Json(Json::Array(arr)) => {
+      let out : Array[Json] = []
+      for item in arr {
+        out.push(jsonata_string_json(@value.JsonataValue::Json(item)))
+      }
+      Json::array(out)
+    }
+    @value.JsonataValue::Json(Json::Object(map)) => {
+      let out : Map[String, Json] = {}
+      for entry in map {
+        let (key, item) = entry
+        out[key] = jsonata_string_json(@value.JsonataValue::Json(item))
+      }
+      Json::object(out)
+    }
+    @value.JsonataValue::Json(json) => json
+  }
+}
+
+///|
+fn jsonata_string_number(n : Double) -> String {
+  if n == 0.0 {
+    return "0"
+  }
+  let negative = n < 0.0
+  let abs_n = if negative { -n } else { n }
+  if abs_n >= 1.0e21 || abs_n < 1.0e-6 {
+    return n.to_string()
+  }
+  let digits_before = decimal_integer_digit_count(abs_n)
+  let decimals = (15 - digits_before).max(0)
+  let rounded_abs = round_to_decimal_places(abs_n, decimals)
+  let body = fixed_decimal_string(rounded_abs, decimals)
+  if negative {
+    "-" + body
+  } else {
+    body
+  }
+}
+
+///|
+fn decimal_integer_digit_count(n : Double) -> Int {
+  let mut digits = 1
+  let mut value = n
+  while value >= 10.0 {
+    value = value / 10.0
+    digits = digits + 1
+  }
+  digits
+}
+
+///|
+fn round_to_decimal_places(n : Double, places : Int) -> Double {
+  if places <= 0 {
+    n.round()
+  } else {
+    let scale = @math.pow(10.0, places.to_double())
+    (n * scale).round() / scale
+  }
+}
+
+///|
+fn fixed_decimal_string(n : Double, places : Int) -> String {
+  if places <= 0 {
+    return integer_digits(n)
+  }
+  let int_part = n.floor()
+  let scale = @math.pow(10.0, places.to_double())
+  let mut frac_number = ((n - int_part) * scale).round().to_int64()
+  let mut int_text = integer_digits(int_part)
+  let scale_int = scale.round().to_int64()
+  if frac_number >= scale_int {
+    int_text = integer_digits(int_part + 1.0)
+    frac_number = 0
+  }
+  let frac = trim_trailing_zeroes(
+    left_pad_number(frac_number.to_string(), places),
+  )
+  if frac.length() == 0 {
+    int_text
+  } else {
+    int_text + "." + frac
+  }
+}
+
+///|
+fn left_pad_number(s : String, width : Int) -> String {
+  let out = StringBuilder::new()
+  for _ in 0..<(width - s.length()).max(0) {
+    out.write_char('0')
+  }
+  out.write_string(s)
+  out.to_string()
+}
+
+///|
+fn trim_trailing_zeroes(s : String) -> String {
+  let mut end = s.length()
+  while end > 0 && s[end - 1] == '0' {
+    end = end - 1
+  }
+  s[:end].to_owned()
 }
 
 ///|

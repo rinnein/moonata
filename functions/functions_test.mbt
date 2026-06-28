@@ -165,6 +165,21 @@ test "函数：$type" {
 ///|
 test "函数：$string $number $boolean" {
   assert_true(eval_fn("$string(42)", Json::null()) == Json::string("42"))
+  assert_true(
+    eval_fn("$string(22 / 7)", Json::null()) == Json::string("3.14285714285714"),
+  )
+  assert_true(eval_fn("$string($string)", Json::null()) == Json::string(""))
+  assert_true(
+    eval_fn("$string({\"string\":\"hello\"}, true)", Json::null()) ==
+    Json::string("{\n  \"string\": \"hello\"\n}"),
+  )
+  assert_true(
+    eval_fn("$string({\"function\":$sum,\"array\":[1,$boolean]})", Json::null()) ==
+    Json::string("{\"function\":\"\",\"array\":[1,\"\"]}"),
+  )
+  assert_true(
+    eval_fn("$string()", @json.parse("[4,true]")) == Json::string("[4,true]"),
+  )
   assert_true(eval_fn("$number(\"42\")", Json::null()) == Json::number(42.0))
   assert_true(eval_fn("$boolean(1)", Json::null()) == Json::boolean(true))
 }
