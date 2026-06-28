@@ -1,0 +1,114 @@
+///|
+fn register_string_functions(ctx : @value.EvalContext) -> Unit {
+  // $substring(str, start, length?)
+  register(ctx, "substring", arity=2, invoke=fn(args, _ctx) {
+    let s = value_to_str(args[0])
+    let start = value_to_int(args[1])
+    let len = s.length()
+    let actual_start = if start < 0 { len + start } else { start }
+    if actual_start < 0 || actual_start >= len {
+      @value.JsonataValue::Json(Json::string(""))
+    } else {
+      let end = if args.length() > 2 {
+        let l = value_to_int(args[2])
+        actual_start + l
+      } else {
+        len
+      }
+      let actual_end = end.min(len)
+      if actual_end <= actual_start {
+        @value.JsonataValue::Json(Json::string(""))
+      } else {
+        let result = s.unsafe_substring(start=actual_start, end=actual_end)
+        @value.JsonataValue::Json(Json::string(result))
+      }
+    }
+  })
+  // $length
+  register(ctx, "length", arity=1, invoke=fn(args, _ctx) {
+    match args[0] {
+      @value.JsonataValue::Json(Json::String(s)) =>
+        @value.JsonataValue::Json(
+          Json::number(s.to_array().length().to_double()),
+        )
+      @value.JsonataValue::Json(Json::Array(arr)) =>
+        @value.JsonataValue::Json(Json::number(arr.length().to_double()))
+      @value.JsonataValue::Json(Json::Object(map)) =>
+        @value.JsonataValue::Json(Json::number(map.size().to_double()))
+      @value.JsonataValue::Sequence(arr) =>
+        @value.JsonataValue::Json(Json::number(arr.length().to_double()))
+      _ => @value.JsonataValue::Undefined
+    }
+  })
+  // $trim
+  register(ctx, "trim", arity=1, invoke=fn(args, _ctx) {
+    @value.JsonataValue::Json(
+      Json::string(value_to_str(args[0]).trim().to_string()),
+    )
+  })
+  // $split
+  register(ctx, "split", arity=2, invoke=fn(args, _ctx) {
+    let s = value_to_str(args[0])
+    let sep = value_to_str(args[1])
+    let arr : Array[Json] = []
+    for p in s.split(sep) {
+      arr.push(Json::string(p.to_string()))
+    }
+    @value.JsonataValue::Json(Json::array(arr))
+  })
+  // $concat
+  register(ctx, "concat", arity=1, invoke=fn(args, _ctx) {
+    let buf = StringBuilder::new()
+    match args[0] {
+      @value.JsonataValue::Json(Json::Array(arr)) =>
+        for v in arr {
+          buf.write_string(value_to_json_str(@value.JsonataValue::Json(v)))
+        }
+      @value.JsonataValue::Sequence(arr) =>
+        for v in arr {
+          buf.write_string(value_to_json_str(v))
+        }
+      _ => buf.write_string(value_to_json_str(args[0]))
+    }
+    @value.JsonataValue::Json(Json::string(buf.to_string()))
+  })
+  // $uppercase / $lowercase
+  register(ctx, "uppercase", arity=1, invoke=fn(args, _ctx) {
+    @value.JsonataValue::Json(Json::string(value_to_str(args[0]).to_upper()))
+  })
+  register(ctx, "lowercase", arity=1, invoke=fn(args, _ctx) {
+    @value.JsonataValue::Json(Json::string(value_to_str(args[0]).to_lower()))
+  })
+  // $contains
+  register(ctx, "contains", arity=2, invoke=fn(args, _ctx) {
+    let s = value_to_str(args[0])
+    let sub = value_to_str(args[1])
+    @value.JsonataValue::Json(Json::boolean(s.contains(sub)))
+  })
+}
+
+///|
+fn value_to_str(v : @value.JsonataValue) -> String {
+  match v {
+    @value.JsonataValue::Json(Json::String(s)) => s
+    @value.JsonataValue::Json(Json::Number(n)) => n.to_string()
+    @value.JsonataValue::Json(Json::True) => "true"
+    @value.JsonataValue::Json(Json::False) => "false"
+    @value.JsonataValue::Json(Json::Null) => "null"
+    @value.JsonataValue::Undefined => ""
+    _ => v.to_json().stringify()
+  }
+}
+
+///|
+fn value_to_int(v : @value.JsonataValue) -> Int {
+  match v {
+    @value.JsonataValue::Json(Json::Number(n)) => n.to_int()
+    _ => 0
+  }
+}
+
+///|
+fn value_to_json_str(v : @value.JsonataValue) -> String {
+  value_to_str(v)
+}
