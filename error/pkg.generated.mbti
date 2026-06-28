@@ -1,0 +1,33 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "rinnein/moonata/error"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn guardrail_error(String, limit? : String?) -> JsonataError
+
+pub fn runtime_error(String) -> JsonataError
+
+pub fn signature_error(String, func? : String?) -> JsonataError
+
+pub fn syntax_error(String, position? : Int?, token? : String?) -> JsonataError
+
+pub fn type_error(String, expected? : String?, actual? : String?) -> JsonataError
+
+// Errors
+pub(all) suberror JsonataError {
+  SyntaxError(message~ : String, position~ : Int?, token~ : String?)
+  RuntimeError(message~ : String)
+  TypeError(message~ : String, expected~ : String?, actual~ : String?)
+  SignatureError(message~ : String, func~ : String?)
+  GuardrailError(message~ : String, limit~ : String?)
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+
+// Type aliases
+
+// Traits
+
