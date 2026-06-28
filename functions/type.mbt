@@ -79,13 +79,28 @@ fn register_higher_order_functions(ctx : @value.EvalContext) -> Unit {
 
 ///|
 fn register_special_functions(ctx : @value.EvalContext) -> Unit {
-  // $now
+  // $now — 当前时间戳（ISO 8601 格式，简化版）
   register(ctx, "now", arity=0, invoke=fn(_args, _ctx) {
-    @value.JsonataValue::Json(Json::string("2026-06-28T00:00:00Z"))
+    let millis = @env.now().to_double()
+    @value.JsonataValue::Json(Json::string(format_iso_time(millis)))
   })
-  // $millis
+  // $millis — 当前时间戳（毫秒数）
   register(ctx, "millis", arity=0, invoke=fn(_args, _ctx) {
-    @value.JsonataValue::Json(Json::number(0.0))
+    @value.JsonataValue::Json(Json::number(@env.now().to_double()))
+  })
+  // $fromMillis — 毫秒数转 ISO 8601 字符串
+  register(ctx, "fromMillis", arity=1, invoke=fn(args, _ctx) {
+    let millis = match args[0] {
+      @value.JsonataValue::Json(Json::Number(n)) => n
+      _ => 0.0
+    }
+    @value.JsonataValue::Json(Json::string(format_iso_time(millis)))
+  })
+  // $toMillis — ISO 8601 字符串转毫秒数（简化：仅解析数字）
+  register(ctx, "toMillis", arity=1, invoke=fn(args, _ctx) {
+    let s = value_to_str(args[0])
+    let millis = @strconv.from_str(s) catch { _ => 0.0 }
+    @value.JsonataValue::Json(Json::number(millis))
   })
   // $base64encode
   register(ctx, "base64encode", arity=1, invoke=fn(args, _ctx) {
@@ -101,6 +116,34 @@ fn register_special_functions(ctx : @value.EvalContext) -> Unit {
   register(ctx, "error", arity=1, invoke=fn(args, _ctx) {
     raise @error.runtime_error(value_to_str(args[0]))
   })
+}
+
+///|
+/// 将毫秒时间戳格式化为简化的 ISO 8601 字符串
+fn format_iso_time(millis : Double) -> String {
+  // 简化实现：返回时间戳的字符串表示
+  // 完整实现需日历计算，此处用近似
+  let seconds = (millis / 1000.0).to_int()
+  let days = seconds / 86400
+  let remainder = seconds % 86400
+  let hours = remainder / 3600
+  let minutes = remainder % 3600 / 60
+  let secs = remainder % 60
+  // 从 1970-01-01 计算年月日（简化算法）
+  let year = 1970 + days / 365
+  let day_of_year = days % 365
+  let month = (day_of_year / 30).max(0).min(11) + 1
+  let day = day_of_year % 30 + 1
+  "\{year}-\{pad2(month)}-\{pad2(day)}T\{pad2(hours)}:\{pad2(minutes)}:\{pad2(secs)}Z"
+}
+
+///|
+fn pad2(n : Int) -> String {
+  if n < 10 {
+    "0\{n}"
+  } else {
+    n.to_string()
+  }
 }
 
 ///|

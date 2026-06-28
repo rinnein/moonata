@@ -1,6 +1,11 @@
-// import {
-//   "rinnein/moonata" @lib,
-// }
+import {
+  "rinnein/moonata",
+  "rinnein/moonata/error",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+supported_targets = "native"
 
 options(
   "is-main": true,

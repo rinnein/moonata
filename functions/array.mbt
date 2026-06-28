@@ -37,16 +37,20 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
     }
     @value.JsonataValue::sequence(results)
   })
-  // $reduce
-  register(ctx, "reduce", arity=3, invoke=fn(args, ctx) {
+  // $reduce(array, func, init?) — 初始值可选
+  register(ctx, "reduce", arity=2, invoke=fn(args, ctx) {
     let items = args[0].to_array()
     let f = match args[1] {
       @value.JsonataValue::Func(f) => f
       _ => return @value.JsonataValue::Undefined
     }
-    let mut acc = args[2]
-    for item in items {
-      acc = (f.invoke)([acc, item], ctx)
+    if items.length() == 0 {
+      return @value.JsonataValue::Undefined
+    }
+    let mut acc = if args.length() > 2 { args[2] } else { items[0] }
+    let start = if args.length() > 2 { 0 } else { 1 }
+    for i in start..<items.length() {
+      acc = (f.invoke)([acc, items[i]], ctx)
     }
     acc
   })

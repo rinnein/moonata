@@ -8,3 +8,7 @@ import {
   "rinnein/moonata/evaluator",
   "rinnein/moonata/functions",
 }
+
+import {
+  "moonbitlang/core/json",
+} for "test"

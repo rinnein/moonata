@@ -1,5 +1,5 @@
 // functions 包：60+ 内建函数实现与注册。
-// 依赖 error/ast/value/evaluator/lexer/parser/strconv/json/regexp。
+// 依赖 error/ast/value/evaluator/lexer/parser/strconv/json/regexp/env。
 import {
   "rinnein/moonata/error",
   "rinnein/moonata/ast",
@@ -9,5 +9,6 @@ import {
   "rinnein/moonata/parser",
   "moonbitlang/core/strconv",
   "moonbitlang/core/json",
+  "moonbitlang/core/env",
   "moonbitlang/regexp",
 }
