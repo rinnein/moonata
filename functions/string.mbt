@@ -130,15 +130,35 @@ fn register_string_functions(ctx : @value.EvalContext) -> Unit {
   register(ctx, "pad", arity=2, invoke=fn(args, _ctx) {
     let s = value_to_str(args[0])
     let width = value_to_int(args[1])
-    let len = s.length()
-    if len >= width {
+    let target = if width < 0 { -width } else { width }
+    let len = s.to_array().length()
+    if len >= target {
       @value.JsonataValue::Json(Json::string(s))
     } else {
-      let pad_char = if args.length() > 2 { value_to_str(args[2]) } else { " " }
-      let pad_str = pad_char.repeat(width - len)
-      @value.JsonataValue::Json(Json::string(s + pad_str))
+      let pad_chars = if args.length() > 2 {
+        let chars = value_to_str(args[2]).to_array()
+        if chars.length() == 0 {
+          [' ']
+        } else {
+          chars
+        }
+      } else {
+        [' ']
+      }
+      let pad_str = make_pad_string(target - len, pad_chars)
+      let result = if width < 0 { pad_str + s } else { s + pad_str }
+      @value.JsonataValue::Json(Json::string(result))
     }
   })
+}
+
+///|
+fn make_pad_string(count : Int, chars : Array[Char]) -> String {
+  let out = StringBuilder::new()
+  for i in 0..<count {
+    out.write_char(chars[i % chars.length()])
+  }
+  out.to_string()
 }
 
 ///|

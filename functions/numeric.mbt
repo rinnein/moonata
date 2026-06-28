@@ -80,7 +80,18 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
   register(ctx, "round", arity=1, invoke=fn(args, _ctx) {
     match args[0] {
       @value.JsonataValue::Json(Json::Number(n, ..)) =>
-        @value.JsonataValue::Json(Json::number(n.round()))
+        @value.JsonataValue::Json(
+          Json::number(
+            round_half_even(
+              n,
+              if args.length() > 1 {
+                value_to_int(args[1])
+              } else {
+                0
+              },
+            ),
+          ),
+        )
       _ => @value.JsonataValue::Undefined
     }
   })
@@ -194,6 +205,41 @@ fn random_fraction() -> Double {
   let seed = (now % 1_000_000).to_double()
   let mixed = @math.sin(seed * 12.9898) * 43758.5453
   mixed - mixed.floor()
+}
+
+///|
+fn round_half_even(n : Double, precision : Int) -> Double {
+  let scale = @math.pow(10.0, precision.to_double())
+  let scaled = n * scale
+  let rounded = round_half_even_integer(scaled)
+  let result = rounded / scale
+  if result == -0.0 {
+    0.0
+  } else {
+    result
+  }
+}
+
+///|
+fn round_half_even_integer(n : Double) -> Double {
+  let sign = if n < 0.0 { -1.0 } else { 1.0 }
+  let abs_n = if n < 0.0 { -n } else { n }
+  let base = abs_n.floor()
+  let frac = abs_n - base
+  let tie_delta = if frac >= 0.5 { frac - 0.5 } else { 0.5 - frac }
+  let rounded_abs = if tie_delta < 0.0000000001 {
+    let base_int = base.to_int()
+    if base_int % 2 == 0 {
+      base
+    } else {
+      base + 1.0
+    }
+  } else if frac < 0.5 {
+    base
+  } else {
+    base + 1.0
+  }
+  sign * rounded_abs
 }
 
 ///|

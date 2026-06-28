@@ -224,6 +224,31 @@ test "官方套件：$sum" {
 }
 
 ///|
+test "官方套件：$round 使用 half-even 与 precision" {
+  assert_eval("$round(2.5)", Json::null(), Json::number(2.0))
+  assert_eval("$round(3.5)", Json::null(), Json::number(4.0))
+  assert_eval("$round(0.5)", Json::null(), Json::number(0.0))
+  assert_eval("$round(-7.5)", Json::null(), Json::number(-8.0))
+  assert_eval("$round(-8.5)", Json::null(), Json::number(-8.0))
+  assert_eval("$round(4.49, 1)", Json::null(), Json::number(4.5))
+  assert_eval("$round(4.525, 2)", Json::null(), Json::number(4.52))
+  assert_eval("$round(12345, -2)", Json::null(), Json::number(12300.0))
+}
+
+///|
+test "官方套件：$pad 支持左右填充与循环截断" {
+  assert_eval("$pad(\"foo\", 5)", Json::null(), Json::string("foo  "))
+  assert_eval("$pad(\"foo\", -5)", Json::null(), Json::string("  foo"))
+  assert_eval("$pad(\"foo\", -5, \"#\")", Json::null(), Json::string("##foo"))
+  assert_eval("$pad(\"foo\", 5, \"\")", Json::null(), Json::string("foo  "))
+  assert_eval(
+    "$pad(\"foo\", 8, \"-+\")",
+    Json::null(),
+    Json::string("foo-+-+-"),
+  )
+}
+
+///|
 test "官方套件：$map" {
   let d = data("[1,2,3]")
   let result = evaluate("$map($, function($x) { $x * 2 })", d)
