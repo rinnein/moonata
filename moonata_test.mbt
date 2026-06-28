@@ -356,6 +356,9 @@ test "官方套件：$type" {
 test "官方套件：$string $number $boolean" {
   assert_eval("$string(42)", Json::null(), Json::string("42"))
   assert_eval("$number(\"42\")", Json::null(), Json::number(42.0))
+  assert_eval("$number(\"0x12\")", Json::null(), Json::number(18.0))
+  assert_eval("$number(\"0B101\")", Json::null(), Json::number(5.0))
+  assert_eval("$number(\"0O12\")", Json::null(), Json::number(10.0))
   assert_eval("$boolean(1)", Json::null(), Json::boolean(true))
 }
 

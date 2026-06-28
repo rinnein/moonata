@@ -9,8 +9,9 @@ fn register_type_functions(ctx : @value.EvalContext) -> Unit {
     match args[0] {
       @value.JsonataValue::Json(Json::Number(_, ..)) => args[0]
       @value.JsonataValue::Json(Json::String(s)) =>
-        @value.JsonataValue::Json(Json::number(@strconv.from_str(s))) catch {
-          _ => @value.JsonataValue::Undefined
+        match parse_number_literal(s) {
+          Some(n) => @value.JsonataValue::Json(Json::number(n))
+          None => @value.JsonataValue::Undefined
         }
       @value.JsonataValue::Json(Json::True) =>
         @value.JsonataValue::Json(Json::number(1.0))
@@ -39,6 +40,58 @@ fn register_type_functions(ctx : @value.EvalContext) -> Unit {
     }
     @value.JsonataValue::Json(Json::string(type_name))
   })
+}
+
+///|
+fn parse_number_literal(s : String) -> Double? {
+  if s.length() > 2 && s[0] == '0' {
+    let radix = match s[1] {
+      'x' | 'X' => 16
+      'b' | 'B' => 2
+      'o' | 'O' => 8
+      _ => 0
+    }
+    if radix != 0 {
+      return parse_radix_number(s, radix, 2)
+    }
+  }
+  Some(@strconv.from_str(s)) catch {
+    _ => None
+  }
+}
+
+///|
+fn parse_radix_number(s : String, radix : Int, start : Int) -> Double? {
+  let mut value = 0
+  let mut i = start
+  if i >= s.length() {
+    return None
+  }
+  while i < s.length() {
+    let digit = match s.get_char(i) {
+      Some(c) => radix_digit(c)
+      None => return None
+    }
+    if digit < 0 || digit >= radix {
+      return None
+    }
+    value = value * radix + digit
+    i = i + 1
+  }
+  Some(value.to_double())
+}
+
+///|
+fn radix_digit(c : Char) -> Int {
+  if c >= '0' && c <= '9' {
+    c.to_int() - '0'.to_int()
+  } else if c >= 'a' && c <= 'f' {
+    c.to_int() - 'a'.to_int() + 10
+  } else if c >= 'A' && c <= 'F' {
+    c.to_int() - 'A'.to_int() + 10
+  } else {
+    -1
+  }
 }
 
 ///|
