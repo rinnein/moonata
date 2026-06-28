@@ -236,6 +236,46 @@ test "官方套件：$round 使用 half-even 与 precision" {
 }
 
 ///|
+test "官方套件：$formatNumber 基础格式" {
+  assert_eval(
+    "$formatNumber(12345.6, \"#,###.00\")",
+    Json::null(),
+    Json::string("12,345.60"),
+  )
+  assert_eval(
+    "$formatNumber(123.9, \"9999\")",
+    Json::null(),
+    Json::string("0124"),
+  )
+  assert_eval("$formatNumber(0.14, \"01%\")", Json::null(), Json::string("14%"))
+  assert_eval(
+    "$formatNumber(0.4857, \"###.###‰\")",
+    Json::null(),
+    Json::string("485.7‰"),
+  )
+  assert_eval("$formatNumber(-6, \"000\")", Json::null(), Json::string("-006"))
+  assert_eval(
+    "$formatNumber(123412345678.9, \"9,9,99.99\")",
+    Json::null(),
+    Json::string("123412345,6,78.90"),
+  )
+}
+
+///|
+test "官方套件：不规则整数分组不重复最左组" {
+  assert_eval(
+    "$formatInteger(1234567890, \"#:###,##0\")",
+    Json::null(),
+    Json::string("1234:567,890"),
+  )
+  assert_eval(
+    "$formatInteger(1234567890, \"##,##,##0\")",
+    Json::null(),
+    Json::string("12345,67,890"),
+  )
+}
+
+///|
 test "官方套件：$pad 支持左右填充与循环截断" {
   assert_eval("$pad(\"foo\", 5)", Json::null(), Json::string("foo  "))
   assert_eval("$pad(\"foo\", -5)", Json::null(), Json::string("  foo"))

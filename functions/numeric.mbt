@@ -152,6 +152,19 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
     }
     @value.JsonataValue::Json(Json::string(buf.to_string()))
   })
+  // $formatNumber(number, picture, options?)
+  register(ctx, "formatNumber", arity=2, invoke=fn(args, _ctx) {
+    let n = value_to_double(args[0])
+    let picture = value_to_str(args[1])
+    let per_mille = if args.length() > 2 {
+      option_string(args[2], "per-mille")
+    } else {
+      None
+    }
+    @value.JsonataValue::Json(
+      Json::string(format_number(n, picture, per_mille)),
+    )
+  })
   // $formatInteger(number, picture)
   register(ctx, "formatInteger", arity=2, invoke=fn(args, _ctx) {
     let n = value_to_int(args[0])
@@ -240,6 +253,180 @@ fn round_half_even_integer(n : Double) -> Double {
     base + 1.0
   }
   sign * rounded_abs
+}
+
+///|
+fn option_string(v : @value.JsonataValue, key : String) -> String? {
+  match v {
+    @value.JsonataValue::Json(Json::Object(map)) =>
+      match map.get(key) {
+        Some(Json::String(s)) => Some(s)
+        _ => None
+      }
+    _ => None
+  }
+}
+
+///|
+fn format_number(
+  n : Double,
+  picture : String,
+  per_mille_option : String?,
+) -> String {
+  let per_mille = per_mille_option.unwrap_or("‰")
+  let multiplier = if picture.contains("%") {
+    100.0
+  } else if picture.contains(per_mille) {
+    1000.0
+  } else {
+    1.0
+  }
+  let suffix = if picture.contains("%") {
+    "%"
+  } else if picture.contains(per_mille) {
+    per_mille
+  } else {
+    trailing_number_suffix(picture)
+  }
+  let core = strip_number_suffix(picture, suffix)
+  let dot = core.find(".")
+  let int_pic = match dot {
+    Some(i) => core[:i].to_owned()
+    None => core
+  }
+  let frac_pic = match dot {
+    Some(i) => core[i + 1:].to_owned()
+    None => ""
+  }
+  let frac_places = count_number_slots(frac_pic)
+  let scaled = n * multiplier
+  let rounded = round_half_even(scaled, frac_places)
+  let negative = rounded < 0.0
+  let abs_value = if negative { -rounded } else { rounded }
+  let integer_part = abs_value.floor().to_int64()
+  let frac_scale = @math.pow(10.0, frac_places.to_double())
+  let frac_number = ((abs_value - integer_part.to_double()) * frac_scale)
+    .round()
+    .to_int64()
+  let int_str = format_number_integer(integer_part, int_pic)
+  let frac_str = format_number_fraction(frac_number, frac_pic, frac_places)
+  let sign = if negative { "-" } else { "" }
+  if frac_str == "" {
+    sign + int_str + suffix
+  } else {
+    sign + int_str + "." + frac_str + suffix
+  }
+}
+
+///|
+fn trailing_number_suffix(picture : String) -> String {
+  let chars = picture.to_array()
+  let mut i = chars.length()
+  while i > 0 {
+    let c = chars[i - 1]
+    if c == '#' || c == '0' || c == '9' || c == ',' || c == '.' {
+      break
+    }
+    i -= 1
+  }
+  chars_to_string(chars, i, chars.length())
+}
+
+///|
+fn strip_number_suffix(picture : String, suffix : String) -> String {
+  if suffix == "" {
+    picture
+  } else if picture.length() >= suffix.length() &&
+    picture[picture.length() - suffix.length():].to_owned() == suffix {
+    picture[:picture.length() - suffix.length()].to_owned()
+  } else {
+    picture
+  }
+}
+
+///|
+fn count_number_slots(pic : String) -> Int {
+  let mut count = 0
+  for c in pic {
+    if c == '#' || c == '0' || c == '9' {
+      count += 1
+    }
+  }
+  count
+}
+
+///|
+fn format_number_integer(n : Int64, pic : String) -> String {
+  let mut digits = n.to_string()
+  let min_width = min_number_width(pic)
+  while digits.length() < min_width {
+    digits = "0" + digits
+  }
+  apply_grouping(digits, pic)
+}
+
+///|
+fn min_number_width(pic : String) -> Int {
+  let mut count = 0
+  for c in pic {
+    if c == '0' || c == '9' {
+      count += 1
+    }
+  }
+  count
+}
+
+///|
+fn format_number_fraction(n : Int64, pic : String, places : Int) -> String {
+  if places == 0 {
+    return ""
+  }
+  let mut digits = n.to_string()
+  while digits.length() < places {
+    digits = "0" + digits
+  }
+  let mandatory = mandatory_fraction_places(pic)
+  while digits.length() > mandatory &&
+        digits.get_char(digits.length() - 1) == Some('0') {
+    digits = digits[:digits.length() - 1].to_owned()
+  }
+  apply_fraction_grouping(digits, pic)
+}
+
+///|
+fn mandatory_fraction_places(pic : String) -> Int {
+  let mut count = 0
+  for c in pic {
+    if c == '0' || c == '9' {
+      count += 1
+    }
+  }
+  count
+}
+
+///|
+fn apply_fraction_grouping(digits : String, pic : String) -> String {
+  if !pic.contains(",") || digits == "" {
+    return digits
+  }
+  let out = StringBuilder::new()
+  let mut digit_index = 0
+  for c in pic {
+    if c == ',' {
+      if digit_index < digits.length() {
+        out.write_char(',')
+      }
+    } else if c == '#' || c == '0' || c == '9' {
+      if digit_index < digits.length() {
+        match digits.get_char(digit_index) {
+          Some(d) => out.write_char(d)
+          None => ()
+        }
+      }
+      digit_index += 1
+    }
+  }
+  out.to_string()
 }
 
 ///|
@@ -352,8 +539,12 @@ fn apply_grouping(digits : String, pic : String) -> String {
   while pos > 0 {
     let (size, sep) = if group_index < groups.length() {
       groups[group_index]
+    } else if groups.length() == 1 {
+      groups[0]
     } else {
-      groups[groups.length() - 1]
+      parts.push(digits[0:pos].to_owned())
+      pos = 0
+      break
     }
     let actual_size = size.max(1)
     let start = (pos - actual_size).max(0)
