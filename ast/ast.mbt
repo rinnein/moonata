@@ -38,6 +38,7 @@ pub(all) enum StepKind {
   Slice(Int?, Int?)
   Filter(Ast)
   Map(Ast)
+  Arrayify
 } derive(Debug, Eq)
 
 ///|
@@ -94,4 +95,10 @@ pub fn wildcard_step(recursive? : Bool = false) -> Step {
 /// 便捷构造路径映射步 `.(expr)`。
 pub fn map_step(expr : Ast) -> Step {
   Step::new(kind=StepKind::Map(expr), stage=StepStage::Single)
+}
+
+///|
+/// 便捷构造空数组选择器 `[]`。
+pub fn arrayify_step() -> Step {
+  Step::new(kind=StepKind::Arrayify, stage=StepStage::Single)
 }

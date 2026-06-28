@@ -292,6 +292,10 @@ fn Parser::parse_bracket_access(
   target : @ast.Ast,
 ) -> @ast.Ast raise @error.JsonataError {
   self.expect(@lexer.TokenKind::LBracket, what="'['")
+  if self.peek_kind() == @lexer.TokenKind::RBracket {
+    ignore(self.advance())
+    return append_step(target, @ast.arrayify_step())
+  }
   // 检测切片 [a:b]
   let start_expr : @ast.Ast? = if self.peek_kind() == @lexer.TokenKind::Colon {
     None

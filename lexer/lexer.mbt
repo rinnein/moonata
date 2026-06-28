@@ -328,6 +328,8 @@ fn Lexer::lex_ident(self : Lexer, start : Int) -> Token {
     "true" => TokenKind::Boolean(true)
     "false" => TokenKind::Boolean(false)
     "null" => TokenKind::Null
+    "and" => TokenKind::And
+    "or" => TokenKind::Or
     _ => TokenKind::Ident(s)
   }
   Token::new(kind~, pos=start)

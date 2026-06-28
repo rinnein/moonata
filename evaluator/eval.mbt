@@ -103,6 +103,7 @@ fn eval_step_single(
     @ast.StepKind::Slice(start, end) => access_slice(input, start, end)
     @ast.StepKind::Filter(expr) => access_filter(input, expr, ctx)
     @ast.StepKind::Map(expr) => access_map(input, expr, ctx)
+    @ast.StepKind::Arrayify => access_arrayify(input)
   }
 }
 
@@ -341,6 +342,16 @@ fn access_filter(
     }
   }
   @value.JsonataValue::sequence(results)
+}
+
+///|
+/// 空数组选择器 `[]`：强制将当前结果包装为 JSON array。
+fn access_arrayify(input : @value.JsonataValue) -> @value.JsonataValue {
+  let arr : Array[Json] = []
+  for item in input.to_array() {
+    arr.push(item.to_json())
+  }
+  @value.JsonataValue::Json(Json::array(arr))
 }
 
 ///|

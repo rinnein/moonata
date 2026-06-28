@@ -7,6 +7,19 @@ fn eval_binary(
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
   let lhs = eval(lhs_ast, ctx)
+  if op == "&&" {
+    if !to_bool(lhs) {
+      return @value.JsonataValue::Json(Json::boolean(false))
+    }
+    let rhs = eval(rhs_ast, ctx)
+    return @value.JsonataValue::Json(Json::boolean(to_bool(rhs)))
+  } else if op == "||" {
+    if to_bool(lhs) {
+      return @value.JsonataValue::Json(Json::boolean(true))
+    }
+    let rhs = eval(rhs_ast, ctx)
+    return @value.JsonataValue::Json(Json::boolean(to_bool(rhs)))
+  }
   let rhs = eval(rhs_ast, ctx)
   // Undefined 传播（多数运算）
   if lhs is @value.JsonataValue::Undefined ||
