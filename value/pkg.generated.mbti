@@ -51,6 +51,7 @@ pub(all) enum JsonataValue {
   Json(Json)
   Sequence(Array[JsonataValue])
   Func(JsonataFunc)
+  Regex(pattern~ : String, flags~ : String)
   Undefined
 } derive(@debug.Debug)
 pub fn JsonataValue::equal(Self, Self) -> Bool

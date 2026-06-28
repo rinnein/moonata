@@ -7,6 +7,8 @@ pub fn eval(
   ctx.tick()
   match ast {
     @ast.Ast::String(s) => @value.JsonataValue::Json(Json::string(s))
+    @ast.Ast::Regex(pattern~, flags~) =>
+      @value.JsonataValue::Regex(pattern~, flags~)
     @ast.Ast::Number(n) => @value.JsonataValue::Json(Json::number(n))
     @ast.Ast::Boolean(b) => @value.JsonataValue::Json(Json::boolean(b))
     @ast.Ast::Null => @value.JsonataValue::Json(Json::null())

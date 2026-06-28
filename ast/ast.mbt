@@ -5,6 +5,7 @@
 /// 路径访问统一用 `Path(Array[Step])` 表示，`Step` 携带 `StepKind` 与 `StepStage`。
 pub(all) enum Ast {
   String(String)
+  Regex(pattern~ : String, flags~ : String)
   Number(Double)
   Boolean(Bool)
   Null

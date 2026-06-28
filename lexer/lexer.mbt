@@ -3,6 +3,7 @@
 pub(all) enum TokenKind {
   // 字面量
   String(String)
+  Regex(pattern~ : String, flags~ : String)
   Number(Double)
   Boolean(Bool)
   Null
@@ -84,15 +85,36 @@ priv struct Lexer {
 pub fn lex(src : String) -> Array[Token] raise @error.JsonataError {
   let lex = Lexer::new(src)
   let tokens : Array[Token] = []
+  let mut expect_operand = true
   for ;; {
     lex.skip_ws_and_comments()
     if lex.pos >= lex.len {
       break
     }
-    let tok = lex.next_token()
+    let tok = lex.next_token(expect_operand)
+    expect_operand = token_expects_operand_after(tok.kind)
     tokens.push(tok)
   }
   tokens
+}
+
+///|
+fn token_expects_operand_after(kind : TokenKind) -> Bool {
+  match kind {
+    String(_)
+    | Regex(_)
+    | Number(_)
+    | Boolean(_)
+    | Null
+    | Ident(_)
+    | Var(_)
+    | DollarDollar
+    | RParen
+    | RBracket
+    | RBrace => false
+    Star | DoubleStar | DotStar => false
+    _ => true
+  }
 }
 
 ///|
@@ -158,9 +180,16 @@ fn Lexer::skip_ws_and_comments(self : Lexer) -> Unit {
 }
 
 ///|
-fn Lexer::next_token(self : Lexer) -> Token raise @error.JsonataError {
+fn Lexer::next_token(
+  self : Lexer,
+  expect_operand : Bool,
+) -> Token raise @error.JsonataError {
   let start = self.pos
   let c = self.peek()
+  // 正则字面量 /pattern/flags。仅在期待操作数的位置解析，避免和除法冲突。
+  if c == '/' && expect_operand {
+    return self.lex_regex(start)
+  }
   // 字符串
   if c == '"' || c == '\'' || c == '`' {
     return self.lex_string(start)
@@ -179,6 +208,64 @@ fn Lexer::next_token(self : Lexer) -> Token raise @error.JsonataError {
   }
   // 运算符与标点
   self.lex_operator(start)
+}
+
+///|
+fn Lexer::lex_regex(
+  self : Lexer,
+  start : Int,
+) -> Token raise @error.JsonataError {
+  self.pos = self.pos + 1 // consume opening slash
+  let pattern = StringBuilder::new()
+  for ;; {
+    if self.pos >= self.len {
+      raise @error.syntax_error(
+        "未终止的正则字面量",
+        position=Some(start),
+        token=None,
+      )
+    }
+    let c = match self.src.get_char(self.pos) {
+      Some(ch) => ch
+      None => {
+        self.pos = self.pos + 1
+        '\u{FFFD}'
+      }
+    }
+    if c == '/' {
+      self.pos = self.pos + 1
+      break
+    }
+    if c == '\\' {
+      pattern.write_char(c)
+      self.pos = self.pos + 1
+      if self.pos >= self.len {
+        raise @error.syntax_error(
+          "正则转义不完整",
+          position=Some(self.pos),
+          token=None,
+        )
+      }
+      let escaped = match self.src.get_char(self.pos) {
+        Some(ch) => ch
+        None => '\u{FFFD}'
+      }
+      pattern.write_char(escaped)
+      self.pos = self.pos + escaped.utf16_len()
+    } else {
+      pattern.write_char(c)
+      self.pos = self.pos + c.utf16_len()
+    }
+  }
+  let flags = StringBuilder::new()
+  while self.pos < self.len && is_ident_part(self.peek()) {
+    flags.write_char(u16_to_char(self.peek()))
+    self.pos = self.pos + 1
+  }
+  Token::new(
+    kind=TokenKind::Regex(pattern=pattern.to_string(), flags=flags.to_string()),
+    pos=start,
+  )
 }
 
 ///|

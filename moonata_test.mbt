@@ -530,3 +530,52 @@ test "官方套件：$replace_regex" {
     Json::string("hello moonbit"),
   )
 }
+
+///|
+test "官方套件：正则字面量基础支持" {
+  assert_eval(
+    "$split(\"ababbxabbcc\", /b+/)",
+    Json::null(),
+    data("[\"a\",\"a\",\"xa\",\"cc\"]"),
+  )
+  assert_eval(
+    "$contains(\"ababbxabbcc\", /ab+/)",
+    Json::null(),
+    Json::boolean(true),
+  )
+  assert_eval(
+    "$contains(\"ababbxabbcc\", /ax+/)",
+    Json::null(),
+    Json::boolean(false),
+  )
+  assert_eval(
+    "$contains(\"Bowler Hat\", /hat/i)",
+    Json::null(),
+    Json::boolean(true),
+  )
+  assert_eval(
+    "$replace(\"ababbxabbcc\", /b+/, \"yy\")",
+    Json::null(),
+    Json::string("ayyayyxayycc"),
+  )
+  assert_eval(
+    "$replace(\"ababbxabbcc\", /b+/, \"yy\", 2)",
+    Json::null(),
+    Json::string("ayyayyxabbcc"),
+  )
+  assert_eval(
+    "$replace(\"John Smith\", /(\\w+)\\s(\\w+)/, \"$2, $1\")",
+    Json::null(),
+    Json::string("Smith, John"),
+  )
+  assert_eval(
+    "$replace(\"Bowler Hat\", /hat/i, function($match) { \"foo\" })",
+    Json::null(),
+    Json::string("Bowler foo"),
+  )
+  assert_eval(
+    "$replace(\"Bowler Hat\", /(h)(at)/i, function($match) { $uppercase($match.match) })",
+    Json::null(),
+    Json::string("Bowler HAT"),
+  )
+}

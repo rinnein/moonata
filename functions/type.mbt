@@ -36,6 +36,7 @@ fn register_type_functions(ctx : @value.EvalContext) -> Unit {
       @value.JsonataValue::Json(Json::Object(_)) => "object"
       @value.JsonataValue::Undefined => "undefined"
       @value.JsonataValue::Func(_) => "function"
+      @value.JsonataValue::Regex(_) => "function"
       @value.JsonataValue::Sequence(_) => "array"
     }
     @value.JsonataValue::Json(Json::string(type_name))

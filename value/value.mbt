@@ -9,6 +9,7 @@ pub(all) enum JsonataValue {
   Json(Json)
   Sequence(Array[JsonataValue])
   Func(JsonataFunc)
+  Regex(pattern~ : String, flags~ : String)
   Undefined
 } derive(Debug)
 
@@ -97,6 +98,7 @@ pub fn JsonataValue::to_json(self : JsonataValue) -> Json {
     Json(j) => j
     Undefined => Json::null()
     Func(_) => Json::null()
+    Regex(_) => Json::null()
     Sequence(arr) =>
       match arr.length() {
         0 => Json::null()
@@ -192,6 +194,8 @@ pub fn JsonataValue::equal(self : JsonataValue, other : JsonataValue) -> Bool {
   match (self, other) {
     (Undefined, Undefined) => true
     (Func(a), Func(b)) => a.arity == b.arity && a.signature == b.signature
+    (Regex(pattern=ap, flags=af), Regex(pattern=bp, flags=bf)) =>
+      ap == bp && af == bf
     (Json(a), Json(b)) => a == b
     (Sequence(a), Sequence(b)) =>
       if a.length() != b.length() {

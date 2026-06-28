@@ -12,6 +12,10 @@ fn Parser::parse_primary(self : Parser) -> @ast.Ast raise @error.JsonataError {
       ignore(self.advance())
       @ast.Ast::String(s)
     }
+    @lexer.TokenKind::Regex(pattern~, flags~) => {
+      ignore(self.advance())
+      @ast.Ast::Regex(pattern~, flags~)
+    }
     @lexer.TokenKind::Number(n) => {
       ignore(self.advance())
       @ast.Ast::Number(n)

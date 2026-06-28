@@ -60,6 +60,7 @@ fn to_bool(v : @value.JsonataValue) -> Bool {
     @value.JsonataValue::Undefined => false
     @value.JsonataValue::Sequence(arr) => arr.length() > 0
     @value.JsonataValue::Func(_) => false
+    @value.JsonataValue::Regex(_) => false
   }
 }
 
