@@ -47,7 +47,7 @@ fn register_string_functions(ctx : @value.EvalContext) -> Unit {
   // $trim
   register(ctx, "trim", arity=1, invoke=fn(args, _ctx) {
     @value.JsonataValue::Json(
-      Json::string(value_to_str(args[0]).trim().to_owned()),
+      Json::string(normalize_whitespace(value_to_str(args[0]))),
     )
   })
   // $split
@@ -158,6 +158,26 @@ fn make_pad_string(count : Int, chars : Array[Char]) -> String {
   let out = StringBuilder::new()
   for i in 0..<count {
     out.write_char(chars[i % chars.length()])
+  }
+  out.to_string()
+}
+
+///|
+fn normalize_whitespace(s : String) -> String {
+  let out = StringBuilder::new()
+  let mut in_space = false
+  let mut wrote = false
+  for c in s.trim() {
+    if c.is_whitespace() {
+      if wrote && !in_space {
+        out.write_char(' ')
+        in_space = true
+      }
+    } else {
+      out.write_char(c)
+      wrote = true
+      in_space = false
+    }
   }
   out.to_string()
 }

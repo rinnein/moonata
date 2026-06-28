@@ -119,7 +119,7 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
   // $join
   register(ctx, "join", arity=2, invoke=fn(args, _ctx) {
     let items = args[0].to_array()
-    let sep = value_to_str(args[1])
+    let sep = if args.length() > 1 { value_to_str(args[1]) } else { "" }
     let parts : Array[String] = []
     for item in items {
       parts.push(value_to_str(item))

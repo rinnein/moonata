@@ -53,7 +53,7 @@ fn Parser::parse_bind(self : Parser) -> @ast.Ast raise @error.JsonataError {
       // 期望 :=
       if self.peek_kind() == @lexer.TokenKind::Eq {
         ignore(self.advance())
-        let value = self.parse_bind()
+        let value = self.parse_chain()
         // 消费分隔 value 和 body 的分号
         ignore(self.match_kind(@lexer.TokenKind::Semicolon))
         let body = self.parse_block()

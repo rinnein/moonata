@@ -322,6 +322,9 @@ fn eval_apply(
   let func_val = eval(func_ast, ctx)
   match func_val {
     @value.JsonataValue::Func(f) => {
+      if has_placeholder(args_ast) {
+        return make_partial_apply(f, args_ast, ctx)
+      }
       let args : Array[@value.JsonataValue] = []
       for arg_ast in args_ast {
         args.push(eval(arg_ast, ctx))
@@ -337,10 +340,10 @@ fn eval_apply(
           ctx2 : @value.EvalContext,
         ) -> @value.JsonataValue raise @error.JsonataError {
           let all : Array[@value.JsonataValue] = []
-          for a in captured {
+          for a in more_args {
             all.push(a)
           }
-          for a in more_args {
+          for a in captured {
             all.push(a)
           }
           ctx2.with_depth(() => (original.invoke)(all, ctx2))
@@ -364,6 +367,64 @@ fn eval_apply(
         actual=None,
       )
   }
+}
+
+///|
+fn has_placeholder(args : Array[@ast.Ast]) -> Bool {
+  let mut found = false
+  for arg in args {
+    if arg is @ast.Ast::Placeholder {
+      found = true
+      break
+    }
+  }
+  found
+}
+
+///|
+fn make_partial_apply(
+  f : @value.JsonataFunc,
+  args_ast : Array[@ast.Ast],
+  ctx : @value.EvalContext,
+) -> @value.JsonataValue raise @error.JsonataError {
+  let captured : Array[@value.JsonataValue?] = []
+  let mut placeholder_count = 0
+  for arg_ast in args_ast {
+    if arg_ast is @ast.Ast::Placeholder {
+      captured.push(None)
+      placeholder_count += 1
+    } else {
+      captured.push(Some(eval(arg_ast, ctx)))
+    }
+  }
+  let invoke = fn(
+    provided : Array[@value.JsonataValue],
+    ctx2 : @value.EvalContext,
+  ) -> @value.JsonataValue raise @error.JsonataError {
+    let args : Array[@value.JsonataValue] = []
+    let mut provided_index = 0
+    for item in captured {
+      match item {
+        Some(value) => args.push(value)
+        None => {
+          if provided_index < provided.length() {
+            args.push(provided[provided_index])
+          } else {
+            args.push(@value.JsonataValue::Undefined)
+          }
+          provided_index += 1
+        }
+      }
+    }
+    ctx2.with_depth(() => (f.invoke)(args, ctx2))
+  }
+  @value.JsonataValue::Func(
+    @value.JsonataFunc::new(
+      arity=placeholder_count,
+      signature=f.signature,
+      invoke~,
+    ),
+  )
 }
 
 ///|
@@ -402,7 +463,11 @@ fn eval_chain(
     let stage = eval(stages[i], ctx)
     match stage {
       @value.JsonataValue::Func(f) =>
-        result = ctx.with_depth(() => (f.invoke)([result], ctx))
+        match result {
+          @value.JsonataValue::Func(left_func) =>
+            result = compose_functions(left_func, f)
+          _ => result = ctx.with_depth(() => (f.invoke)([result], ctx))
+        }
       @value.JsonataValue::Undefined => result = @value.JsonataValue::Undefined
       _ =>
         raise @error.type_error(
@@ -413,6 +478,27 @@ fn eval_chain(
     }
   }
   result
+}
+
+///|
+fn compose_functions(
+  first : @value.JsonataFunc,
+  second : @value.JsonataFunc,
+) -> @value.JsonataValue {
+  let invoke = fn(
+    args : Array[@value.JsonataValue],
+    ctx : @value.EvalContext,
+  ) -> @value.JsonataValue raise @error.JsonataError {
+    let intermediate = ctx.with_depth(() => (first.invoke)(args, ctx))
+    ctx.with_depth(() => (second.invoke)([intermediate], ctx))
+  }
+  @value.JsonataValue::Func(
+    @value.JsonataFunc::new(
+      arity=first.arity,
+      signature=first.signature,
+      invoke~,
+    ),
+  )
 }
 
 ///|

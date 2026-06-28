@@ -25,6 +25,7 @@ pub(all) enum Ast {
   Number(Double)
   Boolean(Bool)
   Null
+  Placeholder
   Path(Array[Step])
   Binary(op~ : String, lhs~ : Ast, rhs~ : Ast)
   Unary(op~ : String, expr~ : Ast)

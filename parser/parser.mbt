@@ -91,6 +91,7 @@ fn debug_tok(t : @lexer.Token) -> String {
     @lexer.TokenKind::Number(_) => "number"
     @lexer.TokenKind::Boolean(_) => "boolean"
     @lexer.TokenKind::Null => "null"
+    @lexer.TokenKind::Question => "?"
     @lexer.TokenKind::Ident(s) => "ident(\{s})"
     @lexer.TokenKind::Var(s) => "var(\{s})"
     @lexer.TokenKind::DollarDollar => "$$"
@@ -128,7 +129,6 @@ fn debug_tok(t : @lexer.Token) -> String {
     @lexer.TokenKind::Colon => ":"
     @lexer.TokenKind::Semicolon => ";"
     @lexer.TokenKind::Comma => ","
-    @lexer.TokenKind::Question => "?"
     @lexer.TokenKind::At => "@"
     @lexer.TokenKind::Hash => "#"
   }

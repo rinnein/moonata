@@ -35,6 +35,10 @@ fn Parser::parse_primary(self : Parser) -> @ast.Ast raise @error.JsonataError {
       ignore(self.advance())
       @ast.Ast::Null
     }
+    @lexer.TokenKind::Question => {
+      ignore(self.advance())
+      @ast.Ast::Placeholder
+    }
     @lexer.TokenKind::Var(name) => {
       ignore(self.advance())
       @ast.Ast::Var(name)

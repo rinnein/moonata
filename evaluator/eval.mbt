@@ -12,6 +12,7 @@ pub fn eval(
     @ast.Ast::Number(n) => @value.JsonataValue::Json(Json::number(n))
     @ast.Ast::Boolean(b) => @value.JsonataValue::Json(Json::boolean(b))
     @ast.Ast::Null => @value.JsonataValue::Json(Json::null())
+    @ast.Ast::Placeholder => @value.JsonataValue::Undefined
     @ast.Ast::Var(name) => eval_var(name, ctx)
     @ast.Ast::Path(steps) => eval_path(steps, ctx.current(), ctx)
     @ast.Ast::Binary(op~, lhs~, rhs~) => eval_binary(op, lhs, rhs, ctx)

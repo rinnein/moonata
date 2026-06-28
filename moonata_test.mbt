@@ -578,4 +578,51 @@ test "官方套件：正则字面量基础支持" {
     Json::null(),
     Json::string("Bowler HAT"),
   )
+  assert_eval(
+    "$map([\"Felicia Saunders\", \"Jimmy Schultz\"], $match(?, /^(\\w*\\s\\w*)/)).match",
+    Json::null(),
+    data("[\"Felicia Saunders\",\"Jimmy Schultz\"]"),
+  )
+}
+
+///|
+test "官方套件：问号占位偏函数" {
+  assert_eval(
+    "($domain := $substringAfter(?, \"@\") ~> $substringBefore(?, \".\"); $domain(\"john@example.com\"))",
+    Json::null(),
+    Json::string("example"),
+  )
+  assert_eval(
+    "($add_suffix := $replace(?, /$/, \"!\"); $add_suffix(\"hello\"))",
+    Json::null(),
+    Json::string("hello!"),
+  )
+}
+
+///|
+test "官方套件：函数链部分应用参数顺序" {
+  assert_eval(
+    "\"john@example.com\" ~> $substringAfter(\"@\") ~> $substringBefore(\".\")",
+    Json::null(),
+    Json::string("example"),
+  )
+  assert_eval(
+    "Account.Order.OrderID ~> $join(\", \")",
+    data(
+      "{\"Account\":{\"Order\":[{\"OrderID\":\"order103\"},{\"OrderID\":\"order104\"}]}}",
+    ),
+    Json::string("order103, order104"),
+  )
+  assert_eval(
+    "Account.Order.OrderID ~> $join()",
+    data(
+      "{\"Account\":{\"Order\":[{\"OrderID\":\"order103\"},{\"OrderID\":\"order104\"}]}}",
+    ),
+    Json::string("order103order104"),
+  )
+  assert_eval(
+    "( $uppertrim := $trim ~> $uppercase; $uppertrim(\"   Hello    World   \") )",
+    Json::null(),
+    Json::string("HELLO WORLD"),
+  )
 }
