@@ -6,6 +6,8 @@ import {
 }
 
 // Values
+pub fn map_step(Ast) -> Step
+
 pub fn name_step(String, recursive? : Bool) -> Step
 
 pub fn wildcard_step(recursive? : Bool) -> Step
@@ -51,6 +53,7 @@ pub(all) enum StepKind {
   Index(Int)
   Slice(Int?, Int?)
   Filter(Ast)
+  Map(Ast)
 } derive(Eq, @debug.Debug)
 
 pub(all) enum StepStage {

@@ -11,7 +11,7 @@ pub fn eval(
     @ast.Ast::Boolean(b) => @value.JsonataValue::Json(Json::boolean(b))
     @ast.Ast::Null => @value.JsonataValue::Json(Json::null())
     @ast.Ast::Var(name) => eval_var(name, ctx)
-    @ast.Ast::Path(steps) => eval_path(steps, ctx.root(), ctx)
+    @ast.Ast::Path(steps) => eval_path(steps, ctx.current(), ctx)
     @ast.Ast::Binary(op~, lhs~, rhs~) => eval_binary(op, lhs, rhs, ctx)
     @ast.Ast::Unary(op~, expr~) => eval_unary(op, expr, ctx)
     @ast.Ast::Construct(items) => eval_construct(items, ctx)
@@ -102,6 +102,7 @@ fn eval_step_single(
     @ast.StepKind::Index(i) => access_index(input, i)
     @ast.StepKind::Slice(start, end) => access_slice(input, start, end)
     @ast.StepKind::Filter(expr) => access_filter(input, expr, ctx)
+    @ast.StepKind::Map(expr) => access_map(input, expr, ctx)
   }
 }
 
@@ -175,10 +176,7 @@ fn access_field(
       let results : Array[@value.JsonataValue] = []
       for v in arr {
         let r = access_field(@value.JsonataValue::Json(v), name)
-        match r {
-          @value.JsonataValue::Undefined => continue
-          _ => results.push(r)
-        }
+        push_path_result(results, r)
       }
       @value.JsonataValue::sequence(results)
     }
@@ -186,14 +184,30 @@ fn access_field(
       let results : Array[@value.JsonataValue] = []
       for item in arr {
         let r = access_field(item, name)
-        match r {
-          @value.JsonataValue::Undefined => continue
-          _ => results.push(r)
-        }
+        push_path_result(results, r)
       }
       @value.JsonataValue::sequence(results)
     }
     _ => @value.JsonataValue::Undefined
+  }
+}
+
+///|
+fn push_path_result(
+  results : Array[@value.JsonataValue],
+  value : @value.JsonataValue,
+) -> Unit {
+  match value {
+    @value.JsonataValue::Undefined => ()
+    @value.JsonataValue::Sequence(arr) =>
+      for item in arr {
+        results.push(item)
+      }
+    @value.JsonataValue::Json(Json::Array(arr)) =>
+      for item in arr {
+        results.push(@value.JsonataValue::Json(item))
+      }
+    _ => results.push(value)
   }
 }
 
@@ -324,6 +338,34 @@ fn access_filter(
             }
           _ => results.push(r)
         }
+    }
+  }
+  @value.JsonataValue::sequence(results)
+}
+
+///|
+/// 路径映射 `.(expr)`。
+///
+/// 对输入序列中的每个元素，将其绑定为当前项并求值表达式，最后按 JSONata
+/// 序列规则展平结果。
+fn access_map(
+  input : @value.JsonataValue,
+  expr : @ast.Ast,
+  ctx : @value.EvalContext,
+) -> @value.JsonataValue raise @error.JsonataError {
+  let items = input.to_array()
+  let results : Array[@value.JsonataValue] = []
+  for item in items {
+    let r = ctx.with_context(current=item, parent=input, fn() -> @value.JsonataValue raise @error.JsonataError {
+      ctx.with_depth(() => eval(expr, ctx))
+    })
+    match r {
+      @value.JsonataValue::Undefined => continue
+      @value.JsonataValue::Sequence(arr) =>
+        for v in arr {
+          results.push(v)
+        }
+      _ => results.push(r)
     }
   }
   @value.JsonataValue::sequence(results)

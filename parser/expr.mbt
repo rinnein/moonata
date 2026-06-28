@@ -221,6 +221,19 @@ fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
             }
             expr = append_step(expr, @ast.name_step(name))
           }
+          @lexer.TokenKind::String(_) => {
+            let name = match self.advance().kind {
+              @lexer.TokenKind::String(n) => n
+              _ => abort("unreachable")
+            }
+            expr = append_step(expr, @ast.name_step(name))
+          }
+          @lexer.TokenKind::LParen => {
+            ignore(self.advance())
+            let mapped = self.parse_block()
+            self.expect(@lexer.TokenKind::RParen, what="')'")
+            expr = append_step(expr, @ast.map_step(mapped))
+          }
           @lexer.TokenKind::Star => {
             ignore(self.advance())
             expr = append_step(expr, @ast.wildcard_step())

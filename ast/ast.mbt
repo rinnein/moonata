@@ -37,6 +37,7 @@ pub(all) enum StepKind {
   Index(Int)
   Slice(Int?, Int?)
   Filter(Ast)
+  Map(Ast)
 } derive(Debug, Eq)
 
 ///|
@@ -87,4 +88,10 @@ pub fn wildcard_step(recursive? : Bool = false) -> Step {
     kind=StepKind::Wildcard,
     stage=if recursive { StepStage::Recursive } else { StepStage::Single },
   )
+}
+
+///|
+/// 便捷构造路径映射步 `.(expr)`。
+pub fn map_step(expr : Ast) -> Step {
+  Step::new(kind=StepKind::Map(expr), stage=StepStage::Single)
 }
