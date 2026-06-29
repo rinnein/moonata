@@ -274,6 +274,13 @@ test "官方套件：$round 使用 half-even 与 precision" {
 }
 
 ///|
+test "官方套件：$ceil" {
+  assert_eval("$ceil(3.7)", Json::null(), Json::number(4.0))
+  assert_eval("$ceil(-3.7)", Json::null(), Json::number(-3.0))
+  assert_eval("$ceil(0)", Json::null(), Json::number(0.0))
+}
+
+///|
 test "官方套件：$formatNumber 基础格式" {
   assert_eval(
     "$formatNumber(12345.6, \"#,###.00\")",

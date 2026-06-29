@@ -106,6 +106,9 @@ test "函数：$abs $floor $ceiling $round" {
   assert_true(eval_fn("$abs(-5)", Json::null()) == Json::number(5.0))
   assert_true(eval_fn("$floor(3.7)", Json::null()) == Json::number(3.0))
   assert_true(eval_fn("$ceiling(3.2)", Json::null()) == Json::number(4.0))
+  assert_true(eval_fn("$ceil(3.7)", Json::null()) == Json::number(4.0))
+  assert_true(eval_fn("$ceil(-3.7)", Json::null()) == Json::number(-3.0))
+  assert_true(eval_fn("$ceil(0)", Json::null()) == Json::number(0.0))
   assert_true(eval_fn("$round(3.5)", Json::null()) == Json::number(4.0))
 }
 

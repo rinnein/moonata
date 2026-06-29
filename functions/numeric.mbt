@@ -89,6 +89,13 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
       _ => @value.JsonataValue::Undefined
     }
   })
+  register(ctx, "ceil", arity=1, invoke=fn(args, _ctx) {
+    match args[0] {
+      @value.JsonataValue::Json(Json::Number(n, ..)) =>
+        @value.JsonataValue::Json(Json::number(n.ceil()))
+      _ => @value.JsonataValue::Undefined
+    }
+  })
   register(ctx, "round", arity=1, invoke=fn(args, _ctx) {
     match args[0] {
       @value.JsonataValue::Json(Json::Number(n, ..)) =>
