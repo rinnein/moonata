@@ -73,10 +73,20 @@ fn contains_regex(args : Array[@value.JsonataValue]) -> @value.JsonataValue {
 ///|
 fn split_regex(args : Array[@value.JsonataValue]) -> @value.JsonataValue {
   let s = value_to_str(args[0])
+  let limit = if args.length() > 2 { value_to_int(args[2]) } else { -1 }
+  if limit == 0 {
+    return @value.JsonataValue::Json(Json::array([]))
+  }
+  match args[1] {
+    @value.JsonataValue::Json(Json::String(sep)) =>
+      if sep == "" {
+        return split_into_characters(s, limit)
+      }
+    _ => ()
+  }
   let re = compile_regex_value(args[1]) catch {
     _ => return @value.JsonataValue::Undefined
   }
-  let limit = if args.length() > 2 { value_to_int(args[2]) } else { -1 }
   let parts : Array[Json] = []
   let mut remaining = s
   let mut any_match = false
@@ -111,6 +121,25 @@ fn split_regex(args : Array[@value.JsonataValue]) -> @value.JsonataValue {
     parts.push(Json::string(s))
   }
   @value.JsonataValue::Json(Json::array(parts))
+}
+
+///|
+fn split_into_characters(s : String, limit : Int) -> @value.JsonataValue {
+  let parts : Array[Json] = []
+  for i, c in s.to_array() {
+    if limit >= 0 && i >= limit {
+      break
+    }
+    parts.push(Json::string(char_to_string(c)))
+  }
+  @value.JsonataValue::Json(Json::array(parts))
+}
+
+///|
+fn char_to_string(c : Char) -> String {
+  let out = StringBuilder::new()
+  out.write_char(c)
+  out.to_string()
 }
 
 ///|

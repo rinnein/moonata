@@ -487,6 +487,21 @@ test "官方套件：$uppercase $lowercase" {
 }
 
 ///|
+test "官方套件：$split 空分隔符与限制" {
+  assert_eval(
+    "$split(\"Hello\", \"\")",
+    Json::null(),
+    data("[\"H\",\"e\",\"l\",\"l\",\"o\"]"),
+  )
+  assert_eval(
+    "$sum($split(\"12345\", \"\").$number($))",
+    Json::null(),
+    Json::number(15.0),
+  )
+  assert_eval("$split(\"a, b, c, d\", \", \", 0)", Json::null(), data("[]"))
+}
+
+///|
 test "官方套件：零参函数调用使用当前上下文" {
   assert_eval("$number()", Json::number(5.0), Json::number(5.0))
 }

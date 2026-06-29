@@ -115,10 +115,10 @@ _build/native/debug/build/cmd/main/main.exe '<expr>' --file '<tmp-json-data>'
 - 失败最多的前 10 个 group。
 - skip 原因计数。
 
-当前固定快照（2026-06-29，P11 函数调用默认上下文实参修复阶段）：
+当前固定快照（2026-06-29，P11 `$split` 空分隔符与 limit 修复阶段）：
 
 ```text
-eligible 1251 pass 992 fail 259 skip 431
+eligible 1251 pass 995 fail 256 skip 431
 top_failures
 function-tomillis 34
 joins 28

@@ -99,6 +99,14 @@ test "函数：$split" {
       #|Array([String("a"), String("b"), String("c")])
     ),
   )
+  assert_true(
+    eval_fn("$split(\"Hello\", \"\")", Json::null()) ==
+    @json.parse("[\"H\",\"e\",\"l\",\"l\",\"o\"]"),
+  )
+  assert_true(
+    eval_fn("$split(\"a, b, c, d\", \", \", 0)", Json::null()) ==
+    @json.parse("[]"),
+  )
 }
 
 ///|
