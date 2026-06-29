@@ -20,14 +20,14 @@
 | P8 | CLI 与集成 | moonata / cmd/main | 2 | 4 | ✅ 完成（CLI native 参数模式可用） |
 | P9 | 语义修复与函数补全 | evaluator / functions / value | 5 | 12 | ✅ 完成 |
 | P10 | 验收收尾与兼容性补齐 | value / evaluator / functions / docs | 4 | 7 | ✅ 完成 |
-| P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | 🚧 推进中（940/1251 可比对用例通过） |
+| P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | 🚧 推进中（955/1251 可比对用例通过） |
 | 合计 | | | **26** | **66** | |
 
-> 当前固定快照（2026-06-28，P11 `$string` 序列化修复阶段）：`moon test` 为 158/158 通过；`moon check`、`moon info` 通过；`moon fmt` 已执行。JSONata 官方可比对审计为 `eligible 1251 / pass 940 / fail 311 / skip 431`。
+> 当前固定快照（2026-06-29，P11 条件表达式修复阶段）：`moon test` 为 161/161 通过；`moon check`、`moon info` 通过；`moon fmt` 已执行。JSONata 官方可比对审计为 `eligible 1251 / pass 955 / fail 296 / skip 431`。
 
 ### 1.1 当前暂停边界
 
-P11 已完成日期时间 picture 修复、Lambda 签名语法与范围表达式修复、整数 picture 修复、`$string` 序列化修复（`function-string` 可比对用例 26/26），后续继续优先处理官方失败数最高的 group：
+P11 已完成日期时间 picture 修复、Lambda 签名语法与范围表达式修复、整数 picture 修复、`$string` 序列化修复（`function-string` 可比对用例 26/26）、条件表达式与无空格二元减法修复（`conditionals` 可比对用例 7/7，`lambdas` 可比对用例 10/12），后续继续优先处理官方失败数最高的 group：
 
 | 排名 | 官方 group | 失败数 |
 | --- | --- | --- |
@@ -40,7 +40,7 @@ P11 已完成日期时间 picture 修复、Lambda 签名语法与范围表达式
 | 7 | `object-constructor` | 14 |
 | 8 | `flattening` | 13 |
 | 9 | `transforms` | 11 |
-| 10 | `lambdas` | 9 |
+| 10 | `inclusion-operator` | 8 |
 
 跳过项仅表示当前 CLI 审计 harness 无法直接比较，不表示通过或失败：`no_result 395`、`expr-file 23`、`timelimit 7`、`bindings 6`。
 

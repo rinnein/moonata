@@ -90,6 +90,22 @@ test "求值：逻辑运算" {
 }
 
 ///|
+test "求值：条件表达式" {
+  assert_true(
+    eval_to_json("1 < 2 ? \"yes\" : \"no\"", Json::null()) ==
+    Json::string("yes"),
+  )
+  assert_true(
+    eval_to_json("1 > 2 ? \"yes\" : \"no\"", Json::null()) == Json::string("no"),
+  )
+  assert_true(eval_to_json("false ? \"hidden\"", Json::null()) == Json::null())
+  assert_true(
+    eval_to_json("(function($x){$x <= 1 ? 1 : $x * 2})(4)", Json::null()) ==
+    Json::number(8.0),
+  )
+}
+
+///|
 test "求值：字符串拼接" {
   assert_true(
     eval_to_json("\"Hello\" & \" World\"", Json::null()) ==

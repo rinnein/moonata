@@ -63,7 +63,25 @@ fn Parser::parse_bind(self : Parser) -> @ast.Ast raise @error.JsonataError {
     // 回退：不是绑定
     self.pos = saved
   }
-  self.parse_fallback()
+  self.parse_conditional()
+}
+
+///|
+/// 条件表达式：`cond ? then` 或 `cond ? then : else`。
+fn Parser::parse_conditional(
+  self : Parser,
+) -> @ast.Ast raise @error.JsonataError {
+  let condition = self.parse_fallback()
+  if !self.match_kind(@lexer.TokenKind::Question) {
+    return condition
+  }
+  let consequent = self.parse_chain()
+  let alternate : @ast.Ast? = if self.match_kind(@lexer.TokenKind::Colon) {
+    Some(self.parse_chain())
+  } else {
+    None
+  }
+  @ast.Ast::Conditional(condition~, consequent~, alternate~)
 }
 
 ///|

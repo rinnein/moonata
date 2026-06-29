@@ -45,6 +45,12 @@ test "词法：字面量" {
     ),
   )
   debug_inspect(
+    tok_kind("$x-1"),
+    content=(
+      #|[Var("x"), Minus, Number(1)]
+    ),
+  )
+  debug_inspect(
     tok_kind("true"),
     content=(
       #|[Boolean(true)]

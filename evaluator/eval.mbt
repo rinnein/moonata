@@ -17,6 +17,8 @@ pub fn eval(
     @ast.Ast::Path(steps) => eval_path(steps, ctx.current(), ctx)
     @ast.Ast::Binary(op~, lhs~, rhs~) => eval_binary(op, lhs, rhs, ctx)
     @ast.Ast::Unary(op~, expr~) => eval_unary(op, expr, ctx)
+    @ast.Ast::Conditional(condition~, consequent~, alternate~) =>
+      eval_conditional(condition, consequent, alternate, ctx)
     @ast.Ast::Construct(items) => eval_construct(items, ctx)
     @ast.Ast::Bind(name~, value~, body~) => eval_bind(name, value, body, ctx)
     @ast.Ast::Block(exprs) => eval_block(exprs, ctx)
@@ -26,6 +28,24 @@ pub fn eval(
     @ast.Ast::Chain(stages) => eval_chain(stages, ctx)
     @ast.Ast::Group(pairs) => eval_group(pairs, ctx)
     @ast.Ast::Sort(expr~, terms~) => eval_sort(expr, terms, ctx)
+  }
+}
+
+///|
+fn eval_conditional(
+  condition_ast : @ast.Ast,
+  consequent : @ast.Ast,
+  alternate : @ast.Ast?,
+  ctx : @value.EvalContext,
+) -> @value.JsonataValue raise @error.JsonataError {
+  let condition = eval(condition_ast, ctx)
+  if to_bool(condition) {
+    eval(consequent, ctx)
+  } else {
+    match alternate {
+      Some(expr) => eval(expr, ctx)
+      None => @value.JsonataValue::Undefined
+    }
   }
 }
 

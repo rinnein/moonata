@@ -13,6 +13,7 @@ pub(all) enum Ast {
   Path(Array[Step])
   Binary(op~ : String, lhs~ : Ast, rhs~ : Ast)
   Unary(op~ : String, expr~ : Ast)
+  Conditional(condition~ : Ast, consequent~ : Ast, alternate~ : Ast?)
   Construct(Array[Ast])
   Group(Array[(Ast, Ast)])
   Sort(expr~ : Ast, terms~ : Array[SortTerm])

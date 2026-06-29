@@ -208,6 +208,20 @@ test "官方套件：fallback 运算 ?? 与 ?:" {
 }
 
 ///|
+test "官方套件：条件表达式" {
+  assert_eval("true ? \"yes\" : \"no\"", Json::null(), Json::string("yes"))
+  assert_eval("false ? \"yes\" : \"no\"", Json::null(), Json::string("no"))
+  let d = data(
+    "{\"Account\":{\"Order\":[{\"Product\":[{\"Price\":34.45},{\"Price\":21.67}]},{\"Product\":[{\"Price\":34.45},{\"Price\":107.99}]}]}}",
+  )
+  assert_eval(
+    "Account.Order.Product.(Price < 30 ? \"Cheap\")",
+    d,
+    Json::string("Cheap"),
+  )
+}
+
+///|
 test "官方套件：字符串拼接 &" {
   assert_eval(
     "\"Hello\" & \" \" & \"World\"",

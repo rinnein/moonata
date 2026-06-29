@@ -403,6 +403,26 @@ test "解析：变量" {
 }
 
 ///|
+test "解析：条件表达式" {
+  debug_inspect(
+    parse_str("$x > 0 ? \"yes\" : \"no\""),
+    content=(
+      #|Conditional(
+      #|  condition=Binary(op=">", lhs=Var("x"), rhs=Number(0)),
+      #|  consequent=String("yes"),
+      #|  alternate=Some(String("no")),
+      #|)
+    ),
+  )
+  debug_inspect(
+    parse_str("$x ? $x"),
+    content=(
+      #|Conditional(condition=Var("x"), consequent=Var("x"), alternate=None)
+    ),
+  )
+}
+
+///|
 test "解析：函数调用" {
   debug_inspect(
     parse_str("$sum([1, 2, 3])"),

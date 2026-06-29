@@ -196,7 +196,7 @@ fn Lexer::next_token(
     return self.lex_string(start)
   }
   // 数字
-  if is_digit(c) || (c == '-' && is_digit(self.peek_at(1))) {
+  if is_digit(c) || (expect_operand && c == '-' && is_digit(self.peek_at(1))) {
     return self.lex_number(start)
   }
   // 标识符（字母/下划线开头）
