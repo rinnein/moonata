@@ -481,6 +481,17 @@ test "官方套件：$join" {
 }
 
 ///|
+test "官方套件：$shuffle" {
+  assert_eval("$count($shuffle([1..10]))", Json::null(), Json::number(10.0))
+  assert_eval(
+    "$sort($shuffle([1..10]))",
+    Json::null(),
+    data("[1,2,3,4,5,6,7,8,9,10]"),
+  )
+  assert_eval("$shuffle([1])", Json::null(), data("[1]"))
+}
+
+///|
 test "官方套件：$uppercase $lowercase" {
   assert_eval("$uppercase(\"hello\")", Json::null(), Json::string("HELLO"))
   assert_eval("$lowercase(\"WORLD\")", Json::null(), Json::string("world"))

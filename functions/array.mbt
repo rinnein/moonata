@@ -116,6 +116,16 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
     let reversed = items.rev()
     @value.JsonataValue::sequence(reversed)
   })
+  // $shuffle
+  register(ctx, "shuffle", arity=1, invoke=fn(args, _ctx) {
+    let items = args[0].to_array()
+    let shuffled = shuffle_items(items)
+    let arr : Array[Json] = []
+    for item in shuffled {
+      arr.push(item.to_json())
+    }
+    @value.JsonataValue::Json(Json::array(arr))
+  })
   // $join
   register(ctx, "join", arity=1, invoke=fn(args, _ctx) {
     let items = args[0].to_array()
@@ -227,4 +237,32 @@ fn value_to_bool(v : @value.JsonataValue) -> Bool {
     @value.JsonataValue::Func(_) => false
     @value.JsonataValue::Regex(_) => false
   }
+}
+
+///|
+fn shuffle_items(
+  items : Array[@value.JsonataValue],
+) -> Array[@value.JsonataValue] {
+  let out : Array[@value.JsonataValue] = []
+  for item in items {
+    out.push(item)
+  }
+  let mut i = out.length()
+  while i > 1 {
+    i -= 1
+    let j = random_index(i + 1)
+    let tmp = out[i]
+    out[i] = out[j]
+    out[j] = tmp
+  }
+  out
+}
+
+///|
+fn random_index(limit : Int) -> Int {
+  let now = @env.now()
+  let seed = (now % 1_000_000).to_double()
+  let mixed = @math.sin(seed * 12.9898) * 43758.5453
+  let fraction = mixed - mixed.floor()
+  (fraction * limit.to_double()).floor().to_int().min(limit - 1).max(0)
 }

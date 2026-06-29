@@ -256,6 +256,14 @@ test "函数：$join" {
 }
 
 ///|
+test "函数：$shuffle" {
+  assert_true(
+    eval_fn("$count($shuffle([1..10]))", Json::null()) == Json::number(10.0),
+  )
+  assert_true(eval_fn("$shuffle([1])", Json::null()) == @json.parse("[1]"))
+}
+
+///|
 test "函数：$append" {
   let data = @json.parse("[1,2]")
   let result = eval_fn("$append($, [3,4])", data)
