@@ -35,6 +35,12 @@ test "函数：$sum" {
 }
 
 ///|
+test "函数：$average" {
+  assert_true(eval_fn("$average([1,2,3])", Json::null()) == Json::number(2.0))
+  assert_true(eval_fn("$average(1)", Json::null()) == Json::number(1.0))
+}
+
+///|
 test "函数：$max $min" {
   let data = @json.parse("[3,1,4,1,5,9,2,6]")
   assert_true(eval_fn("$max($)", data) == Json::number(9.0))

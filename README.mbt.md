@@ -79,11 +79,11 @@ docs: update official test status
 
 ## 兼容性状态
 
-固定快照：2026-06-29，P11 比较运算修复阶段。
+固定快照：2026-06-29，P11 `$average` 与数字拼接修复阶段。
 
 ```text
-moon test: 161/161
-official comparable audit: eligible 1251, pass 958, fail 293, skip 431
+moon test: 163/163
+official comparable audit: eligible 1251, pass 966, fail 285, skip 431
 ```
 
 当前剩余失败最多的官方测试分组：

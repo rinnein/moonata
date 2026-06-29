@@ -123,6 +123,10 @@ test "求值：字符串拼接" {
     eval_to_json("\"Hello\" & \" World\"", Json::null()) ==
     Json::string("Hello World"),
   )
+  assert_true(
+    eval_to_json("\"avg: \" & (90.57000000000001 / 2)", Json::null()) ==
+    Json::string("avg: 45.285"),
+  )
 }
 
 ///|

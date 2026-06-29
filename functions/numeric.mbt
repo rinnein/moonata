@@ -27,6 +27,18 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
       _ => @value.JsonataValue::Undefined
     }
   })
+  // $average
+  register(ctx, "average", arity=1, invoke=fn(args, _ctx) {
+    let nums = value_to_num_array(args[0])
+    if nums.length() == 0 {
+      return @value.JsonataValue::Undefined
+    }
+    let mut total = 0.0
+    for n in nums {
+      total = total + n
+    }
+    @value.JsonataValue::Json(Json::number(total / nums.length().to_double()))
+  })
   // $max / $min
   register(ctx, "max", arity=1, invoke=fn(args, _ctx) {
     let nums = value_to_num_array(args[0])
@@ -191,6 +203,7 @@ fn value_to_double(v : @value.JsonataValue) -> Double {
 fn value_to_num_array(v : @value.JsonataValue) -> Array[Double] {
   let result : Array[Double] = []
   match v {
+    @value.JsonataValue::Json(Json::Number(n, ..)) => result.push(n)
     @value.JsonataValue::Json(Json::Array(arr)) =>
       for item in arr {
         match item {

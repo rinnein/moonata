@@ -28,13 +28,101 @@ fn to_number(v : @value.JsonataValue) -> Double raise @error.JsonataError {
 fn to_str(v : @value.JsonataValue) -> String {
   match v {
     @value.JsonataValue::Json(Json::String(s)) => s
-    @value.JsonataValue::Json(Json::Number(n, ..)) => n.to_string()
+    @value.JsonataValue::Json(Json::Number(n, ..)) => number_to_str(n)
     @value.JsonataValue::Json(Json::True) => "true"
     @value.JsonataValue::Json(Json::False) => "false"
     @value.JsonataValue::Json(Json::Null) => "null"
     @value.JsonataValue::Undefined => ""
     _ => v.to_json().stringify()
   }
+}
+
+///|
+fn number_to_str(n : Double) -> String {
+  if n == 0.0 {
+    return "0"
+  }
+  let negative = n < 0.0
+  let abs_n = if negative { -n } else { n }
+  if abs_n >= 1.0e21 || abs_n < 1.0e-6 {
+    return n.to_string()
+  }
+  if abs_n >= 9_007_199_254_740_991.0 {
+    return n.to_string()
+  }
+  let digits_before = number_integer_digit_count(abs_n)
+  let places = (15 - digits_before).max(0)
+  let rounded_abs = round_decimal_places(abs_n, places)
+  let body = fixed_number_string(rounded_abs, places)
+  if negative {
+    "-" + body
+  } else {
+    body
+  }
+}
+
+///|
+fn number_integer_digit_count(n : Double) -> Int {
+  let mut digits = 1
+  let mut value = n
+  while value >= 10.0 {
+    value = value / 10.0
+    digits = digits + 1
+  }
+  digits
+}
+
+///|
+fn round_decimal_places(n : Double, places : Int) -> Double {
+  if places <= 0 {
+    n.round()
+  } else {
+    let scale = @math.pow(10.0, places.to_double())
+    (n * scale).round() / scale
+  }
+}
+
+///|
+fn fixed_number_string(n : Double, places : Int) -> String {
+  if places <= 0 {
+    return n.round().to_int64().to_string()
+  }
+  let int_part = n.floor()
+  let scale = @math.pow(10.0, places.to_double())
+  let mut frac_number = ((n - int_part) * scale).round().to_int64()
+  let mut int_text = int_part.to_int64().to_string()
+  let scale_int = scale.round().to_int64()
+  if frac_number >= scale_int {
+    int_text = (int_part + 1.0).to_int64().to_string()
+    frac_number = 0
+  }
+  let frac = trim_number_zeroes(
+    pad_number_left(frac_number.to_string(), places),
+  )
+  if frac.length() == 0 {
+    int_text
+  } else {
+    int_text + "." + frac
+  }
+}
+
+///|
+fn pad_number_left(s : String, width : Int) -> String {
+  let out = StringBuilder::new()
+  for _ in 0..<(width - s.length()).max(0) {
+    out.write_char('0')
+  }
+  out.write_string(s)
+  out.to_string()
+}
+
+///|
+fn trim_number_zeroes(s : String) -> String {
+  let mut end = s.length()
+  while end > 0 && s[end - 1] == '0' {
+    end = end - 1
+  }
+  s[:end].to_owned()
 }
 
 ///|

@@ -241,6 +241,20 @@ test "官方套件：$sum" {
 }
 
 ///|
+test "官方套件：$average" {
+  assert_eval("$average([1,2,3])", Json::null(), Json::number(2.0))
+  assert_eval("$average(1)", Json::null(), Json::number(1.0))
+  let d = data(
+    "{\"Account\":{\"Order\":[{\"Product\":[{\"Price\":34.45,\"Quantity\":2},{\"Price\":21.67,\"Quantity\":1}]},{\"Product\":[{\"Price\":34.45,\"Quantity\":4},{\"Price\":107.99,\"Quantity\":1}]}]}}",
+  )
+  assert_eval(
+    "$average(Account.Order.Product.(Price * Quantity))",
+    d,
+    Json::number(84.09),
+  )
+}
+
+///|
 test "官方套件：$round 使用 half-even 与 precision" {
   assert_eval("$round(2.5)", Json::null(), Json::number(2.0))
   assert_eval("$round(3.5)", Json::null(), Json::number(4.0))
