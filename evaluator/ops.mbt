@@ -38,6 +38,7 @@ fn eval_binary(
     match op {
       "=" => return compare_eq(lhs, rhs)
       "!=" => return compare_neq(lhs, rhs)
+      "in" => return in_op(lhs, rhs)
       "&&" =>
         // 短路：若 lhs 为 false 则结果 false
         match lhs {
@@ -69,12 +70,48 @@ fn eval_binary(
     "<=" => compare_lte(lhs, rhs)
     ">" => compare_gt(lhs, rhs)
     ">=" => compare_gte(lhs, rhs)
+    "in" => in_op(lhs, rhs)
     "&&" => logic_and(lhs, rhs)
     "||" => logic_or(lhs, rhs)
     "??" => if lhs is @value.JsonataValue::Undefined { rhs } else { lhs }
     "?:" => if to_bool(lhs) { lhs } else { rhs }
     _ => raise @error.runtime_error("未知运算符: \{op}")
   }
+}
+
+///|
+fn in_op(
+  lhs : @value.JsonataValue,
+  rhs : @value.JsonataValue,
+) -> @value.JsonataValue {
+  if lhs is @value.JsonataValue::Undefined ||
+    rhs is @value.JsonataValue::Undefined {
+    return @value.JsonataValue::Json(Json::boolean(false))
+  }
+  let found = match rhs {
+    @value.JsonataValue::Json(Json::Array(arr)) => {
+      let mut matched = false
+      for item in arr {
+        if json_equal(lhs.to_json(), item) {
+          matched = true
+          break
+        }
+      }
+      matched
+    }
+    @value.JsonataValue::Sequence(arr) => {
+      let mut matched = false
+      for item in arr {
+        if json_equal(lhs.to_json(), item.to_json()) {
+          matched = true
+          break
+        }
+      }
+      matched
+    }
+    _ => json_equal(lhs.to_json(), rhs.to_json())
+  }
+  @value.JsonataValue::Json(Json::boolean(found))
 }
 
 ///|

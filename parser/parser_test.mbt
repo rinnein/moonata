@@ -611,6 +611,30 @@ test "解析：一元运算" {
 }
 
 ///|
+test "解析：in 运算符" {
+  debug_inspect(
+    parse_str("\"hello\" in names"),
+    content=(
+      #|Binary(
+      #|  op="in",
+      #|  lhs=String("hello"),
+      #|  rhs=Path([{ kind: Name("names"), stage: Single }]),
+      #|)
+    ),
+  )
+  debug_inspect(
+    parse_str("in in names"),
+    content=(
+      #|Binary(
+      #|  op="in",
+      #|  lhs=Path([{ kind: Name("in"), stage: Single }]),
+      #|  rhs=Path([{ kind: Name("names"), stage: Single }]),
+      #|)
+    ),
+  )
+}
+
+///|
 test "解析：语法错误" {
   let result = try {
     ignore(parse_str("1 +"))

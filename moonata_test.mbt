@@ -185,6 +185,13 @@ test "官方套件：比较运算" {
   assert_eval("\"hello\" < \"world\"", Json::null(), Json::boolean(true))
   assert_eval("null = nothing", data("{}"), Json::boolean(false))
   assert_eval("nothing = nothing", data("{}"), Json::boolean(false))
+  assert_eval("1 in [1,2]", Json::null(), Json::boolean(true))
+  assert_eval("3 in [1,2]", Json::null(), Json::boolean(false))
+  assert_eval(
+    "\"world\" in [\"hello\", \"world\"]",
+    Json::null(),
+    Json::boolean(true),
+  )
 }
 
 ///|

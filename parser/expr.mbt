@@ -175,7 +175,7 @@ fn Parser::is_and_operator(self : Parser) -> Bool {
 }
 
 ///|
-/// 比较 `= != < <= > >=`
+/// 比较 `= != < <= > >= in`
 fn Parser::parse_comparison(
   self : Parser,
 ) -> @ast.Ast raise @error.JsonataError {
@@ -187,6 +187,7 @@ fn Parser::parse_comparison(
     @lexer.TokenKind::Lte => "<="
     @lexer.TokenKind::Gt => ">"
     @lexer.TokenKind::Gte => ">="
+    @lexer.TokenKind::Ident("in") => "in"
     _ => return left
   }
   ignore(self.advance())
