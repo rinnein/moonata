@@ -79,11 +79,11 @@ docs: update official test status
 
 ## 兼容性状态
 
-固定快照：2026-06-29，P11 `$shuffle` 数组函数修复阶段。
+固定快照：2026-06-29，P11 `$single` predicate 修复阶段。
 
 ```text
-本地测试：moon test 173/173
-官方可比对审计：eligible 1251, pass 998, fail 253, skip 431
+本地测试：moon test 174/174
+官方可比对审计：eligible 1251, pass 1001, fail 250, skip 431
 ```
 
 当前剩余失败最多的官方测试分组：

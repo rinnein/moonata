@@ -348,6 +348,20 @@ test "P9.3：$formatBase 进制转换" {
 test "P9.3：$single 唯一元素" {
   let data = @json.parse("[42]")
   assert_true(eval_fn("$single($)", data) == Json::number(42.0))
+  assert_true(
+    eval_fn(
+      "$single([true, false, true], function($v) {$v=false})",
+      Json::null(),
+    ) ==
+    Json::boolean(false),
+  )
+  assert_true(
+    eval_fn(
+      "$single([\"zero\", \"one\", \"two\"], function($v, $i, $a) {$i=1})",
+      Json::null(),
+    ) ==
+    Json::string("one"),
+  )
 }
 
 ///|

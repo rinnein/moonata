@@ -156,9 +156,18 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
     _ctx : @value.EvalContext,
   ) -> @value.JsonataValue raise @error.JsonataError {
     let items = args[0].to_array()
-    match items.length() {
+    let candidates = if args.length() > 1 {
+      let f = match args[1] {
+        @value.JsonataValue::Func(f) => f
+        _ => return @value.JsonataValue::Undefined
+      }
+      filter_single_candidates(items, f, ctx)
+    } else {
+      items
+    }
+    match candidates.length() {
       0 => @value.JsonataValue::Undefined
-      1 => items[0]
+      1 => candidates[0]
       _ => raise @error.runtime_error("$single: 序列包含多个元素")
     }
   })
@@ -256,6 +265,35 @@ fn shuffle_items(
     out[j] = tmp
   }
   out
+}
+
+///|
+fn filter_single_candidates(
+  items : Array[@value.JsonataValue],
+  f : @value.JsonataFunc,
+  ctx : @value.EvalContext,
+) -> Array[@value.JsonataValue] raise @error.JsonataError {
+  let source = json_array_value(items)
+  let results : Array[@value.JsonataValue] = []
+  for i, item in items {
+    let r = (f.invoke)(
+      [item, @value.JsonataValue::Json(Json::number(i.to_double())), source],
+      ctx,
+    )
+    if value_to_bool(r) {
+      results.push(item)
+    }
+  }
+  results
+}
+
+///|
+fn json_array_value(items : Array[@value.JsonataValue]) -> @value.JsonataValue {
+  let arr : Array[Json] = []
+  for item in items {
+    arr.push(item.to_json())
+  }
+  @value.JsonataValue::Json(Json::array(arr))
 }
 
 ///|

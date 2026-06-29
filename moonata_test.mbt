@@ -492,6 +492,20 @@ test "官方套件：$shuffle" {
 }
 
 ///|
+test "官方套件：$single predicate" {
+  assert_eval(
+    "$single([true, false, true], function($v) {$v=false})",
+    Json::null(),
+    Json::boolean(false),
+  )
+  assert_eval(
+    "$single([\"zero\", \"one\", \"two\"], function($v, $i, $a) {$i=1})",
+    Json::null(),
+    Json::string("one"),
+  )
+}
+
+///|
 test "官方套件：$uppercase $lowercase" {
   assert_eval("$uppercase(\"hello\")", Json::null(), Json::string("HELLO"))
   assert_eval("$lowercase(\"WORLD\")", Json::null(), Json::string("world"))
