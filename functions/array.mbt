@@ -178,15 +178,26 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
     ]
     @value.JsonataValue::Json(Json::array(arr))
   })
-  // $zip — 将两个序列按位置配对
-  register(ctx, "zip", arity=2, invoke=fn(args, _ctx) {
-    let a = args[0].to_array()
-    let b = args[1].to_array()
-    let len = a.length().min(b.length())
+  // $zip — 将一个或多个序列按位置配对
+  register(ctx, "zip", arity=1, invoke=fn(args, _ctx) {
+    let columns : Array[Array[@value.JsonataValue]] = []
+    let mut len = 0
+    for i in 0..<args.length() {
+      let items = args[i].to_array()
+      if i == 0 {
+        len = items.length()
+      } else {
+        len = len.min(items.length())
+      }
+      columns.push(items)
+    }
     let arr : Array[Json] = []
-    for i in 0..<len {
-      let pair : Array[Json] = [a[i].to_json(), b[i].to_json()]
-      arr.push(Json::array(pair))
+    for row in 0..<len {
+      let tuple : Array[Json] = []
+      for col in columns {
+        tuple.push(col[row].to_json())
+      }
+      arr.push(Json::array(tuple))
     }
     @value.JsonataValue::Json(Json::array(arr))
   })

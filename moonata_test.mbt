@@ -501,6 +501,23 @@ test "官方套件：$distinct" {
   )
 }
 
+///|
+test "官方套件：$zip" {
+  let result = evaluate("$zip([1,2,3],[4,5,6],[7,8,9])", Json::null())
+  debug_inspect(
+    result,
+    content=(
+      #|Array(
+      #|  [
+      #|    Array([Number(1), Number(4), Number(7)]),
+      #|    Array([Number(2), Number(5), Number(8)]),
+      #|    Array([Number(3), Number(6), Number(9)]),
+      #|  ],
+      #|)
+    ),
+  )
+}
+
 // ============ 高级特性 ============
 
 ///|

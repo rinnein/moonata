@@ -349,6 +349,30 @@ test "P9.3：$zip 配对" {
       #|)
     ),
   )
+  debug_inspect(
+    eval_fn("$zip([1,2,3],[4,5,6],[7,8,9])", Json::null()),
+    content=(
+      #|Array(
+      #|  [
+      #|    Array([Number(1), Number(4), Number(7)]),
+      #|    Array([Number(2), Number(5), Number(8)]),
+      #|    Array([Number(3), Number(6), Number(9)]),
+      #|  ],
+      #|)
+    ),
+  )
+  debug_inspect(
+    eval_fn("$zip([1,2,3])", Json::null()),
+    content=(
+      #|Array([Array([Number(1)]), Array([Number(2)]), Array([Number(3)])])
+    ),
+  )
+  debug_inspect(
+    eval_fn("$zip(1,2,3)", Json::null()),
+    content=(
+      #|Array([Array([Number(1), Number(2), Number(3)])])
+    ),
+  )
 }
 
 ///|
