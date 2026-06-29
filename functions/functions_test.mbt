@@ -305,11 +305,19 @@ test "P9.3：$sqrt $pi $e" {
 
 ///|
 test "P9.3：$formatBase 进制转换" {
+  assert_true(eval_fn("$formatBase(100)", Json::null()) == Json::string("100"))
   assert_true(
     eval_fn("$formatBase(255, 16)", Json::null()) == Json::string("ff"),
   )
   assert_true(
     eval_fn("$formatBase(10, 2)", Json::null()) == Json::string("1010"),
+  )
+  assert_true(
+    eval_fn("$formatBase(99.5, 2.5)", Json::null()) == Json::string("1100100"),
+  )
+  assert_true(
+    eval_fn("$formatBase(5890840712243076)", Json::null()) ==
+    Json::string("5890840712243076"),
   )
 }
 

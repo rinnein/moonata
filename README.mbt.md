@@ -79,11 +79,11 @@ docs: update official test status
 
 ## 兼容性状态
 
-固定快照：2026-06-29，P11 `$ceil` 函数别名修复阶段。
+固定快照：2026-06-29，P11 `$formatBase` 兼容修复阶段。
 
 ```text
-moon test: 166/166
-official comparable audit: eligible 1251, pass 982, fail 269, skip 431
+moon test: 167/167
+official comparable audit: eligible 1251, pass 985, fail 266, skip 431
 ```
 
 当前剩余失败最多的官方测试分组：

@@ -140,30 +140,31 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
   register(ctx, "e", arity=0, invoke=fn(_args, _ctx) {
     @value.JsonataValue::Json(Json::number(2.71828182845904523536))
   })
-  // $formatBase(number, radix)
-  register(ctx, "formatBase", arity=2, invoke=fn(args, _ctx) {
-    let n = value_to_int(args[0])
-    let radix = value_to_int(args[1])
+  // $formatBase(number, radix?)
+  register(ctx, "formatBase", arity=1, invoke=fn(args, _ctx) {
+    let n = value_to_double(args[0]).round().to_int64()
+    let radix = if args.length() > 1 { value_to_int(args[1]) } else { 10 }
     if radix < 2 || radix > 36 {
       return @value.JsonataValue::Undefined
     }
     let digits = "0123456789abcdefghijklmnopqrstuvwxyz"
-    let mut num = if n < 0 { -n } else { n }
-    if num == 0 {
+    let mut num = if n < 0L { -n } else { n }
+    if num == 0L {
       return @value.JsonataValue::Json(Json::string("0"))
     }
+    let radix64 = radix.to_int64()
     let chars : Array[Char] = []
-    while num > 0 {
-      let d = num % radix
+    while num > 0L {
+      let d = (num % radix64).to_int()
       match digits.get_char(d) {
         Some(c) => chars.push(c)
         None => ()
       }
-      num = num / radix
+      num = num / radix64
     }
     let reversed = chars.rev()
     let buf = StringBuilder::new()
-    if n < 0 {
+    if n < 0L {
       buf.write_char('-')
     }
     for c in reversed {

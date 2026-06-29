@@ -281,6 +281,13 @@ test "官方套件：$ceil" {
 }
 
 ///|
+test "官方套件：$formatBase" {
+  assert_eval("$formatBase(100)", Json::null(), Json::string("100"))
+  assert_eval("$formatBase(100, 2)", Json::null(), Json::string("1100100"))
+  assert_eval("$formatBase(99.5, 2.5)", Json::null(), Json::string("1100100"))
+}
+
+///|
 test "官方套件：$formatNumber 基础格式" {
   assert_eval(
     "$formatNumber(12345.6, \"#,###.00\")",
