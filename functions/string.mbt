@@ -77,10 +77,16 @@ fn register_string_functions(ctx : @value.EvalContext) -> Unit {
     @value.JsonataValue::Json(Json::string(buf.to_string()))
   })
   // $uppercase / $lowercase
-  register(ctx, "uppercase", arity=1, invoke=fn(args, _ctx) {
+  register(ctx, "uppercase", arity=1, signature=Some("s"), invoke=fn(
+    args,
+    _ctx,
+  ) {
     @value.JsonataValue::Json(Json::string(value_to_str(args[0]).to_upper()))
   })
-  register(ctx, "lowercase", arity=1, invoke=fn(args, _ctx) {
+  register(ctx, "lowercase", arity=1, signature=Some("s"), invoke=fn(
+    args,
+    _ctx,
+  ) {
     @value.JsonataValue::Json(Json::string(value_to_str(args[0]).to_lower()))
   })
   // $contains
@@ -105,7 +111,10 @@ fn register_string_functions(ctx : @value.EvalContext) -> Unit {
     )
   })
   // $substringBefore(str, chars)
-  register(ctx, "substringBefore", arity=2, invoke=fn(args, _ctx) {
+  register(ctx, "substringBefore", arity=2, signature=Some("ss"), invoke=fn(
+    args,
+    _ctx,
+  ) {
     let s = value_to_str(args[0])
     let chars = value_to_str(args[1])
     let idx = s.find(chars)
@@ -115,7 +124,10 @@ fn register_string_functions(ctx : @value.EvalContext) -> Unit {
     }
   })
   // $substringAfter(str, chars)
-  register(ctx, "substringAfter", arity=2, invoke=fn(args, _ctx) {
+  register(ctx, "substringAfter", arity=2, signature=Some("ss"), invoke=fn(
+    args,
+    _ctx,
+  ) {
     let s = value_to_str(args[0])
     let chars = value_to_str(args[1])
     let idx = s.find(chars)

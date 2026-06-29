@@ -20,6 +20,7 @@ pub(all) enum JsonataValue {
 pub struct JsonataFunc {
   arity : Int
   signature : String?
+  contextual : Bool
   invoke : (Array[JsonataValue], EvalContext) -> JsonataValue raise @error.JsonataError
 }
 
@@ -37,9 +38,10 @@ pub impl Debug for JsonataFunc with fn to_repr(self) {
 pub fn JsonataFunc::new(
   arity~ : Int,
   signature? : String? = None,
+  contextual? : Bool = false,
   invoke~ : (Array[JsonataValue], EvalContext) -> JsonataValue raise @error.JsonataError,
 ) -> JsonataFunc {
-  { arity, signature, invoke }
+  { arity, signature, contextual, invoke }
 }
 
 ///|
@@ -193,7 +195,10 @@ pub fn JsonataValue::sequence(items : Array[JsonataValue]) -> JsonataValue {
 pub fn JsonataValue::equal(self : JsonataValue, other : JsonataValue) -> Bool {
   match (self, other) {
     (Undefined, Undefined) => true
-    (Func(a), Func(b)) => a.arity == b.arity && a.signature == b.signature
+    (Func(a), Func(b)) =>
+      a.arity == b.arity &&
+      a.signature == b.signature &&
+      a.contextual == b.contextual
     (Regex(pattern=ap, flags=af), Regex(pattern=bp, flags=bf)) =>
       ap == bp && af == bf
     (Json(a), Json(b)) => a == b

@@ -487,6 +487,22 @@ test "官方套件：$uppercase $lowercase" {
 }
 
 ///|
+test "官方套件：零参函数调用使用当前上下文" {
+  assert_eval("$number()", Json::number(5.0), Json::number(5.0))
+}
+
+///|
+test "官方套件：路径函数调用使用当前上下文" {
+  assert_eval(
+    "Account.Order.Product.\"Product Name\".$uppercase().$substringBefore(\" \")",
+    data(
+      "{\"Account\":{\"Order\":[{\"Product\":[{\"Product Name\":\"Bowler Hat\"},{\"Product Name\":\"Trilby hat\"}]},{\"Product\":[{\"Product Name\":\"Bowler Hat\"},{\"Product Name\":\"Cloak\"}]}]}}",
+    ),
+    data("[\"BOWLER\",\"TRILBY\",\"BOWLER\",\"CLOAK\"]"),
+  )
+}
+
+///|
 test "官方套件：$sort" {
   let d = data("[3,1,4,1,5,9,2,6]")
   let result = evaluate("$sort($)", d)

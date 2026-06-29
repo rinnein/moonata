@@ -31,7 +31,7 @@ fn register(
   ctx.bind(
     name,
     @value.JsonataValue::Func(
-      @value.JsonataFunc::new(arity~, signature~, invoke~),
+      @value.JsonataFunc::new(arity~, signature~, contextual=true, invoke~),
     ),
   )
 }

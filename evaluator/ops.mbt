@@ -425,6 +425,7 @@ fn eval_apply(
       for arg_ast in args_ast {
         args.push(eval(arg_ast, ctx))
       }
+      let args = apply_context_argument(args, f, ctx)
       f.check_args(args)
       if args.length() < f.arity && should_partial_on_missing(f) {
         // 部分应用：返回捕获已提供参数的柯里化函数
@@ -463,6 +464,22 @@ fn eval_apply(
         actual=None,
       )
   }
+}
+
+///|
+fn apply_context_argument(
+  args : Array[@value.JsonataValue],
+  f : @value.JsonataFunc,
+  ctx : @value.EvalContext,
+) -> Array[@value.JsonataValue] {
+  if f.arity == 0 || args.length() >= f.arity || !f.contextual {
+    return args
+  }
+  let out : Array[@value.JsonataValue] = [ctx.current()]
+  for arg in args {
+    out.push(arg)
+  }
+  out
 }
 
 ///|

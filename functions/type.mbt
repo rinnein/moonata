@@ -7,7 +7,7 @@ fn register_type_functions(ctx : @value.EvalContext) -> Unit {
     @value.JsonataValue::Json(Json::string(jsonata_string(value, pretty)))
   })
   // $number
-  register(ctx, "number", arity=1, invoke=fn(args, _ctx) {
+  register(ctx, "number", arity=1, signature=Some("j"), invoke=fn(args, _ctx) {
     match args[0] {
       @value.JsonataValue::Json(Json::Number(_, ..)) => args[0]
       @value.JsonataValue::Json(Json::String(s)) =>
