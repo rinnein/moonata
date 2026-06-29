@@ -79,11 +79,11 @@ docs: update official test status
 
 ## 兼容性状态
 
-固定快照：2026-06-29，P11 条件表达式修复阶段。
+固定快照：2026-06-29，P11 比较运算修复阶段。
 
 ```text
 moon test: 161/161
-official comparable audit: eligible 1251, pass 955, fail 296, skip 431
+official comparable audit: eligible 1251, pass 958, fail 293, skip 431
 ```
 
 当前剩余失败最多的官方测试分组：

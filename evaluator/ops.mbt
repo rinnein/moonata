@@ -36,6 +36,8 @@ fn eval_binary(
   if lhs is @value.JsonataValue::Undefined ||
     rhs is @value.JsonataValue::Undefined {
     match op {
+      "=" => return compare_eq(lhs, rhs)
+      "!=" => return compare_neq(lhs, rhs)
       "&&" =>
         // 短路：若 lhs 为 false 则结果 false
         match lhs {
@@ -174,6 +176,10 @@ fn compare_eq(
   lhs : @value.JsonataValue,
   rhs : @value.JsonataValue,
 ) -> @value.JsonataValue {
+  if lhs is @value.JsonataValue::Undefined ||
+    rhs is @value.JsonataValue::Undefined {
+    return @value.JsonataValue::Json(Json::boolean(false))
+  }
   @value.JsonataValue::Json(
     Json::boolean(json_equal(lhs.to_json(), rhs.to_json())),
   )
@@ -185,6 +191,10 @@ fn compare_neq(
   lhs : @value.JsonataValue,
   rhs : @value.JsonataValue,
 ) -> @value.JsonataValue {
+  if lhs is @value.JsonataValue::Undefined ||
+    rhs is @value.JsonataValue::Undefined {
+    return @value.JsonataValue::Json(Json::boolean(true))
+  }
   @value.JsonataValue::Json(
     Json::boolean(not(json_equal(lhs.to_json(), rhs.to_json()))),
   )
@@ -196,9 +206,17 @@ fn compare_lt(
   lhs : @value.JsonataValue,
   rhs : @value.JsonataValue,
 ) -> @value.JsonataValue raise @error.JsonataError {
-  let l = to_number(lhs)
-  let r = to_number(rhs)
-  @value.JsonataValue::Json(Json::boolean(l < r))
+  match (lhs, rhs) {
+    (
+      @value.JsonataValue::Json(Json::String(l)),
+      @value.JsonataValue::Json(Json::String(r)),
+    ) => @value.JsonataValue::Json(Json::boolean(l < r))
+    _ => {
+      let l = to_number(lhs)
+      let r = to_number(rhs)
+      @value.JsonataValue::Json(Json::boolean(l < r))
+    }
+  }
 }
 
 ///|
@@ -207,9 +225,17 @@ fn compare_lte(
   lhs : @value.JsonataValue,
   rhs : @value.JsonataValue,
 ) -> @value.JsonataValue raise @error.JsonataError {
-  let l = to_number(lhs)
-  let r = to_number(rhs)
-  @value.JsonataValue::Json(Json::boolean(l <= r))
+  match (lhs, rhs) {
+    (
+      @value.JsonataValue::Json(Json::String(l)),
+      @value.JsonataValue::Json(Json::String(r)),
+    ) => @value.JsonataValue::Json(Json::boolean(l <= r))
+    _ => {
+      let l = to_number(lhs)
+      let r = to_number(rhs)
+      @value.JsonataValue::Json(Json::boolean(l <= r))
+    }
+  }
 }
 
 ///|
@@ -218,9 +244,17 @@ fn compare_gt(
   lhs : @value.JsonataValue,
   rhs : @value.JsonataValue,
 ) -> @value.JsonataValue raise @error.JsonataError {
-  let l = to_number(lhs)
-  let r = to_number(rhs)
-  @value.JsonataValue::Json(Json::boolean(l > r))
+  match (lhs, rhs) {
+    (
+      @value.JsonataValue::Json(Json::String(l)),
+      @value.JsonataValue::Json(Json::String(r)),
+    ) => @value.JsonataValue::Json(Json::boolean(l > r))
+    _ => {
+      let l = to_number(lhs)
+      let r = to_number(rhs)
+      @value.JsonataValue::Json(Json::boolean(l > r))
+    }
+  }
 }
 
 ///|
@@ -229,9 +263,17 @@ fn compare_gte(
   lhs : @value.JsonataValue,
   rhs : @value.JsonataValue,
 ) -> @value.JsonataValue raise @error.JsonataError {
-  let l = to_number(lhs)
-  let r = to_number(rhs)
-  @value.JsonataValue::Json(Json::boolean(l >= r))
+  match (lhs, rhs) {
+    (
+      @value.JsonataValue::Json(Json::String(l)),
+      @value.JsonataValue::Json(Json::String(r)),
+    ) => @value.JsonataValue::Json(Json::boolean(l >= r))
+    _ => {
+      let l = to_number(lhs)
+      let r = to_number(rhs)
+      @value.JsonataValue::Json(Json::boolean(l >= r))
+    }
+  }
 }
 
 ///|

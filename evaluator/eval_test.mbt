@@ -76,6 +76,18 @@ test "求值：比较运算" {
   assert_true(eval_to_json("2 < 1", Json::null()) == Json::boolean(false))
   assert_true(eval_to_json("3 = 3", Json::null()) == Json::boolean(true))
   assert_true(eval_to_json("3 != 4", Json::null()) == Json::boolean(true))
+  assert_true(
+    eval_to_json("\"hello\" < \"world\"", Json::null()) == Json::boolean(true),
+  )
+  assert_true(
+    eval_to_json("null = missing", Json::null()) == Json::boolean(false),
+  )
+  assert_true(
+    eval_to_json("missing = missing", Json::null()) == Json::boolean(false),
+  )
+  assert_true(
+    eval_to_json("missing != missing", Json::null()) == Json::boolean(true),
+  )
 }
 
 ///|

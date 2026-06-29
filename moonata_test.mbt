@@ -182,6 +182,9 @@ test "官方套件：比较运算" {
   assert_eval("1 < 2", Json::null(), Json::boolean(true))
   assert_eval("3 = 3", Json::null(), Json::boolean(true))
   assert_eval("3 != 4", Json::null(), Json::boolean(true))
+  assert_eval("\"hello\" < \"world\"", Json::null(), Json::boolean(true))
+  assert_eval("null = nothing", data("{}"), Json::boolean(false))
+  assert_eval("nothing = nothing", data("{}"), Json::boolean(false))
 }
 
 ///|
