@@ -238,6 +238,13 @@ test "函数：$sort" {
 test "函数：$join" {
   let data = @json.parse("[\"a\",\"b\",\"c\"]")
   assert_true(eval_fn("$join($, \",\")", data) == Json::string("a,b,c"))
+  assert_true(eval_fn("$join($)", data) == Json::string("abc"))
+  assert_true(
+    eval_fn("$join(\"hello\")", Json::null()) == Json::string("hello"),
+  )
+  assert_true(
+    eval_fn("$join([\"hello\"])", Json::null()) == Json::string("hello"),
+  )
 }
 
 ///|

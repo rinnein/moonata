@@ -577,6 +577,14 @@ fn eval_chain(
   }
   let mut result = eval(stages[0], ctx)
   for i in 1..<stages.length() {
+    match stages[i] {
+      @ast.Ast::Apply(func~, args~) =>
+        if !has_placeholder(args) {
+          result = eval_chain_apply_stage(result, func, args, ctx)
+          continue
+        }
+      _ => ()
+    }
     let stage = eval(stages[i], ctx)
     match stage {
       @value.JsonataValue::Func(f) =>
@@ -595,6 +603,53 @@ fn eval_chain(
     }
   }
   result
+}
+
+///|
+fn eval_chain_apply_stage(
+  input : @value.JsonataValue,
+  func_ast : @ast.Ast,
+  args_ast : Array[@ast.Ast],
+  ctx : @value.EvalContext,
+) -> @value.JsonataValue raise @error.JsonataError {
+  let func_val = eval(func_ast, ctx)
+  let target = match func_val {
+    @value.JsonataValue::Func(f) => f
+    @value.JsonataValue::Undefined => return @value.JsonataValue::Undefined
+    _ =>
+      raise @error.type_error(
+        "链中非函数值",
+        expected=Some("function"),
+        actual=None,
+      )
+  }
+  let captured : Array[@value.JsonataValue] = []
+  for arg_ast in args_ast {
+    captured.push(eval(arg_ast, ctx))
+  }
+  let stage_invoke = fn(
+    provided : Array[@value.JsonataValue],
+    ctx2 : @value.EvalContext,
+  ) -> @value.JsonataValue raise @error.JsonataError {
+    let args : Array[@value.JsonataValue] = []
+    for item in provided {
+      args.push(item)
+    }
+    for item in captured {
+      args.push(item)
+    }
+    ctx2.with_depth(() => (target.invoke)(args, ctx2))
+  }
+  let stage_func = @value.JsonataFunc::new(
+    arity=1,
+    signature=target.signature,
+    invoke=stage_invoke,
+  )
+  match input {
+    @value.JsonataValue::Func(left_func) =>
+      compose_functions(left_func, stage_func)
+    _ => ctx.with_depth(() => (stage_func.invoke)([input], ctx))
+  }
 }
 
 ///|

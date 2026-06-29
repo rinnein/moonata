@@ -470,6 +470,17 @@ test "官方套件：$length" {
 }
 
 ///|
+test "官方套件：$join" {
+  assert_eval("$join(\"hello\")", Json::null(), Json::string("hello"))
+  assert_eval("$join([\"hello\"])", Json::null(), Json::string("hello"))
+  assert_eval(
+    "$join([\"hello\", \"world\"])",
+    Json::null(),
+    Json::string("helloworld"),
+  )
+}
+
+///|
 test "官方套件：$uppercase $lowercase" {
   assert_eval("$uppercase(\"hello\")", Json::null(), Json::string("HELLO"))
   assert_eval("$lowercase(\"WORLD\")", Json::null(), Json::string("world"))

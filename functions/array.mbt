@@ -117,7 +117,7 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
     @value.JsonataValue::sequence(reversed)
   })
   // $join
-  register(ctx, "join", arity=2, invoke=fn(args, _ctx) {
+  register(ctx, "join", arity=1, invoke=fn(args, _ctx) {
     let items = args[0].to_array()
     let sep = if args.length() > 1 { value_to_str(args[1]) } else { "" }
     let parts : Array[String] = []

@@ -79,11 +79,11 @@ docs: update official test status
 
 ## 兼容性状态
 
-固定快照：2026-06-29，P11 `$formatBase` 兼容修复阶段。
+固定快照：2026-06-29，P11 `$join` 默认分隔符与链式调用修复阶段。
 
 ```text
-moon test: 167/167
-official comparable audit: eligible 1251, pass 985, fail 266, skip 431
+本地测试：moon test 168/168
+官方可比对审计：eligible 1251, pass 989, fail 262, skip 431
 ```
 
 当前剩余失败最多的官方测试分组：
