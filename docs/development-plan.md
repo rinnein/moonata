@@ -357,4 +357,4 @@ P11 已完成日期时间 picture 修复、Lambda 签名语法与范围表达式
 
 ## 6. 官方测试集审计流程
 
-官方测试集审计流程以 `.codebuddy/rules/moonata_项目实现指南.mdc` 第 8 节为准。更新完成度时必须复跑 native CLI 审计，并同步本文件的固定快照、失败前 10 group 与 skip 原因。
+官方测试集实现闭环以 `docs/jsonata-official-workflow.md` 为准；`.codebuddy/rules/moonata_项目实现指南.mdc` 第 8 节保留简版审计口径。更新完成度时必须复跑 native CLI 审计，并同步本文件的固定快照、失败前 10 group 与 skip 原因。
