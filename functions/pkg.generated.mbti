@@ -2,6 +2,7 @@
 package "rinnein/moonata/functions"
 
 import {
+  "moonbitlang/core/debug",
   "rinnein/moonata/value",
 }
 
@@ -11,6 +12,9 @@ pub fn register_builtins(@value.EvalContext) -> Unit
 // Errors
 
 // Types and methods
+type DateComponents derive(@debug.Debug)
+
+type PictureSegment derive(@debug.Debug)
 
 // Type aliases
 

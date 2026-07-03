@@ -26,10 +26,12 @@
 - ~~已知语义缺口：`@`/`$$` 上下文简化为根、谓词过滤未绑定当前项、`&` 未做对象合并、部分应用未实现。~~ **已解决**：P9 全部修复。
 
 ## 项目状态（P9 完成后）
-- 140 个测试全绿，moon check/test/fmt/info 通过。
+- 174 个测试全绿，moon check/test/fmt/info 通过。
 - CLI native 目标端到端可用：`moon run cmd/main --target native -- '<expr>' --data '<json>'`。
 - 内建函数 60+，含正则函数（$match/$contains_regex/$split_regex/$replace_regex）。
 - 8 阶段 + P9 语义修复全部完成，17+5=22 个提交节点（C1-C22）。
+- 通用 date picture parser 已实现，支持 word number、roman numeral、ordinal 等格式。
+- 官方审计基线（2026-07-04）：eligible 1251 pass 1025 fail 226 skip 431（审计脚本 `scripts/jsonata_official_audit.py`，通过率 81.9%）
 
 ## 项目文件布局
 - 设计文档在 `docs/`（architecture / development-plan / design-decisions）。

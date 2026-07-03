@@ -318,13 +318,18 @@ fn register_special_functions(ctx : @value.EvalContext) -> Unit {
     args : Array[@value.JsonataValue],
     _ctx : @value.EvalContext,
   ) -> @value.JsonataValue raise @error.JsonataError {
-    let s = value_to_str(args[0])
-    let millis = if args.length() > 1 {
-      parse_date_picture(s, value_to_str(args[1]))
-    } else {
-      parse_iso_millis(s)
+    match args[0] {
+      @value.JsonataValue::Undefined => @value.JsonataValue::Undefined
+      _ => {
+        let s = value_to_str(args[0])
+        let millis = if args.length() > 1 {
+          parse_date_picture(s, value_to_str(args[1]))
+        } else {
+          parse_iso_millis(s)
+        }
+        @value.JsonataValue::Json(Json::number(millis))
+      }
     }
-    @value.JsonataValue::Json(Json::number(millis))
   })
   // $formatDateTime — JSONata 日期时间 picture 格式化
   register(ctx, "formatDateTime", arity=1, invoke=fn(
@@ -540,21 +545,982 @@ fn normalize_marker(marker : String) -> String {
 }
 
 ///|
+/// Picture segment types for date parsing
+enum PictureSegment {
+  Literal(String)
+  Marker(String) // normalized marker
+} derive(Debug)
+
+///|
+/// Components extracted from a date string via picture parsing
+struct DateComponents {
+  mut year : Int?
+  mut month : Int?
+  mut day : Int?
+  mut hour24 : Int?
+  mut hour12 : Int?
+  mut minute : Int?
+  mut second : Int?
+  mut millis : Int?
+  mut offset : Int?
+  mut day_of_year : Int?
+  mut am_pm : Bool? // true=PM
+  mut weekday : Int?
+} derive(Debug)
+
+///|
 fn parse_date_picture(
   s : String,
   picture : String,
 ) -> Double raise @error.JsonataError {
-  match picture {
-    "[Y1]" => millis_from_date(parse_int_strict(s), 1, 1)
-    "[Y0001]-[M01]-[D01]" => parse_iso_millis(s)
-    "[Y]-[M]-[D]" => parse_iso_millis(s)
-    "[Y0001][M01]" => parse_compact_date(s, has_day=false, has_time=false)
-    "[Y,*-4][M01]" => parse_compact_date(s, has_day=false, has_time=false)
-    "[Y0001][M01][D01]" => parse_compact_date(s, has_day=true, has_time=false)
-    "[Y0000][M00][D00][H00][m00][s00]" =>
-      parse_compact_date(s, has_day=true, has_time=true)
-    "[D#1]/[M#1]/[Y0001]" => parse_slash_date(s)
-    _ => parse_iso_millis(s)
+  let segments = split_picture(picture)
+  let comps = extract_date_components(s, segments)
+  build_date_from_components(comps, picture)
+}
+
+///|
+/// Split a picture string into Literal and Marker segments.
+fn split_picture(picture : String) -> Array[PictureSegment] {
+  let chars = picture.to_array()
+  let result : Array[PictureSegment] = []
+  let mut i = 0
+  let mut lit_buf = StringBuilder::new()
+  while i < chars.length() {
+    if chars[i] == '[' {
+      if i + 1 < chars.length() && chars[i + 1] == '[' {
+        lit_buf.write_char('[')
+        i += 2
+      } else {
+        if lit_buf.to_string().length() > 0 {
+          result.push(PictureSegment::Literal(lit_buf.to_string()))
+          lit_buf = StringBuilder::new()
+        }
+        let mut j = i + 1
+        while j < chars.length() && chars[j] != ']' {
+          j += 1
+        }
+        if j < chars.length() {
+          let marker = normalize_marker(chars_to_string(chars, i + 1, j))
+          result.push(PictureSegment::Marker(marker))
+          i = j + 1
+        } else {
+          lit_buf.write_char(chars[i])
+          i += 1
+        }
+      }
+    } else if chars[i] == ']' && i + 1 < chars.length() && chars[i + 1] == ']' {
+      lit_buf.write_char(']')
+      i += 2
+    } else {
+      lit_buf.write_char(chars[i])
+      i += 1
+    }
+  }
+  if lit_buf.to_string().length() > 0 {
+    result.push(PictureSegment::Literal(lit_buf.to_string()))
+  }
+  result
+}
+
+///|
+/// Extract date components from input string using picture segments.
+fn extract_date_components(
+  input : String,
+  segments : Array[PictureSegment],
+) -> DateComponents raise @error.JsonataError {
+  let comps = DateComponents::default()
+
+  // Build a flat token list: literal segments become delimiters
+  // Markers extract values from the input.
+  // Strategy: scan both picture segments and input simultaneously.
+  // Each marker consumes as many characters from input as its format dictates,
+  // and the following literal acts as the delimiter.
+
+  let input_chars = input.to_array()
+  let mut pos = 0
+
+  // Process segments in order
+  for idx, seg in segments {
+    match seg {
+      PictureSegment::Literal(lit) => {
+        // Match the literal exactly in the input
+        let lit_chars = lit.to_array()
+        if pos + lit_chars.length() > input_chars.length() {
+          if idx == segments.length() - 1 && pos == input_chars.length() {
+            // trailing literal at end, ok
+          } else {
+            raise @error.runtime_error(
+              "D3110: date/time string does not match picture format",
+            )
+          }
+        } else {
+          let mut matched = true
+          for j in 0..<lit_chars.length() {
+            if input_chars[pos + j] != lit_chars[j] {
+              matched = false
+              break
+            }
+          }
+          if not(matched) {
+            raise @error.runtime_error(
+              "D3110: date/time string does not match picture format",
+            )
+          }
+          pos += lit_chars.length()
+        }
+      }
+      PictureSegment::Marker(marker) => {
+        // Determine if there's a trailing literal delimiter
+        let delim = find_next_literal(segments, idx)
+        // Find the end of this marker's value in the input
+        let end_pos = find_marker_end(input_chars, pos, delim, marker)
+        if pos >= end_pos && marker_is_optional(marker) {
+          continue // e.g., timezone that defaults to UTC
+        }
+        let value = chars_to_string(input_chars, pos, end_pos)
+        // Parse value according to marker type
+        extract_marker_value(comps, marker, value)
+        pos = end_pos
+      }
+    }
+  }
+  // If we haven't consumed all input and last segment was not a marker, error
+  if pos < input_chars.length() {
+    raise @error.runtime_error("D3110: trailing characters in date/time string")
+  }
+  comps
+}
+
+///|
+/// Find the next literal after a marker in segments
+fn find_next_literal(segments : Array[PictureSegment], start : Int) -> String? {
+  let mut i = start + 1
+  while i < segments.length() {
+    match segments[i] {
+      PictureSegment::Literal(lit) => return Some(lit)
+      _ => i += 1
+    }
+  }
+  None
+}
+
+///|
+/// Find the end position of a marker's value in the input.
+/// If there's a delimiter, find it; if fixed-width, use that; otherwise consume to end.
+fn find_marker_end(
+  chars : Array[Char],
+  start : Int,
+  delim : String?,
+  marker : String,
+) -> Int {
+  // First try: determine fixed width from marker
+  let width = marker_char_width(marker)
+  match width {
+    Some(w) => {
+      let end = start + w
+      if end > chars.length() {
+        start
+      } else {
+        end
+      }
+    }
+    None => find_delim_end(chars, start, delim)
+  }
+}
+
+///|
+/// Determine the character width of a marker from its format specifier.
+/// Returns None for variable-width markers (named, ordinal, etc.).
+fn marker_char_width(marker : String) -> Int? {
+  if marker.length() == 0 {
+    return None
+  }
+  let c0 = match marker.get_char(0) {
+    Some(c) => c
+    None => return None
+  }
+  match c0 {
+    'Y' => {
+      // Y0001 -> 4, Y00 -> 2, Y0000 -> 4, Y,*-4 -> variable, Y -> variable, Y1 -> variable
+      // YI/Yi -> roman numeral, Yw -> word year
+      let has_comma = marker.contains(",")
+      let has_I = marker.contains("I")
+      let has_i = marker.contains("i")
+      let has_w = marker.contains("w")
+      if has_comma || has_I || has_i || has_w {
+        None
+      } else if marker == "Y" || marker == "Y1" {
+        None
+      } else {
+        // Count digit placeholders: Y0001 has 4 digits (0,0,0,1)
+        Some(marker_placeholder_count(marker))
+      }
+    }
+    'M' =>
+      if marker.starts_with("MN") {
+        None // Named month
+      } else if marker.contains("i") ||
+        marker.contains("A") ||
+        marker.contains("a") {
+        None // Roman numeral or abbreviated
+        // M01 -> 2, M#1 -> variable, M -> variable
+      } else if marker.contains("#") || marker == "M" {
+        None
+      } else {
+        Some(marker_placeholder_count(marker))
+      }
+    'D' => {
+      let has_o = marker.contains("o")
+      let has_Ww = marker.contains("Ww")
+      let starts_Dw = marker.starts_with("Dw")
+      let has_a = marker.contains("a")
+      let has_A = marker.contains("A")
+      if has_o || has_Ww || starts_Dw || has_a || has_A {
+        None // Ordinal, word, or abbreviated
+      } else if marker.contains("#") || marker == "D" {
+        None
+      } else {
+        Some(marker_placeholder_count(marker))
+      }
+    }
+    'H' | 'h' =>
+      if marker == "H" || marker == "h" || marker.contains("#") {
+        None
+      } else {
+        Some(marker_placeholder_count(marker))
+      }
+    'm' =>
+      if marker == "m" || marker.contains("#") {
+        None
+      } else {
+        Some(marker_placeholder_count(marker))
+      }
+    's' =>
+      if marker == "s" || marker.contains("#") {
+        None
+      } else {
+        Some(marker_placeholder_count(marker))
+      }
+    'f' =>
+      // f001 -> 3, f -> variable, f1 -> variable
+      if marker == "f" || marker == "f1" {
+        None
+      } else {
+        Some(marker_placeholder_count(marker))
+      }
+    'd' =>
+      if marker.contains("wo") {
+        None // Word ordinal
+      } else if marker == "d" {
+        None
+      } else {
+        Some(marker_placeholder_count(marker))
+      }
+    'F' => None // Named or numeric weekday
+    'Z' | 'z' => None // Variable timezone
+    'P' => None // AM/PM
+    'X' | 'x' | 'W' | 'w' => None
+    _ => None
+  }
+}
+
+///|
+/// Count digit placeholder characters in a marker (0, 1, #)
+fn marker_placeholder_count(marker : String) -> Int {
+  let mut count = 0
+  for c in marker {
+    match c {
+      '0' | '1' | '#' => count += 1
+      _ => ()
+    }
+  }
+  count
+}
+
+///|
+/// Find end position by scanning for delimiter or end of input
+fn find_delim_end(chars : Array[Char], start : Int, delim : String?) -> Int {
+  match delim {
+    Some(d) => {
+      let mut i = start
+      let del_chars = d.to_array()
+      while i + del_chars.length() <= chars.length() {
+        let mut matched = true
+        for j in 0..<del_chars.length() {
+          if chars[i + j] != del_chars[j] {
+            matched = false
+            break
+          }
+        }
+        if matched {
+          return i
+        }
+        i += 1
+      }
+      chars.length()
+    }
+    None => chars.length()
+  }
+}
+
+///|
+fn marker_is_optional(marker : String) -> Bool {
+  marker == "Z" ||
+  marker.starts_with("Z0") ||
+  marker.starts_with("z") ||
+  marker == "P" ||
+  marker == "Pn" ||
+  marker == "PN"
+}
+
+///|
+/// Parse a marker value string into components
+fn extract_marker_value(
+  comps : DateComponents,
+  marker : String,
+  value : String,
+) -> Unit raise @error.JsonataError {
+  // Determine marker type from first character
+  if marker.length() == 0 {
+    return
+  }
+  let c0 = match marker.get_char(0) {
+    Some(c) => c
+    None => return
+  }
+  match c0 {
+    'Y' =>
+      if marker.contains("I") || marker.contains("i") {
+        // Roman numeral year
+        comps.year = Some(parse_roman_numeral(value))
+      } else if marker.contains("w") {
+        // Word year
+        comps.year = Some(parse_word_number(value))
+      } else {
+        comps.year = parse_int_opt(value)
+        if comps.year.is_empty() {
+          raise @error.runtime_error("D3110: invalid year")
+        }
+      }
+    'M' =>
+      if marker.starts_with("MN") {
+        // Named month
+        let m = parse_month_name(value)
+        comps.month = Some(m)
+      } else if marker.contains("i") {
+        // Roman numeral month
+        comps.month = Some(parse_roman_numeral(value))
+      } else {
+        comps.month = parse_int_opt(value)
+        if comps.month.is_empty() {
+          raise @error.runtime_error("D3110: invalid month")
+        }
+      }
+    'D' =>
+      if marker.contains("Wwo") {
+        // Word-ordinal day like "Twelfth", "Twenty-first"
+        let d = parse_word_ordinal(value)
+        comps.day = Some(d)
+      } else if marker.starts_with("Dw") {
+        // Word day like "twenty-seven", "twenty-seventh"
+        let d = parse_word_number(value)
+        comps.day = Some(d)
+      } else if marker.contains("o") {
+        // Numeric ordinal day like "27th"
+        let d = parse_ordinal_day(value)
+        comps.day = Some(d)
+      } else {
+        comps.day = parse_int_opt(value)
+        if comps.day.is_empty() {
+          raise @error.runtime_error("D3110: invalid day")
+        }
+      }
+    'F' =>
+      // Weekday - parse name or number
+      if marker.starts_with("FN") {
+        let wd = parse_weekday_name(value)
+        comps.weekday = Some(wd)
+      } else if marker == "F0" || marker == "F1" {
+        comps.weekday = parse_int_opt(value)
+      } else if marker == "F" {
+        let wd = parse_weekday_name(value)
+        comps.weekday = Some(wd)
+      }
+    'H' => {
+      comps.hour24 = parse_int_opt(value)
+      if comps.hour24.is_empty() {
+        raise @error.runtime_error("D3110: invalid hour")
+      }
+    }
+    'h' => {
+      comps.hour12 = parse_int_opt(value)
+      if comps.hour12.is_empty() {
+        raise @error.runtime_error("D3110: invalid hour")
+      }
+    }
+    'm' => {
+      comps.minute = parse_int_opt(value)
+      if comps.minute.is_empty() {
+        raise @error.runtime_error("D3110: invalid minute")
+      }
+    }
+    's' => {
+      comps.second = parse_int_opt(value)
+      if comps.second.is_empty() {
+        raise @error.runtime_error("D3110: invalid second")
+      }
+    }
+    'f' => comps.millis = Some(parse_fraction_from_string(value))
+    'd' =>
+      if marker.contains("wo") {
+        // Word-ordinal day of year
+        let doy = parse_word_number(value)
+        comps.day_of_year = Some(doy)
+      } else {
+        comps.day_of_year = parse_int_opt(value)
+        if comps.day_of_year.is_empty() {
+          raise @error.runtime_error("D3110: invalid day of year")
+        }
+      }
+    'Z' | 'z' =>
+      if value != "" {
+        comps.offset = Some(parse_picture_timezone(value))
+      }
+    'P' => comps.am_pm = Some(parse_am_pm(value))
+    'X' => raise @error.runtime_error("D3136: unsupported picture component")
+    'x' => raise @error.runtime_error("D3136: unsupported picture component")
+    'W' => raise @error.runtime_error("D3136: unsupported picture component")
+    'w' => raise @error.runtime_error("D3136: unsupported picture component")
+    'C' | 'E' => ()
+    _ =>
+      // Try to handle Y-variant markers that start differently
+      if marker.contains(",2-2") {
+        comps.year = parse_int_opt(value)
+      } else {
+        raise @error.runtime_error("D3136: unsupported picture component")
+      }
+  }
+}
+
+///|
+fn parse_int_opt(s : String) -> Int? {
+  let chars = s.to_array()
+  if chars.length() == 0 {
+    return None
+  }
+  let mut i = 0
+  let mut neg = false
+  if chars[0] == '+' {
+    i = 1
+  } else if chars[0] == '-' {
+    i = 1
+    neg = true
+  }
+  if i >= chars.length() {
+    return None
+  }
+  let mut val = 0
+  while i < chars.length() {
+    if not(is_digit(chars[i])) {
+      return None
+    }
+    val = val * 10 + digit_value(chars[i])
+    i += 1
+  }
+  if neg {
+    Some(-val)
+  } else {
+    Some(val)
+  }
+}
+
+///|
+/// Parse ordinal day like "1st", "21st", "2nd", "3rd", "4th"
+fn parse_ordinal_day(s : String) -> Int raise @error.JsonataError {
+  // Strip ordinal suffix
+  let trimmed = s.trim().to_string()
+  if trimmed.length() < 2 {
+    raise @error.runtime_error("D3110: invalid ordinal")
+  }
+  let mut num_end = trimmed.length()
+  // Remove trailing ordinal suffix
+  let has_st = trimmed.ends_with("st")
+  let has_nd = trimmed.ends_with("nd")
+  let has_rd = trimmed.ends_with("rd")
+  let has_th = trimmed.ends_with("th")
+  if has_st || has_nd || has_rd || has_th {
+    num_end -= 2
+  }
+  let num_part = trimmed.substring(start=0, end=num_end).to_string()
+  match parse_int_opt(num_part) {
+    Some(n) => n
+    None => raise @error.runtime_error("D3110: invalid ordinal day")
+  }
+}
+
+///|
+/// Parse month name (January, Jan, JANUARY, etc.)
+fn parse_month_name(s : String) -> Int raise @error.JsonataError {
+  let lower = s.trim().to_lower()
+  match lower {
+    "january" | "jan" => 1
+    "february" | "feb" => 2
+    "march" | "mar" => 3
+    "april" | "apr" => 4
+    "may" => 5
+    "june" | "jun" => 6
+    "july" | "jul" => 7
+    "august" | "aug" => 8
+    "september" | "sep" | "sept" => 9
+    "october" | "oct" => 10
+    "november" | "nov" => 11
+    "december" | "dec" => 12
+    _ => raise @error.runtime_error("D3110: invalid month name")
+  }
+}
+
+///|
+/// Parse weekday name
+fn parse_weekday_name(s : String) -> Int raise @error.JsonataError {
+  let lower = s.trim().to_lower()
+  match lower {
+    "monday" | "mon" => 1
+    "tuesday" | "tue" | "tues" => 2
+    "wednesday" | "wed" => 3
+    "thursday" | "thu" | "thur" | "thurs" => 4
+    "friday" | "fri" => 5
+    "saturday" | "sat" => 6
+    "sunday" | "sun" => 7
+    _ => raise @error.runtime_error("D3110: invalid weekday name")
+  }
+}
+
+///|
+/// Parse fractional seconds string into millis
+fn parse_fraction_from_string(s : String) -> Int {
+  let mut value = 0
+  let mut count = 0
+  for c in s {
+    if is_digit(c) && count < 3 {
+      value = value * 10 + digit_value(c)
+      count += 1
+    }
+  }
+  while count < 3 {
+    value *= 10
+    count += 1
+  }
+  value
+}
+
+///|
+/// Parse AM/PM from a string
+fn parse_am_pm(s : String) -> Bool {
+  let lower = s.trim().to_string().to_lower()
+  if lower == "pm" || lower == "p.m." || lower == "p" {
+    true
+  } else {
+    false
+  }
+}
+
+///|
+/// Parse timezone from picture-extracted value
+fn parse_picture_timezone(s : String) -> Int {
+  let trimmed = s.trim().to_string()
+  if trimmed == "" || trimmed == "Z" || trimmed == "z" {
+    return 0
+  }
+  // Handle GMT±HH:MM or GMT±HHMM or GMT±H
+  if trimmed.starts_with("GMT") {
+    let rest = trimmed
+      .substring(start=3, end=trimmed.length())
+      .trim()
+      .to_string()
+    return parse_tz_offset_body(rest)
+  }
+  // Handle ±HH:MM or ±HHMM or ±HH
+  parse_tz_offset_body(trimmed)
+}
+
+///|
+fn parse_tz_offset_body(s : String) -> Int {
+  if s == "" {
+    return 0
+  }
+  let chars = s.to_array()
+  if chars[0] == '+' || chars[0] == '-' {
+    return parse_timezone_offset(chars, 0)
+  }
+  0
+}
+
+///|
+/// Word-ordinal value parsing (for [DWwo], [dwo])
+fn parse_word_ordinal(s : String) -> Int raise @error.JsonataError {
+  let lower = s.trim().to_lower()
+  match lower {
+    "first" | "1st" => 1
+    "second" | "2nd" => 2
+    "third" | "3rd" => 3
+    "fourth" | "4th" => 4
+    "fifth" | "5th" => 5
+    "sixth" | "6th" => 6
+    "seventh" | "7th" => 7
+    "eighth" | "8th" => 8
+    "ninth" | "9th" => 9
+    "tenth" | "10th" => 10
+    "eleventh" | "11th" => 11
+    "twelfth" | "12th" => 12
+    "thirteenth" | "13th" => 13
+    "fourteenth" | "14th" => 14
+    "fifteenth" | "15th" => 15
+    "sixteenth" | "16th" => 16
+    "seventeenth" | "17th" => 17
+    "eighteenth" | "18th" => 18
+    "nineteenth" | "19th" => 19
+    "twentieth" | "20th" => 20
+    "twenty-first" | "twentyfirst" | "21st" => 21
+    "twenty-second" | "twentysecond" | "22nd" => 22
+    "twenty-third" | "twentythird" | "23rd" => 23
+    "twenty-fourth" | "twentyfourth" | "24th" => 24
+    "twenty-fifth" | "twentyfifth" | "25th" => 25
+    "twenty-sixth" | "twentysixth" | "26th" => 26
+    "twenty-seventh" | "twentyseventh" | "27th" => 27
+    "twenty-eighth" | "twentyeighth" | "28th" => 28
+    "twenty-ninth" | "twentyninth" | "29th" => 29
+    "thirtieth" | "30th" => 30
+    "thirty-first" | "thirtyfirst" | "31st" => 31
+    _ =>
+      // Try parsing as number with optional ordinal suffix
+      parse_ordinal_day(s)
+  }
+}
+
+///|
+/// Parse a Roman numeral string to integer
+fn parse_roman_numeral(s : String) -> Int raise @error.JsonataError {
+  let upper = s.trim().to_string().to_upper()
+  let mut total = 0
+  let mut prev = 0
+  let chars = upper.to_array()
+  let mut i = chars.length()
+  while i > 0 {
+    i -= 1
+    let val = match chars[i] {
+      'I' => 1
+      'V' => 5
+      'X' => 10
+      'L' => 50
+      'C' => 100
+      'D' => 500
+      'M' => 1000
+      _ => raise @error.runtime_error("D3110: invalid roman numeral")
+    }
+    if val < prev {
+      total -= val
+    } else {
+      total += val
+    }
+    prev = val
+  }
+  total
+}
+
+///|
+/// Parse a word number like "one thousand, nine hundred and eighty-four"
+fn parse_word_number(s : String) -> Int raise @error.JsonataError {
+  // Clean the input: remove commas, hyphens, "and"
+  let lower = s.to_lower()
+  let trimmed = lower.trim()
+  let cleaned = trimmed.to_string()
+  // Remove commas, hyphens, and standalone "and"
+  let no_commas = cleaned.replace_all(old=",", new="")
+  let no_hyphens = no_commas.replace_all(old="-", new=" ")
+  let no_and = no_hyphens.replace_all(old=" and ", new=" ")
+  let final_text = no_and.trim().to_string()
+  let words = split_words(final_text)
+
+  // Map of word values
+  let singles : Map[String, Int] = {
+    "zero": 0,
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+    "thirteen": 13,
+    "fourteen": 14,
+    "fifteen": 15,
+    "sixteen": 16,
+    "seventeen": 17,
+    "eighteen": 18,
+    "nineteen": 19,
+  }
+  let tens : Map[String, Int] = {
+    "twenty": 20,
+    "thirty": 30,
+    "forty": 40,
+    "fifty": 50,
+    "sixty": 60,
+    "seventy": 70,
+    "eighty": 80,
+    "ninety": 90,
+  }
+  let multipliers : Map[String, Int] = { "hundred": 100, "thousand": 1000 }
+
+  let mut result = 0
+  let mut current = 0
+
+  for w in words {
+    let mut value = 0
+    // Strip ordinal suffix if present
+    let base_word = strip_ordinal_suffix(w)
+
+    match singles.get(base_word) {
+      Some(v) => value = v
+      None =>
+        match tens.get(base_word) {
+          Some(v) => value = v
+          None =>
+            match multipliers.get(base_word) {
+              Some(v) => {
+                if current == 0 {
+                  current = 1
+                }
+                if v == 1000 {
+                  result += current * v
+                  current = 0
+                } else {
+                  // v == 100
+                  current *= v
+                }
+                continue
+              }
+              None => continue
+            }
+        }
+    }
+    current += value
+  }
+  result += current
+  result
+}
+
+///|
+/// Strip ordinal suffix (st, nd, rd, th) from a word.
+/// Only strips if the remaining base is a known number component.
+fn strip_ordinal_suffix(w : String) -> String {
+  let len = w.length()
+  if len > 2 {
+    let suffix = w.substring(start=len - 2, end=len).to_string()
+    if suffix == "st" || suffix == "nd" || suffix == "rd" || suffix == "th" {
+      let base = w.substring(start=0, end=len - 2).to_string()
+      let result = ordinal_base_to_cardinal(base)
+      // Only accept the stripped version if it's different from input
+      // (this prevents false positives like "thousand" -> "thousa")
+      if result != base {
+        return result
+      }
+    }
+  }
+  w
+}
+
+///|
+/// Convert ordinal base form to cardinal form
+fn ordinal_base_to_cardinal(base : String) -> String {
+  match base {
+    "fir" => "one"
+    "seco" => "two"
+    "thi" | "thir" => "three"
+    "four" => "four"
+    "fif" => "five"
+    "six" => "six"
+    "seven" => "seven"
+    "eigh" | "eigth" => "eight"
+    "nin" | "nint" => "nine"
+    "ten" => "ten"
+    "eleven" => "eleven"
+    "twelf" => "twelve"
+    "thirteen" => "thirteen"
+    "fourteen" => "fourteen"
+    "fifteen" => "fifteen"
+    "sixteen" => "sixteen"
+    "seventeen" => "seventeen"
+    "eighteen" => "eighteen"
+    "nineteen" => "nineteen"
+    "twentie" | "twent" => "twenty"
+    "thirtie" | "thirt" => "thirty"
+    "fortie" | "fort" => "forty"
+    "fiftie" | "fift" => "fifty"
+    "sixtie" | "sixt" => "sixty"
+    "seventie" | "sevent" => "seventy"
+    "eightie" | "eight" => "eighty"
+    "ninetie" | "ninet" => "ninety"
+    "hundred" => "hundred"
+    "thousand" => "thousand"
+    _ => base
+  }
+}
+
+///|
+/// Split a string into words by whitespace
+fn split_words(s : String) -> Array[String] {
+  let result : Array[String] = []
+  let chars = s.to_array()
+  let mut i = 0
+  while i < chars.length() {
+    // Skip whitespace
+    while i < chars.length() && is_whitespace(chars[i]) {
+      i += 1
+    }
+    if i >= chars.length() {
+      break
+    }
+    let start = i
+    while i < chars.length() && not(is_whitespace(chars[i])) {
+      i += 1
+    }
+    result.push(chars_to_string(chars, start, i))
+  }
+  result
+}
+
+///|
+fn is_whitespace(c : Char) -> Bool {
+  c == ' ' || c == '\t' || c == '\n' || c == '\r'
+}
+
+///|
+/// Build millis from extracted components
+fn build_date_from_components(
+  comps : DateComponents,
+  picture : String,
+) -> Double raise @error.JsonataError {
+  let mut year = 1970
+  let mut month = 1
+  let mut day = 1
+  let mut hour = 0
+  let mut minute = 0
+  let mut second = 0
+  let mut millis = 0
+  let mut offset = 0
+
+  // Apply extracted components
+  match comps.year {
+    Some(y) => year = y
+    _ => ()
+  }
+  match comps.month {
+    Some(m) => month = m
+    _ => ()
+  }
+  match comps.day {
+    Some(d) => day = d
+    _ => ()
+  }
+  match comps.hour24 {
+    Some(h) => hour = h
+    _ => ()
+  }
+  match comps.hour12 {
+    Some(h) => {
+      hour = if h == 12 { 0 } else { h }
+      match comps.am_pm {
+        Some(pm) => if pm { hour = hour + 12 }
+        _ => ()
+      }
+    }
+    _ => ()
+  }
+  match comps.minute {
+    Some(m) => minute = m
+    _ => ()
+  }
+  match comps.second {
+    Some(s) => second = s
+    _ => ()
+  }
+  match comps.millis {
+    Some(ms) => millis = ms
+    _ => ()
+  }
+  match comps.offset {
+    Some(o) => offset = o
+    _ => ()
+  }
+  // If day_of_year is specified, convert to month/day
+  match comps.day_of_year {
+    Some(doy) => {
+      let (m, d) = day_of_year_to_month_day(year, doy)
+      month = m
+      day = d
+    }
+    _ => ()
+  }
+  // If weekday is specified but not day/month, we need a reference point
+  // This is complex and typically requires additional context
+  // For now, if we have year, month, weekday but no day, use the date that matches
+
+  millis_from_date_time(year, month, day, hour, minute, second, millis, offset)
+}
+
+///|
+/// Convert day of year to (month, day)
+fn day_of_year_to_month_day(year : Int, doy : Int) -> (Int, Int) {
+  let days_in_months = [
+    31,
+    if is_leap_year(year) {
+      29
+    } else {
+      28
+    },
+    31,
+    30,
+    31,
+    30,
+    31,
+    31,
+    30,
+    31,
+    30,
+    31,
+  ]
+  let mut remaining = doy
+  let mut m = 1
+  while m <= 12 {
+    if remaining <= days_in_months[m - 1] {
+      return (m, remaining)
+    }
+    remaining -= days_in_months[m - 1]
+    m += 1
+  }
+  (12, 31)
+}
+
+///|
+fn DateComponents::default() -> DateComponents {
+  {
+    year: None,
+    month: None,
+    day: None,
+    hour24: None,
+    hour12: None,
+    minute: None,
+    second: None,
+    millis: None,
+    offset: None,
+    day_of_year: None,
+    am_pm: None,
+    weekday: None,
   }
 }
 

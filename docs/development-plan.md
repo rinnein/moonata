@@ -20,26 +20,26 @@
 | P8 | CLI 与集成 | moonata / cmd/main | 2 | 4 | ✅ 完成（CLI native 参数模式可用） |
 | P9 | 语义修复与函数补全 | evaluator / functions / value | 5 | 12 | ✅ 完成 |
 | P10 | 验收收尾与兼容性补齐 | value / evaluator / functions / docs | 4 | 7 | ✅ 完成 |
-| P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | 🚧 推进中（1001/1251 可比对用例通过） |
+| P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | 🚧 推进中（1025/1251 可比对用例通过） |
 | 合计 | | | **26** | **66** | |
 
-> 当前固定快照（2026-06-29，P11 `$single` predicate 修复阶段）：`moon test` 为 174/174 通过；`moon check`、`moon info` 通过；`moon fmt` 已执行。JSONata 官方可比对审计为 `eligible 1251 / pass 1001 / fail 250 / skip 431`。
+> 当前固定快照（2026-07-04，通用 date picture parser 实现阶段）：`moon test` 为 174/174 通过；`moon check`、`moon info` 通过；`moon fmt` 已执行。JSONata 官方可比对审计为 `eligible 1251 / pass 1025 / fail 226 / skip 431`（审计脚本：`scripts/jsonata_official_audit.py`）。
 
 ### 1.1 当前暂停边界
 
-P11 已完成日期时间 picture 修复、Lambda 签名语法与范围表达式修复、整数 picture 修复、`$string` 序列化修复（`function-string` 可比对用例 26/26）、条件表达式与无空格二元减法修复（`conditionals` 可比对用例 7/7，`lambdas` 可比对用例 10/12）、比较运算修复（`comparison-operators` 可比对用例 41/41）、`$average` 与数字拼接修复（`function-average` 可比对用例 5/5）、`$zip` 可变参数修复（`function-zip` 可比对用例 6/6）、`in` 运算符修复（`inclusion-operator` 可比对用例 9/9）、`$ceil` 函数别名修复（`function-ceil` 可比对用例 3/3）、`$formatBase` 兼容修复（`function-formatBase` 可比对用例 6/6）、`$join` 默认分隔符与链式调用修复（`function-join` 可比对用例 7/7）、函数调用默认上下文实参修复（`context` 可比对用例 4/4，`function-signatures` 可比对用例 30/30）、`$split` 空分隔符与 limit 修复（`function-split` 可比对用例 11/11）、`$shuffle` 数组函数修复（`function-shuffle` 可比对用例 3/3）、`$single` predicate 修复（`hof-single` 可比对用例 6/6），后续继续优先处理官方失败数最高的 group：
+P11 已完成日期时间 picture 修复、Lambda 签名语法与范围表达式修复、整数 picture 修复、`$string` 序列化修复（`function-string` 可比对用例 26/26）、条件表达式与无空格二元减法修复（`conditionals` 可比对用例 7/7，`lambdas` 可比对用例 10/12）、比较运算修复（`comparison-operators` 可比对用例 41/41）、`$average` 与数字拼接修复（`function-average` 可比对用例 5/5）、`$zip` 可变参数修复（`function-zip` 可比对用例 6/6）、`in` 运算符修复（`inclusion-operator` 可比对用例 9/9）、`$ceil` 函数别名修复（`function-ceil` 可比对用例 3/3）、`$formatBase` 兼容修复（`function-formatBase` 可比对用例 6/6）、`$join` 默认分隔符与链式调用修复（`function-join` 可比对用例 7/7）、函数调用默认上下文实参修复（`context` 可比对用例 4/4，`function-signatures` 可比对用例 30/30）、`$split` 空分隔符与 limit 修复（`function-split` 可比对用例 11/11）、`$shuffle` 数组函数修复（`function-shuffle` 可比对用例 3/3）、`$single` predicate 修复（`hof-single` 可比对用例 6/6）、通用 date picture parser 实现（`function-tomillis` 从 34 → 17 失败，支持 word number/roman numeral/ordinal 等格式），后续继续优先处理官方失败数最高的 group：
 
 | 排名 | 官方 group | 失败数 |
 | --- | --- | --- |
-| 1 | `function-tomillis` | 34 |
-| 2 | `joins` | 28 |
-| 3 | `parent-operator` | 20 |
-| 4 | `function-formatNumber` | 16 |
-| 5 | `sorting` | 16 |
-| 6 | `function-fromMillis` | 15 |
-| 7 | `object-constructor` | 14 |
-| 8 | `flattening` | 13 |
-| 9 | `transforms` | 11 |
+| 1 | `joins` | 28 |
+| 2 | `parent-operator` | 20 |
+| 3 | `function-formatNumber` | 16 |
+| 4 | `sorting` | 16 |
+| 5 | `function-fromMillis` | 15 |
+| 6 | `object-constructor` | 14 |
+| 7 | `flattening` | 13 |
+| 8 | `transforms` | 11 |
+| 9 | `function-tomillis` | 10 |
 | 10 | `descendent-operator` | 7 |
 
 跳过项仅表示当前 CLI 审计 harness 无法直接比较，不表示通过或失败：`no_result 395`、`non-string-expr 23`、`timelimit 7`、`bindings 6`。
