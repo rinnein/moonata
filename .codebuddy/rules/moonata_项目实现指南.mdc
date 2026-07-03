@@ -87,6 +87,14 @@ moon build cmd/main --target native
 
 审计使用 native CLI：`_build/native/debug/build/cmd/main/main.exe`。
 
+自动审计脚本：
+
+```bash
+python3 scripts/jsonata_official_audit.py
+```
+
+可用 `--group <name>` 限定官方分组，用 `--show-failures <n>` 输出失败明细，用 `--json-out <file>` 写出机器可读报告。
+
 ### 8.2 可比对口径
 
 递归读取 `/tmp/jsonata-upstream/test/test-suite/groups/**/*.json`。每个 JSON 文件通常是一个官方用例对象；兼容旧聚合格式时也可展开数组或映射。

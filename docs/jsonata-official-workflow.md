@@ -39,6 +39,20 @@ _build/native/debug/build/cmd/main/main.exe
 _build/native/debug/build/cmd/main/main.exe '<expr>' --file '<tmp-json-data>'
 ```
 
+本仓库提供自动审计脚本：
+
+```bash
+python3 scripts/jsonata_official_audit.py
+```
+
+脚本默认读取 `/tmp/jsonata-upstream`，默认调用 `_build/native/debug/build/cmd/main/main.exe`。如果本地路径不同，用参数覆盖：
+
+```bash
+python3 scripts/jsonata_official_audit.py \
+  --upstream /path/to/jsonata \
+  --exe _build/native/debug/build/cmd/main/main.exe
+```
+
 ## 3. 定义可比对口径
 
 递归读取：
@@ -71,7 +85,38 @@ _build/native/debug/build/cmd/main/main.exe '<expr>' --file '<tmp-json-data>'
 
 ## 4. 执行审计并记录快照
 
-审计脚本应输出以下固定信息：
+完整审计：
+
+```bash
+python3 scripts/jsonata_official_audit.py
+```
+
+只审计一个或多个 group：
+
+```bash
+python3 scripts/jsonata_official_audit.py --group function-string
+python3 scripts/jsonata_official_audit.py --group function-tomillis --group function-fromMillis
+```
+
+输出前若干失败明细：
+
+```bash
+python3 scripts/jsonata_official_audit.py --group function-tomillis --show-failures 5
+```
+
+写出机器可读 JSON 报告：
+
+```bash
+python3 scripts/jsonata_official_audit.py --json-out /tmp/moonata-jsonata-audit.json
+```
+
+用于 CI 或严格门禁时，可在存在失败时返回非零退出码：
+
+```bash
+python3 scripts/jsonata_official_audit.py --fail-on-failure
+```
+
+脚本输出以下固定信息：
 
 ```text
 eligible <n> pass <n> fail <n> skip <n>
@@ -137,11 +182,12 @@ bindings 6
 定位一个失败 group 时，按以下顺序收集证据：
 
 1. 读取官方 case 的 `expr`、`data`/`dataset`、`result`；
-2. 用本地 CLI 单独执行该表达式；
-3. 判断失败类型：解析失败、运行时错误、输出 JSON 不一致、超时；
-4. 若是解析失败，优先检查 `lexer/` 与 `parser/`；
-5. 若是输出不一致，优先检查 `evaluator/`、`value/`、`functions/`；
-6. 若多个 group 同时失败，先找共享语义，而不是逐个硬编码 case。
+2. 用 `scripts/jsonata_official_audit.py --group <group> --show-failures <n>` 获取失败 case；
+3. 用本地 CLI 单独执行该表达式；
+4. 判断失败类型：解析失败、运行时错误、输出 JSON 不一致、超时；
+5. 若是解析失败，优先检查 `lexer/` 与 `parser/`；
+6. 若是输出不一致，优先检查 `evaluator/`、`value/`、`functions/`；
+7. 若多个 group 同时失败，先找共享语义，而不是逐个硬编码 case。
 
 修复前应把至少一个最小复现沉淀为本地测试。能稳定表达官方语义的用例使用 `assert_eq`；结构化调试或 AST 输出才使用快照。
 
@@ -196,7 +242,13 @@ moon build cmd/main --target native
 
 ## 10. 复跑官方审计
 
-本地门禁通过后，复跑官方可比对审计。比较新旧快照：
+本地门禁通过后，复跑官方可比对审计：
+
+```bash
+python3 scripts/jsonata_official_audit.py --json-out /tmp/moonata-jsonata-audit.json
+```
+
+比较新旧快照：
 
 - `pass` 必须增加，或失败原因被明确重新分类；
 - `fail` 不应在无解释情况下增加；
