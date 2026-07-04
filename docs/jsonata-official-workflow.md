@@ -128,10 +128,10 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-04，sorting / fromMillis 兼容性修复阶段，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-04，function-sort 兼容性修复阶段，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1080 fail 171 skip 431
+eligible 1251 pass 1084 fail 167 skip 431
 top_failures
 joins 22
 parent-operator 20
@@ -139,10 +139,10 @@ function-formatNumber 16
 flattening 12
 transforms 11
 function-tomillis 10
-function-sort 6
 hof-map 6
 simple-array-selectors 6
 object-constructor 5
+variables 5
 skip_reasons
 no_result 395
 non-string-expr 23
@@ -150,17 +150,17 @@ timelimit 7
 bindings 6
 ```
 
-本轮修复（sorting ^() + fromMillis [w]/[xNn]/[Yw]/[Dwo]/[dwo]）：
-- 提交：sorting 16→1, fromMillis 15→3，总体 pass 1052→1080 (+28), fail 199→171 (-28), 通过率 84.1%→86.3%
+本轮修复（$sort natural sort + comparator + string comparison fix）：
+- 提交：function-sort 6→2，总体 pass 1080→1084 (+4), fail 171→167 (-4), 通过率 86.3%→86.7%
 - 门禁：`moon check` 0 error，`moon test` 174/174 passed，`moon info` OK
 - 修复内容：
-  - Parser: `parse_sort_term` 使用 `<`/`>` 替代 `+`/`-` 标记排序方向
-  - Parser: `^()` 从 chain 层移到 postfix 层，支持后续 `.name`/`[0]` 链式调用
-  - Evaluator: `eval_sort` 对每个 item 用 `$` 上下文求值排序键，支持多键 stable sort
-  - Evaluator: `compare_sort_value` Undefined 排在最后（非最前）
-  - Functions: 实现 `[w]` 月内周序号（ISO 周）+ `[xNn]` 周编号月份名
-  - Functions: 实现 `[Yw]/[Ywo]` 年单词、`[Dwo]` 序数日单词、`[dwo]` 序数日序单词
-  - Functions: 修复 `[Y,n]` 年份宽度截断（`delta_weeks` float 除法）
+  - Functions: `$sort` 自然排序（Number 数值、String 字典序、回退 toString）
+  - Functions: `$sort` 支持 arity=2 comparator（`fn($a,$b){...}` → true 表示 $a>$b）
+  - Functions: `compare_natural` 使用 `str_cmp` 字节序（规避 MoonBit String< collation bug）
+  - Evaluator: `to_number` 添加 Sequence 单例提升
+  - Evaluator: 所有比较运算符 `<`/`>`/`<=`/`>=` 使用 `str_lt`/`str_gt`（字节序）
+  - Evaluator: `compare_sort_value` 使用 `str_cmp`
+  - 已知差异: `$sort(1)` 返回 `1` 而非 `[1]`（因 `to_json` 单例解包，全局修复会引入回归 4 case）
 
 每次更新快照时，同步记录：
 

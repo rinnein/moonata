@@ -90,25 +90,71 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
   register(ctx, "flatten", arity=1, invoke=fn(args, _ctx) {
     @value.JsonataValue::sequence(args[0].to_array())
   })
-  // $sort
-  register(ctx, "sort", arity=1, invoke=fn(args, _ctx) {
+  // $sort(array, comparator?)
+  // - arity 1: natural order (number/string/toString)
+  // - arity 2: comparator(a,b)→true means a goes after b (a > b), i.e. ascending
+  register(ctx, "sort", arity=1, invoke=fn(
+    args : Array[@value.JsonataValue],
+    _ctx : @value.EvalContext,
+  ) -> @value.JsonataValue raise @error.JsonataError {
     let items = args[0].to_array()
-    // 简化排序：按数字值
-    let keyed : Array[(Double, @value.JsonataValue)] = []
-    for item in items {
-      keyed.push((value_to_double(item), item))
+    if items.length() <= 1 {
+      // $sort always returns a sequence (even for single-element arrays)
+      return if items.length() == 0 {
+        @value.JsonataValue::Undefined
+      } else {
+        @value.JsonataValue::Sequence(items)
+      }
     }
-    keyed.sort_by(fn(a, b) {
-      let (na, _) = a
-      let (nb, _) = b
-      Double::compare(na, nb)
+    if args.length() > 1 {
+      // Comparator: function($a, $b) -> boolean
+      // comparator(a,b)=true means a > b (a goes after b) → ascending
+      let cmp = match args[1] {
+        @value.JsonataValue::Func(f) => f
+        _ => return @value.JsonataValue::Sequence(items) // no comparator, keep original
+      }
+      let indexed : Array[(Int, @value.JsonataValue)] = []
+      for i = 0; i < items.length(); i = i + 1 {
+        indexed.push((i, items[i]))
+      }
+      // Stable insertion sort using comparator
+      for i = 1; i < indexed.length(); i = i + 1 {
+        let key = indexed[i]
+        let mut j = i
+        while j > 0 && item_gt(indexed[j - 1], key, cmp, _ctx) {
+          indexed[j] = indexed[j - 1]
+          j = j - 1
+        }
+        indexed[j] = key
+      }
+      let sorted : Array[@value.JsonataValue] = []
+      for kv in indexed {
+        let (_, item) = kv
+        sorted.push(item)
+      }
+      return @value.JsonataValue::Sequence(sorted)
+    }
+    // Natural sort: compare values directly
+    let indexed : Array[(Int, @value.JsonataValue)] = []
+    for i = 0; i < items.length(); i = i + 1 {
+      indexed.push((i, items[i]))
+    }
+    indexed.sort_by(fn(a, b) {
+      let (ia, va) = a
+      let (ib, vb) = b
+      let cmp = compare_natural(va, vb)
+      if cmp != 0 {
+        cmp
+      } else {
+        ia - ib
+      }
     })
     let sorted : Array[@value.JsonataValue] = []
-    for kv in keyed {
+    for kv in indexed {
       let (_, item) = kv
       sorted.push(item)
     }
-    @value.JsonataValue::sequence(sorted)
+    @value.JsonataValue::Sequence(sorted)
   })
   // $reverse
   register(ctx, "reverse", arity=1, invoke=fn(args, _ctx) {
@@ -220,6 +266,65 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
     }
     @value.JsonataValue::Json(Json::array(arr))
   })
+}
+
+///|
+/// 自然排序比较：Number 数值比较，String 字典序（字节序），其他转字符串比较。
+fn compare_natural(a : @value.JsonataValue, b : @value.JsonataValue) -> Int {
+  match (a, b) {
+    (
+      @value.JsonataValue::Json(Json::Number(na, ..)),
+      @value.JsonataValue::Json(Json::Number(nb, ..)),
+    ) => Double::compare(na, nb)
+    (
+      @value.JsonataValue::Json(Json::String(sa)),
+      @value.JsonataValue::Json(Json::String(sb)),
+    ) => str_cmp(sa, sb)
+    (@value.JsonataValue::Undefined, @value.JsonataValue::Undefined) => 0
+    (@value.JsonataValue::Undefined, _) => 1
+    (_, @value.JsonataValue::Undefined) => -1
+    _ => {
+      let sa = value_to_str(a)
+      let sb = value_to_str(b)
+      str_cmp(sa, sb)
+    }
+  }
+}
+
+///|
+/// 字符串字节序比较，返回 -1/0/1（规避 MoonBit String< 的 collation bug）。
+fn str_cmp(sa : String, sb : String) -> Int {
+  let la = sa.length()
+  let lb = sb.length()
+  let len = if la < lb { la } else { lb }
+  for i = 0; i < len; i = i + 1 {
+    let ca = sa[i]
+    let cb = sb[i]
+    if ca != cb {
+      return if ca.to_int() < cb.to_int() { -1 } else { 1 }
+    }
+  }
+  if la < lb {
+    -1
+  } else if la > lb {
+    1
+  } else {
+    0
+  }
+}
+
+///|
+/// 用 comparator 判断 a 是否 "大于" b（a 应排在 b 之后）。
+/// comparator(a,b)=true ↔ a > b。
+fn item_gt(
+  a : (Int, @value.JsonataValue),
+  b : (Int, @value.JsonataValue),
+  cmp : @value.JsonataFunc,
+  ctx : @value.EvalContext,
+) -> Bool raise @error.JsonataError {
+  let (_, va) = a
+  let (_, vb) = b
+  value_to_bool((cmp.invoke)([va, vb], ctx))
 }
 
 ///|

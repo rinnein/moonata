@@ -20,10 +20,10 @@
 | P8 | CLI 与集成 | moonata / cmd/main | 2 | 4 | ✅ 完成（CLI native 参数模式可用） |
 | P9 | 语义修复与函数补全 | evaluator / functions / value | 5 | 12 | ✅ 完成 |
 | P10 | 验收收尾与兼容性补齐 | value / evaluator / functions / docs | 4 | 7 | ✅ 完成 |
-| P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | 🚧 推进中（1080/1251 可比对用例通过） |
+| P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | 🚧 推进中（1084/1251 可比对用例通过） |
 | 合计 | | | **26** | **66** | |
 
-> 当前固定快照（2026-07-04，sorting / fromMillis 兼容性修复阶段）：`moon test` 为 174/174 通过；`moon check`、`moon info` 通过；`moon fmt` 已执行。JSONata 官方可比对审计为 `eligible 1251 / pass 1080 / fail 171 / skip 431`（审计脚本：`scripts/jsonata_official_audit.py`）。
+> 当前固定快照（2026-07-04，function-sort 兼容性修复阶段）：`moon test` 为 174/174 通过；`moon check`、`moon info` 通过；`moon fmt` 已执行。JSONata 官方可比对审计为 `eligible 1251 / pass 1084 / fail 167 / skip 431`（审计脚本：`scripts/jsonata_official_audit.py`）。
 
 ### 1.1 当前暂停边界
 

@@ -14,6 +14,7 @@ fn to_number(v : @value.JsonataValue) -> Double raise @error.JsonataError {
       }
     @value.JsonataValue::Json(Json::True) => 1.0
     @value.JsonataValue::Json(Json::False) => 0.0
+    @value.JsonataValue::Sequence(_) => to_number(v.lift_singleton())
     _ =>
       raise @error.type_error(
         "无法转为数字",

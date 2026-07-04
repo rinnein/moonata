@@ -247,7 +247,7 @@ fn compare_lt(
     (
       @value.JsonataValue::Json(Json::String(l)),
       @value.JsonataValue::Json(Json::String(r)),
-    ) => @value.JsonataValue::Json(Json::boolean(l < r))
+    ) => @value.JsonataValue::Json(Json::boolean(str_lt(l, r)))
     _ => {
       let l = to_number(lhs)
       let r = to_number(rhs)
@@ -266,7 +266,7 @@ fn compare_lte(
     (
       @value.JsonataValue::Json(Json::String(l)),
       @value.JsonataValue::Json(Json::String(r)),
-    ) => @value.JsonataValue::Json(Json::boolean(l <= r))
+    ) => @value.JsonataValue::Json(Json::boolean(str_lte(l, r)))
     _ => {
       let l = to_number(lhs)
       let r = to_number(rhs)
@@ -285,7 +285,7 @@ fn compare_gt(
     (
       @value.JsonataValue::Json(Json::String(l)),
       @value.JsonataValue::Json(Json::String(r)),
-    ) => @value.JsonataValue::Json(Json::boolean(l > r))
+    ) => @value.JsonataValue::Json(Json::boolean(str_gt(l, r)))
     _ => {
       let l = to_number(lhs)
       let r = to_number(rhs)
@@ -304,7 +304,7 @@ fn compare_gte(
     (
       @value.JsonataValue::Json(Json::String(l)),
       @value.JsonataValue::Json(Json::String(r)),
-    ) => @value.JsonataValue::Json(Json::boolean(l >= r))
+    ) => @value.JsonataValue::Json(Json::boolean(str_gte(l, r)))
     _ => {
       let l = to_number(lhs)
       let r = to_number(rhs)
@@ -805,20 +805,57 @@ fn compare_sort_value(a : @value.JsonataValue, b : @value.JsonataValue) -> Int {
     (
       @value.JsonataValue::Json(Json::String(sa)),
       @value.JsonataValue::Json(Json::String(sb)),
-    ) => if sa < sb { -1 } else if sa > sb { 1 } else { 0 }
+    ) => str_cmp(sa, sb)
     (@value.JsonataValue::Undefined, @value.JsonataValue::Undefined) => 0
     (@value.JsonataValue::Undefined, _) => 1 // Undefined 排在最后
     (_, @value.JsonataValue::Undefined) => -1
     _ => {
       let sa = to_str(a)
       let sb = to_str(b)
-      if sa < sb {
-        -1
-      } else if sa > sb {
-        1
-      } else {
-        0
-      }
+      str_cmp(sa, sb)
     }
+  }
+}
+
+///|
+/// 字节序字符串比较替代（规避 MoonBit String< collation bug）。
+fn str_lt(sa : String, sb : String) -> Bool {
+  str_cmp(sa, sb) < 0
+}
+
+///|
+fn str_gt(sa : String, sb : String) -> Bool {
+  str_cmp(sa, sb) > 0
+}
+
+///|
+fn str_lte(sa : String, sb : String) -> Bool {
+  str_cmp(sa, sb) <= 0
+}
+
+///|
+fn str_gte(sa : String, sb : String) -> Bool {
+  str_cmp(sa, sb) >= 0
+}
+
+///|
+/// 字节序字符串比较，返回 -1/0/1（规避 MoonBit String< collation bug）。
+fn str_cmp(sa : String, sb : String) -> Int {
+  let la = sa.length()
+  let lb = sb.length()
+  let len = if la < lb { la } else { lb }
+  for i = 0; i < len; i = i + 1 {
+    let ca = sa[i]
+    let cb = sb[i]
+    if ca != cb {
+      return if ca.to_int() < cb.to_int() { -1 } else { 1 }
+    }
+  }
+  if la < lb {
+    -1
+  } else if la > lb {
+    1
+  } else {
+    0
   }
 }
