@@ -307,34 +307,236 @@ fn format_number(
   } else {
     trailing_number_suffix(picture)
   }
-  let core = strip_number_suffix(picture, suffix)
-  let dot = core.find(".")
-  let int_pic = match dot {
-    Some(i) => core[:i].to_owned()
-    None => core
+  let prefix = leading_number_prefix(picture)
+  let core_base = strip_number_suffix(
+    strip_number_prefix(picture, prefix),
+    suffix,
+  )
+  // 检测科学计数法：e/E 后跟数字格式字符
+  let e_pos = find_scientific_exp(core_base)
+  match e_pos {
+    Some(ep) => {
+      let mantissa_pic = core_base[:ep].to_owned()
+      let exp_pic = core_base[ep + 1:].to_owned() // 跳过 e/E
+      prefix + format_scientific(n * multiplier, mantissa_pic, exp_pic, suffix)
+    }
+    None => {
+      let core = core_base
+      let dot = core.find(".")
+      let int_pic = match dot {
+        Some(i) => core[:i].to_owned()
+        None => core
+      }
+      let frac_pic = match dot {
+        Some(i) => core[i + 1:].to_owned()
+        None => ""
+      }
+      let frac_places = count_number_slots(frac_pic)
+      let scaled = n * multiplier
+      let rounded = round_half_even(scaled, frac_places)
+      let negative = rounded < 0.0
+      let abs_value = if negative { -rounded } else { rounded }
+      let int_str = format_number_integer_from_double(abs_value, int_pic)
+      let frac_str = format_number_fraction_from_double(
+        abs_value, frac_pic, frac_places,
+      )
+      let sign = if negative { "-" } else { "" }
+      if frac_str == "" {
+        prefix + sign + int_str + suffix
+      } else {
+        prefix + sign + int_str + "." + frac_str + suffix
+      }
+    }
   }
-  let frac_pic = match dot {
-    Some(i) => core[i + 1:].to_owned()
+}
+
+///|
+/// 提取 picture 的前导前缀（第一个数字格式字符之前的文字）。
+fn leading_number_prefix(picture : String) -> String {
+  let chars = picture.to_array()
+  let mut i = 0
+  while i < chars.length() {
+    let c = chars[i]
+    if c == '#' || c == '0' || c == '9' || c == '.' || c == ',' || c == '%' {
+      break
+    }
+    i = i + 1
+  }
+  chars_to_string(chars, 0, i)
+}
+
+///|
+fn strip_number_prefix(picture : String, prefix : String) -> String {
+  if prefix == "" {
+    picture
+  } else if picture.has_prefix(prefix) {
+    picture[prefix.length():].to_owned()
+  } else {
+    picture
+  }
+}
+
+///|
+/// 在 picture 中查找科学计数法分隔符 `e` 或 `E`。
+/// e/E 后必须是数字格式字符（#/0/9），否则不视为科学计数法。
+fn find_scientific_exp(picture : String) -> Int? {
+  // 从后往前找 e/E，因为后缀可能包含 e/E（如 SUFFIXe0）
+  // 但 standard 中 e/E 位于格式字符之间
+  let chars = picture.to_array()
+  let mut seen_digit_pattern = false
+  let mut i = chars.length()
+  while i > 0 {
+    i = i - 1
+    let c = chars[i]
+    match c {
+      '#' | '0' | '9' | ',' | '.' => seen_digit_pattern = true
+      'e' | 'E' => if seen_digit_pattern { return Some(i) } else { continue }
+      _ => continue
+    }
+  }
+  None
+}
+
+///|
+/// 科学计数法格式化。
+fn format_scientific(
+  value : Double,
+  mantissa_pic : String,
+  exp_pic : String,
+  suffix : String,
+) -> String {
+  let negative = value < 0.0
+  let abs_val = if negative { -value } else { value }
+
+  // 解析尾数 picture
+  let dot_pos = mantissa_pic.find(".")
+  let int_pic = match dot_pos {
+    Some(i) => mantissa_pic[:i].to_owned()
+    None => mantissa_pic
+  }
+  let frac_pic = match dot_pos {
+    Some(i) => mantissa_pic[i + 1:].to_owned()
     None => ""
   }
-  let frac_places = count_number_slots(frac_pic)
-  let scaled = n * multiplier
-  let rounded = round_half_even(scaled, frac_places)
-  let negative = rounded < 0.0
-  let abs_value = if negative { -rounded } else { rounded }
-  let integer_part = abs_value.floor().to_int64()
-  let frac_scale = @math.pow(10.0, frac_places.to_double())
-  let frac_number = ((abs_value - integer_part.to_double()) * frac_scale)
+  let int_slots = count_number_slots(int_pic)
+  let frac_slots = count_number_slots(frac_pic)
+  let mandatory_int = min_number_width(int_pic) // count of 0/9 in int_pic
+  // 若 mantissa picture 包含 . 但无明确小数位，至少保留 1 位小数
+  let implicit_frac = if mantissa_pic.contains(".") && frac_slots == 0 {
+    1
+  } else {
+    0
+  }
+
+  // 计算指数
+  let mut exp = 0
+  let mut mantissa_val = abs_val
+  if abs_val == 0.0 {
+    mantissa_val = 0.0
+    exp = 0
+  } else if mandatory_int > 0 {
+    // mandatory integer digits: normalize mantissa ∈ [10^(mandatory-1), 10^mandatory)
+    while mantissa_val >= @math.pow(10.0, mandatory_int.to_double()) {
+      mantissa_val = mantissa_val / 10.0
+      exp = exp + 1
+    }
+    while mantissa_val < @math.pow(10.0, (mandatory_int - 1).to_double()) {
+      mantissa_val = mantissa_val * 10.0
+      exp = exp - 1
+    }
+  } else if int_slots > 0 {
+    // optional (#) integer digits: keep mantissa < 10, or < 1 if none at all
+    while mantissa_val >= 10.0 {
+      mantissa_val = mantissa_val / 10.0
+      exp = exp + 1
+    }
+    // For # only: no lower-bound normalization (allow mantissa < 1)
+  } else {
+    // No integer slots at all (e.g. ".00e0"): mantissa stays < 1
+    while mantissa_val >= 1.0 {
+      mantissa_val = mantissa_val / 10.0
+      exp = exp + 1
+    }
+  }
+
+  // 保留尾数数字
+  let effective_frac = frac_slots + implicit_frac
+  let total_precision = if int_slots + effective_frac == 0 {
+    1
+  } else {
+    int_slots + effective_frac
+  }
+  let scale = @math.pow(10.0, total_precision.to_double())
+  let rounded = (mantissa_val * scale).round() / scale
+
+  // 处理进位：进位可能导致跨越边界
+  let mut m_val = rounded
+  let mut e_val = exp
+  if mandatory_int > 0 {
+    let upper = @math.pow(10.0, mandatory_int.to_double())
+    if m_val >= upper && m_val > 0.0 {
+      m_val = m_val / 10.0
+      e_val = e_val + 1
+    }
+    let lower = @math.pow(10.0, (mandatory_int - 1).to_double())
+    if m_val < lower && m_val > 0.0 {
+      m_val = m_val * 10.0
+      e_val = e_val - 1
+    }
+  } else if int_slots > 0 && m_val >= 10.0 && m_val > 0.0 {
+    m_val = m_val / 10.0
+    e_val = e_val + 1
+  }
+
+  // 格式化整数部分
+  let mantissa_scale = @math.pow(10.0, effective_frac.to_double())
+  let int_part = m_val.floor().to_int64()
+  let frac_val = ((m_val - int_part.to_double()) * mantissa_scale)
     .round()
     .to_int64()
-  let int_str = format_number_integer(integer_part, int_pic)
-  let frac_str = format_number_fraction(frac_number, frac_pic, frac_places)
-  let sign = if negative { "-" } else { "" }
-  if frac_str == "" {
-    sign + int_str + suffix
-  } else {
-    sign + int_str + "." + frac_str + suffix
+
+  // 整数部分字符串
+  let mut int_part_str = int_part.to_string()
+  while int_part_str.length() < mandatory_int ||
+        int_part_str.length() < int_slots {
+    int_part_str = "0" + int_part_str
   }
+
+  // 小数部分
+  let mut frac_str = frac_val.to_string()
+  while frac_str.length() < effective_frac {
+    frac_str = "0" + frac_str
+  }
+  // 去掉可选小数尾零（保留 implicit_frac 位）
+  let mandatory = mandatory_fraction_places(frac_pic) + implicit_frac
+  while frac_str.length() > mandatory &&
+        frac_str.get_char(frac_str.length() - 1) == Some('0') {
+    frac_str = frac_str[:frac_str.length() - 1].to_owned()
+  }
+
+  // 构建尾数字符串: 无整数部分的特殊处理
+  let has_dot = mantissa_pic.contains(".")
+  let mantissa_str = if int_pic == "" && int_slots == 0 {
+    // No integer part at all: show nothing before "."
+    "." + frac_str
+  } else if frac_str == "" && !has_dot {
+    int_part_str
+  } else {
+    int_part_str + "." + frac_str
+  }
+
+  // 格式化指数
+  let exp_neg = e_val < 0
+  let exp_abs = if exp_neg { -e_val } else { e_val }
+  let mut exp_str = exp_abs.to_string()
+  let exp_min_width = min_number_width(exp_pic)
+  while exp_str.length() < exp_min_width {
+    exp_str = "0" + exp_str
+  }
+  let exp_sign = if exp_neg { "-" } else { "" }
+
+  let sign = if negative { "-" } else { "" }
+  sign + mantissa_str + "e" + exp_sign + exp_str + suffix
 }
 
 ///|
@@ -375,13 +577,37 @@ fn count_number_slots(pic : String) -> Int {
 }
 
 ///|
-fn format_number_integer(n : Int64, pic : String) -> String {
-  let mut digits = n.to_string()
-  let min_width = min_number_width(pic)
-  while digits.length() < min_width {
-    digits = "0" + digits
+
+///|
+/// 从 Double 格式化整数部分（处理超 Int64 范围的大数），替代旧 format_number_integer。
+fn format_number_integer_from_double(n : Double, pic : String) -> String {
+  let int_part = n.floor()
+  let digits = if int_part <= 9_007_199_254_740_991.0 {
+    int_part.to_int64().to_string()
+  } else {
+    integer_digits(int_part)
   }
-  apply_grouping(digits, pic)
+  let mut d = digits
+  let min_width = min_number_width(pic)
+  while d.length() < min_width {
+    d = "0" + d
+  }
+  apply_grouping(d, pic)
+}
+
+///|
+/// 从 Double 格式化小数部分。
+fn format_number_fraction_from_double(
+  n : Double,
+  frac_pic : String,
+  frac_places : Int,
+) -> String {
+  if frac_places == 0 {
+    return ""
+  }
+  let frac_scale = @math.pow(10.0, frac_places.to_double())
+  let frac_number = ((n - n.floor()) * frac_scale).round().to_int64()
+  format_number_fraction(frac_number, frac_pic, frac_places)
 }
 
 ///|

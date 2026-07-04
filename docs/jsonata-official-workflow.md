@@ -128,13 +128,12 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-04，#$pos 位置变量绑定，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-04，formatNumber 科学计数法 + parent-operator 解析基础，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1097 fail 154 skip 431
+eligible 1251 pass 1109 fail 142 skip 431
 top_failures
 parent-operator 20
-function-formatNumber 16
 joins 14
 flattening 12
 transforms 11
@@ -142,6 +141,7 @@ function-tomillis 10
 hof-map 6
 object-constructor 5
 variables 5
+function-formatNumber 4
 wildcards 4
 skip_reasons
 no_result 395
@@ -150,15 +150,15 @@ timelimit 7
 bindings 6
 ```
 
-本轮修复（#$pos 位置变量绑定路径步）：
-- 提交：joins 22→14 (-8), 总体 pass 1089→1097 (+8), fail 162→154 (-8), 通过率 87.1%→87.7%
-- 门禁：`moon check` 0 error 0 warning, `moon test` 174/174 passed, `moon info` OK
+本轮修复（parent-operator 解析 + formatNumber 科学计数法）：
+- 提交：formatNumber 16→4 (-12), 总体 pass 1097→1109 (+12), fail 154→142 (-12), 通过率 87.7%→88.6%
+- 门禁：`moon check` 0e0w, `moon test` 174/174 passed, `moon info` OK，无 .mbti 变更
 - 修复内容：
-  - AST: `Step` 新增 `pos_var : String?` 字段用于 #$var 位置索引绑定
-  - Parser: `parse_postfix` 新增 `Hash` 分支解析 `# $name` 并标注步的 pos_var
-  - Evaluator: `eval_path_from` 遇到 pos_var 时注入 `__pos__` 上下文标记
-  - Evaluator: `access_filter` / `access_map` 在迭代时检查 `__pos__` 并绑定 $var 名
-- 已知限制: `$[[1..4]]#$pos` 模式尚未正确处理（Construct 在 filter 位置被当作值而非索引）
+  - **parent-operator**: parser 新增 `%` 解析（parse_primary + postfix Dot），evaluator 新增 parent_stack 路径父级栈
+  - 已知限制：% 在 Filter/Map/Group 内部需 per-item parent 跟踪（架构级改动），当前 20 例全为 semantic mismatch
+  - **formatNumber 科学计数法**: format_scientific 完整实现 e/E 格式（mandatory/optional 整数位、无整数部分、指数零填充）
+  - **formatNumber 前缀 + 大数**: leading_number_prefix 提取前缀，format_number_integer 替换为 Double 版避免 Int64 溢出
+  - formatNumber 剩余 4 fail: 自定义零位字符 (case011/034/035) + 正负零子图 (case016)
 
 每次更新快照时，同步记录：
 

@@ -128,10 +128,9 @@ _build/native/debug/build/cmd/main/main.exe '<expr>' --file '<tmp-json-data>'
 当前固定快照（2026-07-04，simple-array-selectors 兼容性修复，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1097 fail 154 skip 431
+eligible 1251 pass 1109 fail 142 skip 431
 top_failures
 parent-operator 20
-function-formatNumber 16
 joins 14
 flattening 12
 transforms 11
@@ -139,6 +138,7 @@ function-tomillis 10
 hof-map 6
 object-constructor 5
 variables 5
+function-formatNumber 4
 wildcards 4
 skip_reasons
 no_result 395
