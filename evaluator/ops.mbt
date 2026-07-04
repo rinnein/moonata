@@ -763,7 +763,11 @@ fn eval_sort(
     let (ka, ia, _) = a
     let (kb, ib, _) = b
     let cmp = compare_keys(ka, kb, terms)
-    if cmp != 0 { cmp } else { ia - ib }
+    if cmp != 0 {
+      cmp
+    } else {
+      ia - ib
+    }
   })
   let sorted : Array[@value.JsonataValue] = []
   for kv in keyed {
@@ -792,24 +796,29 @@ fn compare_keys(
 
 ///|
 /// 排序值比较：Number 数值比较，String 字典比较，Undefined 排在最后。
-fn compare_sort_value(
-  a : @value.JsonataValue,
-  b : @value.JsonataValue,
-) -> Int {
+fn compare_sort_value(a : @value.JsonataValue, b : @value.JsonataValue) -> Int {
   match (a, b) {
-    (@value.JsonataValue::Json(Json::Number(na, ..)),
-    @value.JsonataValue::Json(Json::Number(nb, ..))) => Double::compare(na, nb)
-    (@value.JsonataValue::Json(Json::String(sa)),
-    @value.JsonataValue::Json(Json::String(sb))) => {
-      if sa < sb { -1 } else if sa > sb { 1 } else { 0 }
-    }
+    (
+      @value.JsonataValue::Json(Json::Number(na, ..)),
+      @value.JsonataValue::Json(Json::Number(nb, ..)),
+    ) => Double::compare(na, nb)
+    (
+      @value.JsonataValue::Json(Json::String(sa)),
+      @value.JsonataValue::Json(Json::String(sb)),
+    ) => if sa < sb { -1 } else if sa > sb { 1 } else { 0 }
     (@value.JsonataValue::Undefined, @value.JsonataValue::Undefined) => 0
-    (@value.JsonataValue::Undefined, _) => 1   // Undefined 排在最后
+    (@value.JsonataValue::Undefined, _) => 1 // Undefined 排在最后
     (_, @value.JsonataValue::Undefined) => -1
     _ => {
       let sa = to_str(a)
       let sb = to_str(b)
-      if sa < sb { -1 } else if sa > sb { 1 } else { 0 }
+      if sa < sb {
+        -1
+      } else if sa > sb {
+        1
+      } else {
+        0
+      }
     }
   }
 }

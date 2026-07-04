@@ -541,7 +541,7 @@ fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
           terms.push(self.parse_sort_term())
         }
         self.expect(@lexer.TokenKind::RParen, what="')'")
-        expr = @ast.Ast::Sort(expr=expr, terms~)
+        expr = @ast.Ast::Sort(expr~, terms~)
       }
       _ => break
     }

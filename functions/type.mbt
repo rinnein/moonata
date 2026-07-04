@@ -460,12 +460,14 @@ fn format_date_marker(
   dt : @time.ZonedDateTime,
   marker : String,
   offset_seconds : Int,
-) -> String {
+) -> String raise @error.JsonataError {
   let marker = normalize_marker(marker)
   match marker {
     "Y" => dt.year().to_string()
     "Y0001" => pad4(dt.year())
     "Y9,999,*" => group_thousands(dt.year())
+    "Yw" => number_to_words(dt.year().to_double())
+    "Ywo" => number_to_ordinal_words(dt.year().to_double())
     "X0001" => pad4(iso_week_year(dt))
     "M" | "M#1" => dt.month().to_string()
     "M01" => pad2(dt.month())
@@ -478,6 +480,7 @@ fn format_date_marker(
     "D01" => pad2(dt.day())
     "D#1,2" | "D1" => pad2(dt.day())
     "D1o" => "\{dt.day()}\{ordinal_suffix(dt.day())}"
+    "Dwo" => number_to_ordinal_words(dt.day().to_double())
     "H" | "H#1" => dt.hour().to_string()
     "H01" => pad2(dt.hour())
     "h" | "h#1" => hour12(dt.hour()).to_string()
@@ -489,8 +492,11 @@ fn format_date_marker(
     "f" | "f001" => pad3(dt.nanosecond() / 1_000_000)
     "d" => dt.ordinal().to_string()
     "d001" => pad3(dt.ordinal())
+    "dwo" => number_to_ordinal_words(dt.ordinal().to_double())
     "W" => iso_week(dt).to_string()
     "W01" => pad2(iso_week(dt))
+    "w" => week_in_month(dt).to_string()
+    "w01" => pad2(week_in_month(dt))
     "Z" => offset_colon(offset_seconds)
     "Z0" => offset_compact(offset_seconds)
     "Z01:01" => offset_colon(offset_seconds)
@@ -516,12 +522,21 @@ fn format_date_marker(
     "P" | "Pn" => if dt.hour() < 12 { "am" } else { "pm" }
     "PN" => if dt.hour() < 12 { "AM" } else { "PM" }
     "E" | "C" => "ISO"
+    "xNn" => month_name(week_numbering_month(dt), "title")
+    "xN" => month_name(week_numbering_month(dt), "upper")
     _ =>
       if marker.length() > 0 && marker.get_char(0) == Some('Y') {
         if marker.contains(",2-2") {
           pad2(dt.year() % 100)
         } else {
-          dt.year().to_string()
+          // [Y,n] width spec: truncate year to last n digits
+          let width = picture_year_digits(marker)
+          let y = if width > 0 && width < 4 {
+            dt.year() % pow10(width)
+          } else {
+            dt.year()
+          }
+          y.to_string()
         }
       } else if marker.length() > 0 && marker.get_char(0) == Some('M') {
         dt.month().to_string()
@@ -1867,6 +1882,135 @@ fn weeks_in_iso_year(year : Int) -> Int {
 ///|
 fn is_leap_year(year : Int) -> Bool {
   year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
+}
+
+///|
+/// 月内周序号（ISO 周，周一开始，含首周四的为第 1 周）。
+fn week_in_month(dt : @time.ZonedDateTime) -> Int raise @error.JsonataError {
+  let year = dt.year()
+  let month = dt.month()
+  let start_w1 = start_of_first_week(year, month)
+  let current = dt.to_unix_second() * 1000L
+  let week = delta_weeks(start_w1, current)
+  if week > 4 {
+    let (ny, nm) = next_month(year, month)
+    let start_next = start_of_first_week(ny, nm)
+    if current >= start_next {
+      return 1
+    }
+  } else if week < 1 {
+    let (py, pm) = prev_month(year, month)
+    let start_prev = start_of_first_week(py, pm)
+    return delta_weeks(start_prev, current)
+  }
+  week
+}
+
+///|
+/// 周编号月份：`[xNn]` — 当日期属于 ISO 月首周之前/之后月时返回对应月份。
+fn week_numbering_month(
+  dt : @time.ZonedDateTime,
+) -> Int raise @error.JsonataError {
+  let year = dt.year()
+  let month = dt.month()
+  let start_iso = start_of_first_week(year, month)
+  let current = dt.to_unix_second() * 1000L
+  if current < start_iso {
+    let (_, pm) = prev_month(year, month)
+    pm
+  } else {
+    let (ny, nm) = next_month(year, month)
+    let start_next = start_of_first_week(ny, nm)
+    if current >= start_next {
+      nm
+    } else {
+      month
+    }
+  }
+}
+
+///|
+/// 月首周起始（周一开始，含月首周四）：毫秒级 UTC 时间戳。
+fn start_of_first_week(
+  year : Int,
+  month : Int,
+) -> Int64 raise @error.JsonataError {
+  let dt = @time.ZonedDateTime::of(year, month, 1) catch {
+    _ => raise @error.runtime_error("invalid date for start_of_first_week")
+  }
+  let dow = weekday_number(dt) // 1=Mon..7=Sun
+  let millis_in_day : Int64 = 86_400_000L
+  let jan1_millis = dt.to_unix_second() * 1000L
+  if dow > 4 {
+    jan1_millis + (8L - dow.to_int64()) * millis_in_day
+  } else {
+    jan1_millis - (dow.to_int64() - 1L) * millis_in_day
+  }
+}
+
+///|
+/// 周数差（end - start）÷ 7 天 + 1，float 除法以正确处理跨月边界。
+fn delta_weeks(start : Int64, end : Int64) -> Int {
+  let diff = (end - start).to_double()
+  let millis_in_week = 604800000.0
+  (diff / millis_in_week + 1.0).floor().to_int()
+}
+
+///|
+fn next_month(year : Int, month : Int) -> (Int, Int) {
+  if month == 12 {
+    (year + 1, 1)
+  } else {
+    (year, month + 1)
+  }
+}
+
+///|
+fn prev_month(year : Int, month : Int) -> (Int, Int) {
+  if month == 1 {
+    (year - 1, 12)
+  } else {
+    (year, month - 1)
+  }
+}
+
+///|
+/// 从 Y,n 格式中提取年份宽度（仅当 marker 无显式位数模式时）。
+fn picture_year_digits(marker : String) -> Int {
+  let comma = marker.find(",")
+  match comma {
+    Some(pos) =>
+      // 仅在 [Y,n] 无显式位数时截断
+      if pos == 1 {
+        let mut end = pos + 1
+        while end < marker.length() &&
+              marker.get_char(end) >= Some('0') &&
+              marker.get_char(end) <= Some('9') {
+          end += 1
+        }
+        let digits_str = marker[pos + 1:end].to_owned()
+        try_parse_int(digits_str).unwrap_or(0)
+      } else {
+        0
+      }
+    None => 0
+  }
+}
+
+///|
+fn pow10(n : Int) -> Int {
+  let mut r = 1
+  for i = 0; i < n; i = i + 1 {
+    r = r * 10
+  }
+  r
+}
+
+///|
+fn try_parse_int(s : String) -> Int? {
+  Some(parse_int_strict(s)) catch {
+    _ => None
+  }
 }
 
 ///|

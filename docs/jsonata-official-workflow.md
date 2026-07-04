@@ -128,21 +128,21 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-04，descendent-operator 兼容性修复阶段，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-04，sorting / fromMillis 兼容性修复阶段，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1052 fail 199 skip 431
+eligible 1251 pass 1080 fail 171 skip 431
 top_failures
-joins 23
+joins 22
 parent-operator 20
 function-formatNumber 16
-sorting 16
-function-fromMillis 15
 flattening 12
 transforms 11
 function-tomillis 10
 function-sort 6
 hof-map 6
+simple-array-selectors 6
+object-constructor 5
 skip_reasons
 no_result 395
 non-string-expr 23
@@ -150,16 +150,17 @@ timelimit 7
 bindings 6
 ```
 
-本轮修复（descendent-operator 兼容性）：
-- 提交：descendent-operator 7→0，总体 pass 1044→1052（+8），fail 207→199（-8），通过率 83.5%→84.1%
+本轮修复（sorting ^() + fromMillis [w]/[xNn]/[Yw]/[Dwo]/[dwo]）：
+- 提交：sorting 16→1, fromMillis 15→3，总体 pass 1052→1080 (+28), fail 199→171 (-28), 通过率 84.1%→86.3%
 - 门禁：`moon check` 0 error，`moon test` 174/174 passed，`moon info` OK
 - 修复内容：
-  - Parser: `"foo"` 在路径上下文中当作字段名（case003/005）
-  - Parser: `.**.name` / `**.Name` 合并为 Name(Recursive)（case000/008/012）
-  - Parser: `** .X [0]` 合并 index 到递归步（case009/013）
-  - Evaluator: replace collect_recursive with depth-first descend_apply
-  - Evaluator: Name/Index 递归步仅对 Object 应用，避免数组展开重复
-  - Evaluator: access_index 对非 Array/Sequence 值返回原值（[0] no‑op）
+  - Parser: `parse_sort_term` 使用 `<`/`>` 替代 `+`/`-` 标记排序方向
+  - Parser: `^()` 从 chain 层移到 postfix 层，支持后续 `.name`/`[0]` 链式调用
+  - Evaluator: `eval_sort` 对每个 item 用 `$` 上下文求值排序键，支持多键 stable sort
+  - Evaluator: `compare_sort_value` Undefined 排在最后（非最前）
+  - Functions: 实现 `[w]` 月内周序号（ISO 周）+ `[xNn]` 周编号月份名
+  - Functions: 实现 `[Yw]/[Ywo]` 年单词、`[Dwo]` 序数日单词、`[dwo]` 序数日序单词
+  - Functions: 修复 `[Y,n]` 年份宽度截断（`delta_weeks` float 除法）
 
 每次更新快照时，同步记录：
 
