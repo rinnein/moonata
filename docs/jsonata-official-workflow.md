@@ -128,21 +128,21 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-04，路径展平 + 通配符兼容性修复，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-04，$map 回调参数 + chain regex + filter truthy + parser `~>` 优先级修复，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1118 fail 133 skip 431
+eligible 1251 pass 1122 fail 129 skip 431
 top_failures
 parent-operator 20
 joins 14
+flattening 11
 function-tomillis 10
 transforms 10
-flattening 8
-hof-map 6
 object-constructor 5
 variables 5
 function-formatNumber 4
-function-applications 3
+function-fromMillis 3
+simple-array-selectors 3
 skip_reasons
 no_result 395
 non-string-expr 23
@@ -150,7 +150,16 @@ timelimit 7
 bindings 6
 ```
 
-本轮修复（路径展平 + 通配符兼容性）：
+本轮修复（$map 回调参数 + chain regex + filter truthy + parser `~>` 优先级）：
+- 提交：hof-map 6→0 pass (+6 但部分与 $map 共用)，function-applications 17→18 pass (+1)，总体 pass 1118→1122 (+4)，fail 133→129 (-4)，通过率 89.4%→89.7%
+- 门禁：`moon check` 0e0w，`moon test` 174/174 passed，`moon info` OK
+- 修复内容：
+  - Functions: `$map`/`$filter` 回调参数改为 `(item, index, source_array)`（hof-map 全绿）
+  - Evaluator: `eval_chain` 支持 `str ~> /regex/flags` 链式正则匹配
+  - Evaluator: `access_filter` 非布尔/非数字 truthy 结果推送 `item` 而非表达式结果（修复 regex chain 在 filter 内行为）
+  - Parser: `parse_chain` 将右侧末尾 `[]` 分离为链的独立阶段（`~>` 优先级低于 `[]`）
+
+上一轮修复（路径展平 + 通配符兼容性）：
 - 提交：wildcards 4→0 pass (+4), flattening 12→8 pass (+4), 总体 pass 1110→1118 (+8), fail 141→133 (-8), 通过率 88.7%→89.4%
 - 门禁：`moon check` 0e0w, `moon test` 174/174 passed, `moon info` OK
 - 修复内容：

@@ -21,15 +21,20 @@ fn Parser::parse_block(self : Parser) -> @ast.Ast raise @error.JsonataError {
 
 ///|
 /// 函数链 `~>`：最低优先级，左结合。
+/// `~>` 优先级低于 `[]`，因此 `a ~> b[]` 解析为 `(a ~> b)[]`。
 fn Parser::parse_chain(self : Parser) -> @ast.Ast raise @error.JsonataError {
   let mut left = self.parse_bind()
+  let mut trailing_arrayify = false
   while self.peek_kind() == @lexer.TokenKind::Arrow {
     ignore(self.advance())
-    let right = if self.peek_kind() == @lexer.TokenKind::Pipe {
+    let raw_right = if self.peek_kind() == @lexer.TokenKind::Pipe {
       self.parse_transform()
     } else {
       self.parse_bind()
     }
+    // ~> 优先级低于 []：将右侧末尾的 [] 分离出链阶段
+    let (right, has_arrayify) = split_chain_stage_arrayify(raw_right)
+    trailing_arrayify = has_arrayify
     // 链式：累积为 Chain
     match left {
       @ast.Ast::Chain(stages) => {
@@ -38,8 +43,62 @@ fn Parser::parse_chain(self : Parser) -> @ast.Ast raise @error.JsonataError {
       }
       _ => left = @ast.Ast::Chain([left, right])
     }
+    // 如果还有更多 ~>，优先应用 [] 到当前链结果
+    if trailing_arrayify && self.peek_kind() == @lexer.TokenKind::Arrow {
+      left = append_chain_arrayify(left)
+      trailing_arrayify = false
+    }
+  }
+  // 末尾的 [] 应用到整条链结果
+  if trailing_arrayify {
+    left = append_chain_arrayify(left)
   }
   left
+}
+
+///|
+/// 将 Arrayify 步应用到链或非链表达式，产生 Path。
+fn append_chain_arrayify(expr : @ast.Ast) -> @ast.Ast {
+  let step = @ast.arrayify_step()
+  match expr {
+    @ast.Ast::Chain(_) => @ast.Ast::Path([@ast.eval_step(expr), step])
+    _ => append_step(expr, step)
+  }
+}
+
+///|
+/// 从链阶段的 expr 中分离末尾 `[]`（Arrayify）步。
+/// 返回（剥离后表达式，是否存在 Arrayify）。
+fn split_chain_stage_arrayify(expr : @ast.Ast) -> (@ast.Ast, Bool) {
+  match expr {
+    @ast.Ast::Path(steps) => {
+      let len = steps.length()
+      if len == 0 {
+        return (expr, false)
+      }
+      match steps[len - 1].kind {
+        @ast.StepKind::Arrayify => {
+          if len == 1 {
+            return (@ast.Ast::Path([]), true)
+          }
+          let limit = len - 1
+          let new_steps : Array[@ast.Step] = []
+          for i in 0..<limit {
+            new_steps.push(steps[i])
+          }
+          if limit == 1 {
+            match new_steps[0].kind {
+              @ast.StepKind::Eval(inner) => return (inner, true)
+              _ => ()
+            }
+          }
+          (@ast.Ast::Path(new_steps), true)
+        }
+        _ => (expr, false)
+      }
+    }
+    _ => (expr, false)
+  }
 }
 
 ///|

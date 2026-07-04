@@ -169,7 +169,7 @@ fn eval_path_from(
                     for v in arr {
                       results.push(v)
                     }
-                  _ => results.push(r)
+                  _ => results.push(item)
                 }
               }
               return @value.JsonataValue::Sequence(results)
@@ -454,7 +454,7 @@ fn access_field_grouped(
             for e in inner {
               results.push(e)
             }
-          _ => results.push(r)
+          _ => results.push(item)
         }
       }
       @value.JsonataValue::sequence(results)
@@ -588,7 +588,7 @@ fn access_grouped(
         let r = eval_step_single(step, item, ctx)
         match r {
           @value.JsonataValue::Undefined => continue
-          _ => results.push(r)
+          _ => results.push(item)
         }
       }
       @value.JsonataValue::sequence(results)
@@ -640,7 +640,7 @@ fn access_filter(
               results.push(item)
             }
           }
-          _ => results.push(r)
+          _ => results.push(item)
         }
     }
   }

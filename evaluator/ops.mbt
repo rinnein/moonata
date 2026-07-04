@@ -614,6 +614,8 @@ fn eval_chain(
             result = compose_functions(left_func, f)
           _ => result = ctx.with_depth(() => (f.invoke)([result], ctx))
         }
+      @value.JsonataValue::Regex(pattern~, flags~) =>
+        result = chain_regex_match(result, pattern, flags)
       @value.JsonataValue::Undefined => result = @value.JsonataValue::Undefined
       _ =>
         raise @error.type_error(
@@ -692,6 +694,48 @@ fn compose_functions(
       invoke~,
     ),
   )
+}
+
+///|
+/// 链式正则匹配：`str ~> /regex/flags`。
+fn chain_regex_match(
+  input : @value.JsonataValue,
+  pattern : String,
+  flags : String,
+) -> @value.JsonataValue {
+  let s = match input {
+    @value.JsonataValue::Json(Json::String(s)) => s
+    _ => return @value.JsonataValue::Undefined
+  }
+  let re = try {
+    if flags == "" {
+      @regexp.compile(pattern)
+    } else {
+      @regexp.compile(pattern, flags~)
+    }
+  } catch {
+    _ => return @value.JsonataValue::Undefined
+  }
+  let m = re.execute(s)
+  if m.matched() {
+    let map : Map[String, Json] = {}
+    map["match"] = match m.get(0) {
+      Some(s_) => Json::string(s_.to_owned())
+      None => Json::string("")
+    }
+    let groups : Array[Json] = []
+    let results = m.results()
+    for i in 1..<results.length() {
+      match results[i] {
+        Some(g) => groups.push(Json::string(g.to_owned()))
+        None => groups.push(Json::null())
+      }
+    }
+    map["groups"] = Json::array(groups)
+    @value.JsonataValue::Json(Json::object(map))
+  } else {
+    @value.JsonataValue::Undefined
+  }
 }
 
 ///|

@@ -1,4 +1,14 @@
 ///|
+/// HOF 回调的标准参数：`(item, index, source_array)`。
+fn hof_callback_args(
+  index : Int,
+  item : @value.JsonataValue,
+  source : @value.JsonataValue,
+) -> Array[@value.JsonataValue] {
+  [item, @value.JsonataValue::Json(Json::number(index.to_double())), source]
+}
+
+///|
 fn register_array_functions(ctx : @value.EvalContext) -> Unit {
   // $map
   register(ctx, "map", arity=2, invoke=fn(
@@ -10,14 +20,15 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
       @value.JsonataValue::Func(f) => f
       _ => return @value.JsonataValue::Undefined
     }
+    let source = json_array_value(items)
     let results : Array[@value.JsonataValue] = []
-    for item in items {
-      let r = (f.invoke)([item], ctx)
+    for i, item in items {
+      let r = (f.invoke)(hof_callback_args(i, item, source), ctx)
       match r {
         @value.JsonataValue::Undefined => continue
         @value.JsonataValue::Sequence(inner) =>
-          for i in inner {
-            results.push(i)
+          for inner_item in inner {
+            results.push(inner_item)
           }
         _ => results.push(r)
       }
@@ -34,9 +45,10 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
       @value.JsonataValue::Func(f) => f
       _ => return @value.JsonataValue::Undefined
     }
+    let source = json_array_value(items)
     let results : Array[@value.JsonataValue] = []
-    for item in items {
-      let r = (f.invoke)([item], ctx)
+    for i, item in items {
+      let r = (f.invoke)(hof_callback_args(i, item, source), ctx)
       if value_to_bool(r) {
         results.push(item)
       }

@@ -6,6 +6,7 @@ import {
   "rinnein/moonata/value",
   "moonbitlang/core/strconv",
   "moonbitlang/core/math",
+  "moonbitlang/regexp",
 }
 
 import {

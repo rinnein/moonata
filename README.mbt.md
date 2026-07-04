@@ -79,12 +79,12 @@ docs: update official test status
 
 ## 兼容性状态
 
-固定快照：2026-07-04，路径展平 + 通配符兼容性修复阶段。
+固定快照：2026-07-04，$map 回调参数 + chain regex + filter truthy + parser `~>` 优先级修复阶段。
 
 ```text
 本地测试：moon test 174/174
-官方可比对审计：eligible 1251, pass 1118, fail 133, skip 431
-通过率：89.4%
+官方可比对审计：eligible 1251, pass 1122, fail 129, skip 431
+通过率：89.7%
 ```
 
 当前剩余失败最多的官方测试分组：
@@ -92,10 +92,9 @@ docs: update official test status
 ```text
 parent-operator 20
 joins 14
+flattening 11
 function-tomillis 10
 transforms 10
-flattening 8
-hof-map 6
 object-constructor 5
 variables 5
 function-formatNumber 4
