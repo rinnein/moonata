@@ -701,6 +701,10 @@ fn eval_group(
     let (key_ast, val_ast) = kv
     let key = eval(key_ast, ctx)
     let val = eval(val_ast, ctx)
+    // 跳过 undefined 值（匹配 JSONata：undefined 字段不出现在对象中）
+    if val.is_undefined() {
+      continue
+    }
     let key_str = match key {
       @value.JsonataValue::Json(Json::String(s)) => s
       _ => to_str(key)
@@ -715,13 +719,18 @@ fn json_for_constructor(value : @value.JsonataValue) -> Json {
   match value {
     @value.JsonataValue::Func(_) => Json::string("")
     @value.JsonataValue::Regex(_) => Json::string("")
-    @value.JsonataValue::Sequence(arr) => {
-      let out : Array[Json] = []
-      for item in arr {
-        out.push(json_for_constructor(item))
+    @value.JsonataValue::Sequence(arr) =>
+      match arr.length() {
+        0 => Json::null()
+        1 => json_for_constructor(arr[0])
+        _ => {
+          let out : Array[Json] = []
+          for item in arr {
+            out.push(json_for_constructor(item))
+          }
+          Json::array(out)
+        }
       }
-      Json::array(out)
-    }
     _ => value.to_json()
   }
 }

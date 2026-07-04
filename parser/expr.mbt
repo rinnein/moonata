@@ -321,6 +321,11 @@ fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
             let mapped = self.parse_primary()
             expr = append_step(expr, @ast.map_step(mapped))
           }
+          @lexer.TokenKind::LBrace => {
+            ignore(self.advance())
+            let mapped = self.parse_group()
+            expr = append_step(expr, @ast.map_step(mapped))
+          }
           @lexer.TokenKind::Var(_) | @lexer.TokenKind::DollarDollar => {
             let mut mapped = self.parse_primary()
             if self.peek_kind() == @lexer.TokenKind::LParen {
@@ -369,10 +374,54 @@ fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
             expr = append_step(expr, @ast.wildcard_step(recursive=true))
         }
       }
+      @lexer.TokenKind::At => {
+        ignore(self.advance())
+        let var_name = match self.peek_kind() {
+          @lexer.TokenKind::Var(name) => {
+            ignore(self.advance())
+            name
+          }
+          @lexer.TokenKind::DollarDollar => {
+            ignore(self.advance())
+            "$$"
+          }
+          _ =>
+            raise @error.syntax_error(
+              "@ 后期望 $name 或 $$",
+              position=Some(self.peek().pos),
+              token=Some(debug_tok(self.peek())),
+            )
+        }
+        // 标注当前路径的最后一个步，而非新增 BindVar 步
+        match expr {
+          @ast.Ast::Path(steps) => {
+            let last = steps[steps.length() - 1]
+            steps[steps.length() - 1] = @ast.Step::new(
+              kind=last.kind,
+              stage=last.stage,
+              focus=Some(var_name),
+              tuple=true,
+            )
+          }
+          _ => expr = @ast.Ast::Path([@ast.eval_step(expr)])
+        }
+      }
       @lexer.TokenKind::LBracket => expr = self.parse_bracket_access(expr)
       @lexer.TokenKind::LParen =>
         // 函数调用
         expr = self.parse_call(expr)
+      @lexer.TokenKind::LBrace => {
+        ignore(self.advance())
+        let mapped = self.parse_group()
+        // 无前置 `.` 的 { ... }：是聚合分组，非逐元素映射
+        expr = append_step(
+          expr,
+          @ast.Step::new(
+            kind=@ast.StepKind::GroupAggregate(mapped),
+            stage=@ast.StepStage::Single,
+          ),
+        )
+      }
       _ => break
     }
   }

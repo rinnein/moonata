@@ -51,8 +51,10 @@ pub fn SortTerm::new(Ast, descending? : Bool) -> Self
 pub(all) struct Step {
   kind : StepKind
   stage : StepStage
+  focus : String?
+  tuple : Bool
 } derive(Eq, @debug.Debug)
-pub fn Step::new(kind~ : StepKind, stage~ : StepStage) -> Self
+pub fn Step::new(kind~ : StepKind, stage~ : StepStage, focus? : String?, tuple? : Bool) -> Self
 
 pub(all) enum StepKind {
   Name(String)
@@ -62,6 +64,7 @@ pub(all) enum StepKind {
   Eval(Ast)
   Filter(Ast)
   Map(Ast)
+  GroupAggregate(Ast)
   Arrayify
 } derive(Eq, @debug.Debug)
 

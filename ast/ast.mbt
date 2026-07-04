@@ -27,9 +27,12 @@ pub(all) enum Ast {
 
 ///|
 /// 路径步：由种类与阶段（单层/递归）组成。
+/// `focus` 与 `tuple` 由 `@ $var` 标注：focus 绑定变量名，tuple 标记进入 tuple stream 模式。
 pub(all) struct Step {
   kind : StepKind
   stage : StepStage
+  focus : String?
+  tuple : Bool
 } derive(Debug, Eq)
 
 ///|
@@ -42,6 +45,7 @@ pub(all) enum StepKind {
   Eval(Ast)
   Filter(Ast)
   Map(Ast)
+  GroupAggregate(Ast)
   Arrayify
 } derive(Debug, Eq)
 
@@ -61,8 +65,13 @@ pub(all) struct SortTerm {
 
 ///|
 /// 构造路径步。
-pub fn Step::new(kind~ : StepKind, stage~ : StepStage) -> Step {
-  { kind, stage }
+pub fn Step::new(
+  kind~ : StepKind,
+  stage~ : StepStage,
+  focus? : String? = None,
+  tuple? : Bool = false,
+) -> Step {
+  { kind, stage, focus, tuple }
 }
 
 ///|

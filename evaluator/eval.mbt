@@ -71,39 +71,142 @@ fn eval_var(name : String, ctx : @value.EvalContext) -> @value.JsonataValue {
 }
 
 ///|
-/// 路径求值：逐步遍历
+/// 路径求值：逐步遍历。
+/// 处理 focus/tuple 变量绑定步（由 `@ $var` 标注）。
+/// GroupAggregate 步在 eval_path_from 内联处理以保留变量绑定。
 fn eval_path(
   steps : Array[@ast.Step],
   input : @value.JsonataValue,
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
-  let mut current = if steps.length() > 0 {
-    match steps[0].kind {
-      @ast.StepKind::Eval(expr) => {
-        let mut base = eval(expr, ctx)
-        for i in 1..<steps.length() {
-          base = eval_step(steps[i], base, ctx)
-        }
-        return base
-      }
-      @ast.StepKind::Filter(@ast.Ast::Var(name)) => {
-        let base = eval_var(name, ctx)
-        // 对剩余步求值
-        let mut v = base
-        for i in 1..<steps.length() {
-          v = eval_step(steps[i], v, ctx)
-        }
-        return v
-      }
-      _ => input
-    }
-  } else {
-    input
+  if steps.length() == 0 {
+    return input
   }
-  for step in steps {
-    current = eval_step(step, current, ctx)
+  eval_path_from(input, steps, 0, ctx, steps.length())
+}
+
+///|
+/// 从指定位置开始路径求值，处理 focus/tuple 变量绑定步。
+///
+/// 当某步带有 `focus` 标注时，先正常求值该步，再对每项绑定变量名，
+/// 并将 *原始* 输入传给后续步（匹配 JSONata-js tuple stream 语义：
+/// `@ $var` 标注的步求值后，`inputSequence` 不更新）。
+///
+/// 若剩余步以 GroupAggregate 结尾，则 focus 分支结果合并且键值聚合，
+/// 而非当作独立元素收集（保留变量绑定）。
+fn eval_path_from(
+  input : @value.JsonataValue,
+  steps : Array[@ast.Step],
+  start : Int,
+  ctx : @value.EvalContext,
+  stop_at : Int,
+) -> @value.JsonataValue raise @error.JsonataError {
+  let mut current = input
+  let mut i = start
+  while i < stop_at {
+    let step = steps[i]
+    // 非 focus 步中的 GroupAggregate：对当前元素求值并合并
+    if is_aggregate_step(step) {
+      return access_group_aggregate(current, agg_ast(step).unwrap(), ctx)
+    }
+    match step.focus {
+      Some(name) => {
+        // 步带 focus：求值步结果，对每项绑变量，后续步从原始 input 开始
+        let step_result = eval_step(step, current, ctx)
+        // 检查剩余步是否以 GroupAggregate 结尾
+        let has_group = stop_at > i + 1 && is_aggregate_step(steps[stop_at - 1])
+        if has_group {
+          let merged : Map[String, Array[Json]] = {}
+          for item in step_result.to_array() {
+            let r = ctx.with_binding(name, item, fn() -> @value.JsonataValue raise @error.JsonataError {
+              eval_path_from(input, steps, i + 1, ctx, stop_at)
+            })
+            merge_into_group(r, merged)
+          }
+          return @value.JsonataValue::Json(
+            Json::object(build_merged_group(merged)),
+          )
+        } else {
+          let results : Array[@value.JsonataValue] = []
+          for item in step_result.to_array() {
+            let r = ctx.with_binding(name, item, fn() -> @value.JsonataValue raise @error.JsonataError {
+              eval_path_from(input, steps, i + 1, ctx, stop_at)
+            })
+            match r {
+              @value.JsonataValue::Undefined => continue
+              @value.JsonataValue::Sequence(arr) =>
+                for v in arr {
+                  results.push(v)
+                }
+              _ => results.push(r)
+            }
+          }
+          return @value.JsonataValue::Sequence(results)
+        }
+      }
+      None => {
+        current = eval_step(step, current, ctx)
+        i = i + 1
+      }
+    }
   }
   current
+}
+
+///|
+/// 判断步是否为 GroupAggregate。
+fn is_aggregate_step(step : @ast.Step) -> Bool {
+  match step.kind {
+    @ast.StepKind::GroupAggregate(_) => true
+    _ => false
+  }
+}
+
+///|
+/// 提取 GroupAggregate 的 AST（仅在 is_aggregate_step 为 true 时安全）。
+fn agg_ast(step : @ast.Step) -> @ast.Ast? {
+  match step.kind {
+    @ast.StepKind::GroupAggregate(ast) => Some(ast)
+    _ => None
+  }
+}
+
+///|
+/// 将分组求值结果合并到 accumulator 中。
+fn merge_into_group(
+  value : @value.JsonataValue,
+  merged : Map[String, Array[Json]],
+) -> Unit {
+  match value {
+    @value.JsonataValue::Json(Json::Object(map)) =>
+      for name, val in map {
+        match merged.get(name) {
+          Some(values) => values.push(val)
+          None => merged.set(name, [val])
+        }
+      }
+    @value.JsonataValue::Sequence(arr) =>
+      for v in arr {
+        merge_into_group(v, merged)
+      }
+    @value.JsonataValue::Undefined => ()
+    _ => ()
+  }
+}
+
+///|
+/// 从合并后的 accumulator 构建最终 Json::Object。
+/// 单值保持原样，多值转为数组。
+fn build_merged_group(merged : Map[String, Array[Json]]) -> Map[String, Json] {
+  let out : Map[String, Json] = {}
+  for name, values in merged {
+    out[name] = if values.length() == 1 {
+      values[0]
+    } else {
+      Json::array(values)
+    }
+  }
+  out
 }
 
 ///|
@@ -135,6 +238,7 @@ fn eval_step_single(
     @ast.StepKind::Filter(expr) => access_filter(input, expr, ctx)
     @ast.StepKind::Map(expr) => access_map(input, expr, ctx)
     @ast.StepKind::Arrayify => access_arrayify(input)
+    @ast.StepKind::GroupAggregate(_) => input
   }
 }
 
@@ -192,7 +296,7 @@ fn collect_recursive(
 }
 
 ///|
-/// 字段访问
+/// 字段访问。
 fn access_field(
   input : @value.JsonataValue,
   name : String,
@@ -392,7 +496,8 @@ fn access_arrayify(input : @value.JsonataValue) -> @value.JsonataValue {
 /// 路径映射 `.(expr)`。
 ///
 /// 对输入序列中的每个元素，将其绑定为当前项并求值表达式，最后按 JSONata
-/// 序列规则展平结果。
+/// 序列规则展平结果。字段访问返回的数组自动展开为序列元素，
+/// 但显式构造数组 `[ ... ]` 保持原样。
 fn access_map(
   input : @value.JsonataValue,
   expr : @ast.Ast,
@@ -400,6 +505,7 @@ fn access_map(
 ) -> @value.JsonataValue raise @error.JsonataError {
   let items = input.to_array()
   let results : Array[@value.JsonataValue] = []
+  let top_is_construct = expr is @ast.Ast::Construct(_)
   for item in items {
     let r = ctx.with_context(current=item, parent=input, fn() -> @value.JsonataValue raise @error.JsonataError {
       ctx.with_depth(() => eval(expr, ctx))
@@ -408,7 +514,15 @@ fn access_map(
       @value.JsonataValue::Undefined => continue
       @value.JsonataValue::Sequence(arr) =>
         for v in arr {
-          results.push(v)
+          push_path_result(results, v)
+        }
+      @value.JsonataValue::Json(Json::Array(arr)) =>
+        if top_is_construct {
+          results.push(r)
+        } else {
+          for v in arr {
+            results.push(@value.JsonataValue::Json(v))
+          }
         }
       _ => results.push(r)
     }
@@ -417,4 +531,42 @@ fn access_map(
     0 => @value.JsonataValue::Undefined
     _ => @value.JsonataValue::Sequence(results)
   }
+}
+
+///|
+/// 分组聚合 `{...}`（无前置 `.`）：对输入中每项求值 Group，再将所有结果
+/// 的键值对合并为单个对象。重复键的值收集为数组。
+fn access_group_aggregate(
+  input : @value.JsonataValue,
+  group_ast : @ast.Ast,
+  ctx : @value.EvalContext,
+) -> @value.JsonataValue raise @error.JsonataError {
+  let items = input.to_array()
+  let merged : Map[String, Array[Json]] = {}
+  for item in items {
+    let r = ctx.with_context(current=item, parent=input, fn() -> @value.JsonataValue raise @error.JsonataError {
+      ctx.with_depth(() => eval(group_ast, ctx))
+    })
+    match r {
+      @value.JsonataValue::Json(Json::Object(map)) =>
+        for name, val in map {
+          match merged.get(name) {
+            Some(values) => values.push(val)
+            None => merged.set(name, [val])
+          }
+        }
+      @value.JsonataValue::Undefined => continue
+      _ => ()
+    }
+  }
+  // 将合并结果转为最终对象：单值保持单值，多值作为数组
+  let out : Map[String, Json] = {}
+  for name, values in merged {
+    out[name] = if values.length() == 1 {
+      values[0]
+    } else {
+      Json::array(values)
+    }
+  }
+  @value.JsonataValue::Json(Json::object(out))
 }
