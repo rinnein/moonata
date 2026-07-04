@@ -31,7 +31,7 @@
 - 内建函数 60+，含正则函数（$match/$contains_regex/$split_regex/$replace_regex）。
 - 8 阶段 + P9 语义修复全部完成，17+5=22 个提交节点（C1-C22）。
 - 通用 date picture parser 已实现，支持 word number、roman numeral、ordinal 等格式。
-- 官方审计基线（2026-07-04）：eligible 1251 pass 1084 fail 167 skip 431（审计脚本 `scripts/jsonata_official_audit.py`，通过率 86.7%）
+- 官方审计基线（2026-07-04）：eligible 1251 pass 1089 fail 162 skip 431（审计脚本 `scripts/jsonata_official_audit.py`，通过率 87.1%）
 
 ## 项目文件布局
 - 设计文档在 `docs/`（architecture / development-plan / design-decisions）。

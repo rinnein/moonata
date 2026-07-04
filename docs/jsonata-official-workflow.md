@@ -128,10 +128,10 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-04，function-sort 兼容性修复阶段，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-04，simple-array-selectors 兼容性修复，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1084 fail 167 skip 431
+eligible 1251 pass 1089 fail 162 skip 431
 top_failures
 joins 22
 parent-operator 20
@@ -140,9 +140,9 @@ flattening 12
 transforms 11
 function-tomillis 10
 hof-map 6
-simple-array-selectors 6
 object-constructor 5
 variables 5
+wildcards 4
 skip_reasons
 no_result 395
 non-string-expr 23

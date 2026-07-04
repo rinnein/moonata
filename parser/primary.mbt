@@ -86,7 +86,14 @@ fn Parser::parse_primary(self : Parser) -> @ast.Ast raise @error.JsonataError {
       ignore(self.advance())
       let expr = self.parse_block()
       self.expect(@lexer.TokenKind::RParen, what="')'")
-      expr
+      // Parenthesized expression followed by path postfix (.[{):
+      // wrap in Eval step so that subsequent [N]/slice do flat indexing,
+      // preserving (expr)[N] ≠ expr[N] semantics.
+      if is_path_postfix_kind(self.peek_kind()) {
+        @ast.Ast::Path([@ast.eval_step(expr)])
+      } else {
+        expr
+      }
     }
     @lexer.TokenKind::LBracket => {
       ignore(self.advance())

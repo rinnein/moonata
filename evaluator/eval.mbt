@@ -103,6 +103,7 @@ fn eval_path_from(
 ) -> @value.JsonataValue raise @error.JsonataError {
   let mut current = input
   let mut i = start
+  let mut name_was_grouped = false
   while i < stop_at {
     let step = steps[i]
     // 非 focus 步中的 GroupAggregate：对当前元素求值并合并
@@ -111,6 +112,7 @@ fn eval_path_from(
     }
     match step.focus {
       Some(name) => {
+        name_was_grouped = false
         // 步带 focus：求值步结果，对每项绑变量，后续步从原始 input 开始
         let step_result = eval_step(step, current, ctx)
         // 检查剩余步是否以 GroupAggregate 结尾
@@ -145,7 +147,34 @@ fn eval_path_from(
         }
       }
       None => {
-        current = eval_step(step, current, ctx)
+        // Group-aware evaluation for Name→Index/Slice patterns:
+        // a.b[N] means index each b individually, not the flat result.
+        // Only when the Name step was processed via access_field_grouped
+        // (i.e., it had an Index/Slice step following).
+        if name_was_grouped {
+          match step.kind {
+            @ast.StepKind::Index(_) | @ast.StepKind::Slice(_, _) =>
+              current = access_grouped(current, step, ctx)
+            _ => current = eval_step(step, current, ctx)
+          }
+          name_was_grouped = false
+        } else {
+          match step.kind {
+            @ast.StepKind::Name(name) =>
+              if i + 1 < stop_at {
+                match steps[i + 1].kind {
+                  @ast.StepKind::Index(_) | @ast.StepKind::Slice(_, _) => {
+                    current = access_field_grouped(current, name)
+                    name_was_grouped = true
+                  }
+                  _ => current = eval_step(step, current, ctx)
+                }
+              } else {
+                current = eval_step(step, current, ctx)
+              }
+            _ => current = eval_step(step, current, ctx)
+          }
+        }
         i = i + 1
       }
     }
@@ -341,6 +370,53 @@ fn access_field(
 }
 
 ///|
+/// 分组感知的字段访问：与 access_field 相同，但保留顶层数组元素为单元素
+/// 以支持后续 [N]/Slice 路径步的逐元素索引（如 a.b[N] 语义）。
+fn access_field_grouped(
+  input : @value.JsonataValue,
+  name : String,
+) -> @value.JsonataValue {
+  match input {
+    @value.JsonataValue::Json(Json::Object(map)) =>
+      match map.get(name) {
+        Some(v) => @value.JsonataValue::Json(v)
+        None => @value.JsonataValue::Undefined
+      }
+    @value.JsonataValue::Json(Json::Array(arr)) => {
+      let results : Array[@value.JsonataValue] = []
+      for v in arr {
+        let r = access_field_grouped(@value.JsonataValue::Json(v), name)
+        match r {
+          @value.JsonataValue::Undefined => continue
+          @value.JsonataValue::Sequence(inner) =>
+            for e in inner {
+              results.push(e)
+            }
+          _ => results.push(r)
+        }
+      }
+      @value.JsonataValue::sequence(results)
+    }
+    @value.JsonataValue::Sequence(arr) => {
+      let results : Array[@value.JsonataValue] = []
+      for item in arr {
+        let r = access_field_grouped(item, name)
+        match r {
+          @value.JsonataValue::Undefined => continue
+          @value.JsonataValue::Sequence(inner) =>
+            for e in inner {
+              results.push(e)
+            }
+          _ => results.push(r)
+        }
+      }
+      @value.JsonataValue::sequence(results)
+    }
+    _ => @value.JsonataValue::Undefined
+  }
+}
+
+///|
 fn push_path_result(
   results : Array[@value.JsonataValue],
   value : @value.JsonataValue,
@@ -349,7 +425,7 @@ fn push_path_result(
     @value.JsonataValue::Undefined => ()
     @value.JsonataValue::Sequence(arr) =>
       for item in arr {
-        results.push(item)
+        push_path_result(results, item)
       }
     @value.JsonataValue::Json(Json::Array(arr)) =>
       for item in arr {
@@ -457,6 +533,31 @@ fn access_slice(
 }
 
 ///|
+/// 分组感知的 Index/Slice：对 Sequence 中每个元素单独应用 Index/Slice 步，
+/// 分组感知的 Index/Slice：对 Sequence 中每个元素单独应用 Index/Slice 步，
+/// 保留数组元素的分组上下文（如 `arr.nest1[0]` 应为每个 `nest1` 的 `[0]`）。
+fn access_grouped(
+  input : @value.JsonataValue,
+  step : @ast.Step,
+  ctx : @value.EvalContext,
+) -> @value.JsonataValue raise @error.JsonataError {
+  match input {
+    @value.JsonataValue::Sequence(arr) => {
+      let results : Array[@value.JsonataValue] = []
+      for item in arr {
+        let r = eval_step_single(step, item, ctx)
+        match r {
+          @value.JsonataValue::Undefined => continue
+          _ => results.push(r)
+        }
+      }
+      @value.JsonataValue::sequence(results)
+    }
+    _ => eval_step(step, input, ctx)
+  }
+}
+
+///|
 /// 谓词过滤
 ///
 /// 迭代每个元素时将其绑定为 `@`（当前项），父级 `$$` 设为输入序列。
@@ -480,12 +581,15 @@ fn access_filter(
       @value.JsonataValue::Json(Json::False) => continue
       @value.JsonataValue::Undefined => continue
       _ =>
-        // 位置过滤：数字匹配索引
+        // 位置过滤：数字匹配索引，负数从末尾算起
         match r {
-          @value.JsonataValue::Json(Json::Number(n, ..)) =>
-            if n.to_int() == i {
+          @value.JsonataValue::Json(Json::Number(n, ..)) => {
+            let num = n.to_int()
+            let target = if num < 0 { items.length() + num } else { num }
+            if target == i {
               results.push(item)
             }
+          }
           _ => results.push(r)
         }
     }
