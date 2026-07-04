@@ -79,12 +79,12 @@ docs: update official test status
 
 ## 兼容性状态
 
-固定快照：2026-07-04，transforms 操作符解析基础阶段。
+固定快照：2026-07-04，路径展平 + 通配符兼容性修复阶段。
 
 ```text
 本地测试：moon test 174/174
-官方可比对审计：eligible 1251, pass 1110, fail 141, skip 431
-通过率：88.7%
+官方可比对审计：eligible 1251, pass 1118, fail 133, skip 431
+通过率：89.4%
 ```
 
 当前剩余失败最多的官方测试分组：
@@ -92,14 +92,14 @@ docs: update official test status
 ```text
 parent-operator 20
 joins 14
-flattening 12
 function-tomillis 10
 transforms 10
+flattening 8
 hof-map 6
 object-constructor 5
 variables 5
 function-formatNumber 4
-wildcards 4
+function-applications 3
 ```
 
 官方测试集审计流程与跳过策略记录在 `docs/jsonata-official-workflow.md`。

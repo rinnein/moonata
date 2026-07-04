@@ -106,6 +106,10 @@ fn eval_path_from(
   let mut current = input
   let mut i = start
   let mut name_was_grouped = false
+  // 标记是否为路径的"首个有效步"：首步的 Name→Index 在 Array/Sequence
+  // 输入上不应分组（如 phone[0] 应索引整体而非每元素），后续步的
+  // Name→Index 则应分组（如 a.b[0] 需每元素索引）。
+  let mut is_first_step = true
   // 父级栈：维护路径上非 Parent 步的输入值，用于 % 导航
   let parent_stack : Array[@value.JsonataValue] = []
   while i < stop_at {
@@ -188,10 +192,25 @@ fn eval_path_from(
                 @ast.StepKind::Name(name) =>
                   if i + 1 < stop_at {
                     match steps[i + 1].kind {
-                      @ast.StepKind::Index(_) | @ast.StepKind::Slice(_, _) => {
-                        current = access_field_grouped(current, name)
-                        name_was_grouped = true
-                      }
+                      @ast.StepKind::Index(_) | @ast.StepKind::Slice(_, _) =>
+                        // Group Name→Index: index each sub-array individually,
+                        // not the flat result.  Only skip grouping for the very
+                        // first step on an Array/Sequence root (e.g. phone[0]
+                        // should index the overall flat sequence).
+                        if is_first_step {
+                          match current {
+                            @value.JsonataValue::Sequence(_)
+                            | @value.JsonataValue::Json(Json::Array(_)) =>
+                              current = eval_step(step, current, ctx)
+                            _ => {
+                              current = access_field_grouped(current, name)
+                              name_was_grouped = true
+                            }
+                          }
+                        } else {
+                          current = access_field_grouped(current, name)
+                          name_was_grouped = true
+                        }
                       _ => current = eval_step(step, current, ctx)
                     }
                   } else {
@@ -199,6 +218,7 @@ fn eval_path_from(
                   }
                 _ => current = eval_step(step, current, ctx)
               }
+              is_first_step = false
             }
             i = i + 1
           }
@@ -463,20 +483,20 @@ fn push_path_result(
 }
 
 ///|
-/// 通配符访问（所有字段或所有元素）
+/// 通配符访问（所有字段或所有元素），内层数组展平到序列中。
 fn access_wildcard(input : @value.JsonataValue) -> @value.JsonataValue {
   match input {
     @value.JsonataValue::Json(Json::Object(map)) => {
       let results : Array[@value.JsonataValue] = []
       for _, v in map {
-        results.push(@value.JsonataValue::Json(v))
+        push_path_result(results, @value.JsonataValue::Json(v))
       }
       @value.JsonataValue::sequence(results)
     }
     @value.JsonataValue::Json(Json::Array(arr)) => {
       let results : Array[@value.JsonataValue] = []
       for v in arr {
-        results.push(@value.JsonataValue::Json(v))
+        push_path_result(results, @value.JsonataValue::Json(v))
       }
       @value.JsonataValue::sequence(results)
     }
@@ -484,14 +504,7 @@ fn access_wildcard(input : @value.JsonataValue) -> @value.JsonataValue {
       let results : Array[@value.JsonataValue] = []
       for item in arr {
         let r = access_wildcard(item)
-        match r {
-          @value.JsonataValue::Undefined => continue
-          @value.JsonataValue::Sequence(inner) =>
-            for i in inner {
-              results.push(i)
-            }
-          _ => results.push(r)
-        }
+        push_path_result(results, r)
       }
       @value.JsonataValue::sequence(results)
     }

@@ -128,21 +128,21 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-04，transforms 操作符解析基础，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-04，路径展平 + 通配符兼容性修复，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1110 fail 141 skip 431
+eligible 1251 pass 1118 fail 133 skip 431
 top_failures
 parent-operator 20
 joins 14
-flattening 12
 function-tomillis 10
 transforms 10
+flattening 8
 hof-map 6
 object-constructor 5
 variables 5
 function-formatNumber 4
-wildcards 4
+function-applications 3
 skip_reasons
 no_result 395
 non-string-expr 23
@@ -150,7 +150,15 @@ timelimit 7
 bindings 6
 ```
 
-本轮修复（transforms 操作符解析基础）：
+本轮修复（路径展平 + 通配符兼容性）：
+- 提交：wildcards 4→0 pass (+4), flattening 12→8 pass (+4), 总体 pass 1110→1118 (+8), fail 141→133 (-8), 通过率 88.7%→89.4%
+- 门禁：`moon check` 0e0w, `moon test` 174/174 passed, `moon info` OK
+- 修复内容：
+  - Evaluator: `eval_path_from` 新增 `is_first_step` 标志，首步 Name→Index 在 Array/Sequence 输入不分组（fix `phone[0]`、`a[0].b`），后续步正常分组（保持 `a.b[0]` 兼容）
+  - Evaluator: `access_wildcard` 使用 `push_path_result` 替代 `results.push`，内层数组正确展平
+- 已知限制: `[]` 步骤后字段访问的单例提升问题（3 fail），嵌套 `.()` 展平多一层（4 fail），Group 构造内 `[]` 展平（1 fail）
+
+上一轮修复（transforms 操作符解析基础）：
 - 提交：transforms 0→1 pass (+1), 总体 pass 1109→1110 (+1), fail 142→141 (-1), 通过率 88.5%→88.7%
 - 门禁：`moon check` 0e0w, `moon test` 174/174 passed, `moon info` OK
 - 修复内容：
