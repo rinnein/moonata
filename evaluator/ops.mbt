@@ -752,7 +752,7 @@ fn eval_sort(
   for i, item in items {
     let keys : Array[@value.JsonataValue] = []
     for term in terms {
-      let key = ctx.with_context(current=item, parent=input, fn() {
+      let key = ctx.with_context(current=item, parent=input, fn() -> @value.JsonataValue raise @error.JsonataError {
         eval(term.expr, ctx)
       })
       keys.push(key)

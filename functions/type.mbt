@@ -676,7 +676,7 @@ fn extract_date_components(
               break
             }
           }
-          if not(matched) {
+          if !matched {
             raise @error.runtime_error(
               "D3110: date/time string does not match picture format",
             )
@@ -772,7 +772,7 @@ fn marker_char_width(marker : String) -> Int? {
       }
     }
     'M' =>
-      if marker.starts_with("MN") {
+      if marker.has_prefix("MN") {
         None // Named month
       } else if marker.contains("i") ||
         marker.contains("A") ||
@@ -787,7 +787,7 @@ fn marker_char_width(marker : String) -> Int? {
     'D' => {
       let has_o = marker.contains("o")
       let has_Ww = marker.contains("Ww")
-      let starts_Dw = marker.starts_with("Dw")
+      let starts_Dw = marker.has_prefix("Dw")
       let has_a = marker.contains("a")
       let has_A = marker.contains("A")
       if has_o || has_Ww || starts_Dw || has_a || has_A {
@@ -881,8 +881,8 @@ fn find_delim_end(chars : Array[Char], start : Int, delim : String?) -> Int {
 ///|
 fn marker_is_optional(marker : String) -> Bool {
   marker == "Z" ||
-  marker.starts_with("Z0") ||
-  marker.starts_with("z") ||
+  marker.has_prefix("Z0") ||
+  marker.has_prefix("z") ||
   marker == "P" ||
   marker == "Pn" ||
   marker == "PN"
@@ -913,12 +913,12 @@ fn extract_marker_value(
         comps.year = Some(parse_word_number(value))
       } else {
         comps.year = parse_int_opt(value)
-        if comps.year.is_empty() {
+        if comps.year is None {
           raise @error.runtime_error("D3110: invalid year")
         }
       }
     'M' =>
-      if marker.starts_with("MN") {
+      if marker.has_prefix("MN") {
         // Named month
         let m = parse_month_name(value)
         comps.month = Some(m)
@@ -927,7 +927,7 @@ fn extract_marker_value(
         comps.month = Some(parse_roman_numeral(value))
       } else {
         comps.month = parse_int_opt(value)
-        if comps.month.is_empty() {
+        if comps.month is None {
           raise @error.runtime_error("D3110: invalid month")
         }
       }
@@ -936,7 +936,7 @@ fn extract_marker_value(
         // Word-ordinal day like "Twelfth", "Twenty-first"
         let d = parse_word_ordinal(value)
         comps.day = Some(d)
-      } else if marker.starts_with("Dw") {
+      } else if marker.has_prefix("Dw") {
         // Word day like "twenty-seven", "twenty-seventh"
         let d = parse_word_number(value)
         comps.day = Some(d)
@@ -946,13 +946,13 @@ fn extract_marker_value(
         comps.day = Some(d)
       } else {
         comps.day = parse_int_opt(value)
-        if comps.day.is_empty() {
+        if comps.day is None {
           raise @error.runtime_error("D3110: invalid day")
         }
       }
     'F' =>
       // Weekday - parse name or number
-      if marker.starts_with("FN") {
+      if marker.has_prefix("FN") {
         let wd = parse_weekday_name(value)
         comps.weekday = Some(wd)
       } else if marker == "F0" || marker == "F1" {
@@ -963,25 +963,25 @@ fn extract_marker_value(
       }
     'H' => {
       comps.hour24 = parse_int_opt(value)
-      if comps.hour24.is_empty() {
+      if comps.hour24 is None {
         raise @error.runtime_error("D3110: invalid hour")
       }
     }
     'h' => {
       comps.hour12 = parse_int_opt(value)
-      if comps.hour12.is_empty() {
+      if comps.hour12 is None {
         raise @error.runtime_error("D3110: invalid hour")
       }
     }
     'm' => {
       comps.minute = parse_int_opt(value)
-      if comps.minute.is_empty() {
+      if comps.minute is None {
         raise @error.runtime_error("D3110: invalid minute")
       }
     }
     's' => {
       comps.second = parse_int_opt(value)
-      if comps.second.is_empty() {
+      if comps.second is None {
         raise @error.runtime_error("D3110: invalid second")
       }
     }
@@ -993,7 +993,7 @@ fn extract_marker_value(
         comps.day_of_year = Some(doy)
       } else {
         comps.day_of_year = parse_int_opt(value)
-        if comps.day_of_year.is_empty() {
+        if comps.day_of_year is None {
           raise @error.runtime_error("D3110: invalid day of year")
         }
       }
@@ -1036,7 +1036,7 @@ fn parse_int_opt(s : String) -> Int? {
   }
   let mut val = 0
   while i < chars.length() {
-    if not(is_digit(chars[i])) {
+    if !is_digit(chars[i]) {
       return None
     }
     val = val * 10 + digit_value(chars[i])
@@ -1053,20 +1053,20 @@ fn parse_int_opt(s : String) -> Int? {
 /// Parse ordinal day like "1st", "21st", "2nd", "3rd", "4th"
 fn parse_ordinal_day(s : String) -> Int raise @error.JsonataError {
   // Strip ordinal suffix
-  let trimmed = s.trim().to_string()
+  let trimmed = s.trim().to_owned()
   if trimmed.length() < 2 {
     raise @error.runtime_error("D3110: invalid ordinal")
   }
   let mut num_end = trimmed.length()
   // Remove trailing ordinal suffix
-  let has_st = trimmed.ends_with("st")
-  let has_nd = trimmed.ends_with("nd")
-  let has_rd = trimmed.ends_with("rd")
-  let has_th = trimmed.ends_with("th")
+  let has_st = trimmed.has_suffix("st")
+  let has_nd = trimmed.has_suffix("nd")
+  let has_rd = trimmed.has_suffix("rd")
+  let has_th = trimmed.has_suffix("th")
   if has_st || has_nd || has_rd || has_th {
     num_end -= 2
   }
-  let num_part = trimmed.substring(start=0, end=num_end).to_string()
+  let num_part = trimmed[:num_end].to_owned()
   match parse_int_opt(num_part) {
     Some(n) => n
     None => raise @error.runtime_error("D3110: invalid ordinal day")
@@ -1131,7 +1131,7 @@ fn parse_fraction_from_string(s : String) -> Int {
 ///|
 /// Parse AM/PM from a string
 fn parse_am_pm(s : String) -> Bool {
-  let lower = s.trim().to_string().to_lower()
+  let lower = s.trim().to_owned().to_lower()
   if lower == "pm" || lower == "p.m." || lower == "p" {
     true
   } else {
@@ -1142,16 +1142,13 @@ fn parse_am_pm(s : String) -> Bool {
 ///|
 /// Parse timezone from picture-extracted value
 fn parse_picture_timezone(s : String) -> Int {
-  let trimmed = s.trim().to_string()
+  let trimmed = s.trim().to_owned()
   if trimmed == "" || trimmed == "Z" || trimmed == "z" {
     return 0
   }
   // Handle GMT±HH:MM or GMT±HHMM or GMT±H
-  if trimmed.starts_with("GMT") {
-    let rest = trimmed
-      .substring(start=3, end=trimmed.length())
-      .trim()
-      .to_string()
+  if trimmed.has_prefix("GMT") {
+    let rest = trimmed[3:].trim().to_owned()
     return parse_tz_offset_body(rest)
   }
   // Handle ±HH:MM or ±HHMM or ±HH
@@ -1215,7 +1212,7 @@ fn parse_word_ordinal(s : String) -> Int raise @error.JsonataError {
 ///|
 /// Parse a Roman numeral string to integer
 fn parse_roman_numeral(s : String) -> Int raise @error.JsonataError {
-  let upper = s.trim().to_string().to_upper()
+  let upper = s.trim().to_owned().to_upper()
   let mut total = 0
   let mut prev = 0
   let chars = upper.to_array()
@@ -1244,16 +1241,16 @@ fn parse_roman_numeral(s : String) -> Int raise @error.JsonataError {
 
 ///|
 /// Parse a word number like "one thousand, nine hundred and eighty-four"
-fn parse_word_number(s : String) -> Int raise @error.JsonataError {
+fn parse_word_number(s : String) -> Int {
   // Clean the input: remove commas, hyphens, "and"
   let lower = s.to_lower()
   let trimmed = lower.trim()
-  let cleaned = trimmed.to_string()
+  let cleaned = trimmed.to_owned()
   // Remove commas, hyphens, and standalone "and"
   let no_commas = cleaned.replace_all(old=",", new="")
   let no_hyphens = no_commas.replace_all(old="-", new=" ")
   let no_and = no_hyphens.replace_all(old=" and ", new=" ")
-  let final_text = no_and.trim().to_string()
+  let final_text = no_and.trim().to_owned()
   let words = split_words(final_text)
 
   // Map of word values
@@ -1335,9 +1332,9 @@ fn parse_word_number(s : String) -> Int raise @error.JsonataError {
 fn strip_ordinal_suffix(w : String) -> String {
   let len = w.length()
   if len > 2 {
-    let suffix = w.substring(start=len - 2, end=len).to_string()
+    let suffix = w[len - 2:].to_owned()
     if suffix == "st" || suffix == "nd" || suffix == "rd" || suffix == "th" {
-      let base = w.substring(start=0, end=len - 2).to_string()
+      let base = w[:len - 2].to_owned()
       let result = ordinal_base_to_cardinal(base)
       // Only accept the stripped version if it's different from input
       // (this prevents false positives like "thousand" -> "thousa")
@@ -1401,7 +1398,7 @@ fn split_words(s : String) -> Array[String] {
       break
     }
     let start = i
-    while i < chars.length() && not(is_whitespace(chars[i])) {
+    while i < chars.length() && !is_whitespace(chars[i]) {
       i += 1
     }
     result.push(chars_to_string(chars, start, i))
@@ -1418,7 +1415,7 @@ fn is_whitespace(c : Char) -> Bool {
 /// Build millis from extracted components
 fn build_date_from_components(
   comps : DateComponents,
-  picture : String,
+  _picture : String,
 ) -> Double raise @error.JsonataError {
   let mut year = 1970
   let mut month = 1
@@ -1604,7 +1601,7 @@ fn parse_iso_millis(s : String) -> Double raise @error.JsonataError {
 }
 
 ///|
-fn parse_compact_date(
+fn _parse_compact_date(
   s : String,
   has_day~ : Bool,
   has_time~ : Bool,
@@ -1666,7 +1663,7 @@ fn millis_from_date_time(
 }
 
 ///|
-fn parse_slash_date(s : String) -> Double raise @error.JsonataError {
+fn _parse_slash_date(s : String) -> Double raise @error.JsonataError {
   let chars = s.to_array()
   let slash1 = find_char(chars, '/', 0)
   let slash2 = find_char(chars, '/', slash1 + 1)
