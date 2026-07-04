@@ -978,7 +978,7 @@ test "解析：排序表达式" {
     ),
   )
   debug_inspect(
-    parse_str("foo^(-price, name)"),
+    parse_str("foo^(>price, name)"),
     content=(
       #|Sort(
       #|  expr=Path(

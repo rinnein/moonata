@@ -747,30 +747,69 @@ fn eval_sort(
   if items.length() <= 1 {
     return input
   }
-  // 预计算排序键
-  let term = terms[0]
-  let keyed : Array[(Double, @value.JsonataValue)] = []
-  for item in items {
-    // 简化：用 item 本身作为排序上下文（实际应对每个 item 求值 term.expr）
-    let v = match item {
-      @value.JsonataValue::Json(Json::Number(n, ..)) => n
-      _ => 0.0
+  // 对每项在上下文中求值排序键，保留原始索引用于稳定排序
+  let keyed : Array[(Array[@value.JsonataValue], Int, @value.JsonataValue)] = []
+  for i, item in items {
+    let keys : Array[@value.JsonataValue] = []
+    for term in terms {
+      let key = ctx.with_context(current=item, parent=input, fn() {
+        eval(term.expr, ctx)
+      })
+      keys.push(key)
     }
-    keyed.push((v, item))
+    keyed.push((keys, i, item))
   }
   keyed.sort_by(fn(a, b) {
-    let (na, _) = a
-    let (nb, _) = b
-    if term.descending {
-      Double::compare(nb, na)
-    } else {
-      Double::compare(na, nb)
-    }
+    let (ka, ia, _) = a
+    let (kb, ib, _) = b
+    let cmp = compare_keys(ka, kb, terms)
+    if cmp != 0 { cmp } else { ia - ib }
   })
   let sorted : Array[@value.JsonataValue] = []
   for kv in keyed {
-    let (_, item) = kv
+    let (_, _, item) = kv
     sorted.push(item)
   }
   @value.JsonataValue::sequence(sorted)
+}
+
+///|
+/// 多键比较：Dictionary order，每个键按方向判别。
+fn compare_keys(
+  ka : Array[@value.JsonataValue],
+  kb : Array[@value.JsonataValue],
+  terms : Array[@ast.SortTerm],
+) -> Int {
+  for i = 0; i < ka.length(); i = i + 1 {
+    let descending = terms[i].descending
+    let cmp = compare_sort_value(ka[i], kb[i])
+    if cmp != 0 {
+      return if descending { -cmp } else { cmp }
+    }
+  }
+  0
+}
+
+///|
+/// 排序值比较：Number 数值比较，String 字典比较，Undefined 排在最后。
+fn compare_sort_value(
+  a : @value.JsonataValue,
+  b : @value.JsonataValue,
+) -> Int {
+  match (a, b) {
+    (@value.JsonataValue::Json(Json::Number(na, ..)),
+    @value.JsonataValue::Json(Json::Number(nb, ..))) => Double::compare(na, nb)
+    (@value.JsonataValue::Json(Json::String(sa)),
+    @value.JsonataValue::Json(Json::String(sb))) => {
+      if sa < sb { -1 } else if sa > sb { 1 } else { 0 }
+    }
+    (@value.JsonataValue::Undefined, @value.JsonataValue::Undefined) => 0
+    (@value.JsonataValue::Undefined, _) => 1   // Undefined 排在最后
+    (_, @value.JsonataValue::Undefined) => -1
+    _ => {
+      let sa = to_str(a)
+      let sb = to_str(b)
+      if sa < sb { -1 } else if sa > sb { 1 } else { 0 }
+    }
+  }
 }

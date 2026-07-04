@@ -102,20 +102,9 @@ fn Parser::parse_fallback(self : Parser) -> @ast.Ast raise @error.JsonataError {
 }
 
 ///|
-/// 排序表达式 `^(term, ...)`：一元后缀。
+/// 排序层：委托给 parse_or（`^()` 在 postfix 层处理）。
 fn Parser::parse_sort(self : Parser) -> @ast.Ast raise @error.JsonataError {
-  let expr = self.parse_or()
-  if self.match_kind(@lexer.TokenKind::Caret) {
-    self.expect(@lexer.TokenKind::LParen, what="'(' for sort")
-    let terms : Array[@ast.SortTerm] = []
-    terms.push(self.parse_sort_term())
-    while self.match_kind(@lexer.TokenKind::Comma) {
-      terms.push(self.parse_sort_term())
-    }
-    self.expect(@lexer.TokenKind::RParen, what="')'")
-    return @ast.Ast::Sort(expr~, terms~)
-  }
-  expr
+  self.parse_or()
 }
 
 ///|
@@ -123,9 +112,10 @@ fn Parser::parse_sort_term(
   self : Parser,
 ) -> @ast.SortTerm raise @error.JsonataError {
   let mut descending = false
-  if self.match_kind(@lexer.TokenKind::Minus) {
+  // JSONata: < = 升序，> = 降序
+  if self.match_kind(@lexer.TokenKind::Gt) {
     descending = true
-  } else if self.match_kind(@lexer.TokenKind::Plus) {
+  } else if self.match_kind(@lexer.TokenKind::Lt) {
     descending = false
   }
   let expr = self.parse_or()
@@ -540,6 +530,18 @@ fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
             stage=@ast.StepStage::Single,
           ),
         )
+      }
+      @lexer.TokenKind::Caret => {
+        // 排序后缀 ^(term, ...)
+        ignore(self.advance())
+        self.expect(@lexer.TokenKind::LParen, what="'(' for sort")
+        let terms : Array[@ast.SortTerm] = []
+        terms.push(self.parse_sort_term())
+        while self.match_kind(@lexer.TokenKind::Comma) {
+          terms.push(self.parse_sort_term())
+        }
+        self.expect(@lexer.TokenKind::RParen, what="')'")
+        expr = @ast.Ast::Sort(expr=expr, terms~)
       }
       _ => break
     }
