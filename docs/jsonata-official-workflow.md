@@ -265,23 +265,33 @@ python3 scripts/jsonata_official_audit.py --json-out /tmp/moonata-jsonata-audit.
 - `skip` 只应因审计口径变化而变化；
 - 若引入回退，必须先修复或记录为已知风险，不能直接提交。
 
-本轮修复完成后，在 `docs/development-plan.md` 和 `.codebuddy/rules/moonata_项目实现指南.mdc` 中同步最新快照。
+本轮修复完成后，在以下文件中同步最新快照：
+
+- `docs/jsonata-official-workflow.md`（本文档，节 4 中的固定快照块）
+- `docs/development-plan.md`
+- `.codebuddy/rules/moonata_项目实现指南.mdc`
+- `README.md` 兼容性状态一栏（pass/fail/skip、通过率、top failures）
 
 ## 11. 提交节奏
 
-每个阶段提交应是可验证里程碑，提交信息使用约定式格式：
+每个阶段提交应是可验证里程碑，提交信息使用约定式格式。**同一个阶段的所有变更（代码 + 快照 + README）合并为一个 commit**，不拆分：
 
 ```text
-fix(functions): align tomillis parsing
-fix(evaluator): preserve parent context in joins
-test(core): add official flattening regressions
-docs: update official jsonata workflow
+fix(functions): align formatNumber scientific notation, +12 pass
+
+- format_scientific: implement e/E scientific notation formatting
+- leading_number_prefix: extract prefix to avoid false E matches
+- format_number_integer_from_double: avoid Int64 overflow for large numbers
+
+Snapshot: eligible 1251 pass 1109 fail 142 skip 431 (88.6%)
 ```
 
 提交前确认：
 
 - 本地门禁全绿；
-- 官方审计快照已更新；
+- 官方审计快照已更新（`docs/jsonata-official-workflow.md`、`.codebuddy/rules/moonata_项目实现指南.mdc`）；
+- `README.md` 兼容性状态一栏已同步更新（pass/fail/skip、通过率、top failures）；
+- **快照更新与 README 更新必须与程序变更在同一个 commit 中提交**，禁止拆分为独立的 "docs: update snapshot" 提交；
 - 本地回归测试覆盖本轮修复；
 - 文档记录了剩余失败最多的 group；
 - 没有把 `/tmp/jsonata-upstream` 或临时审计数据加入仓库。

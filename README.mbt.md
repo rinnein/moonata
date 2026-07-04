@@ -79,27 +79,27 @@ docs: update official test status
 
 ## 兼容性状态
 
-固定快照：2026-07-04，function-sort 兼容性修复阶段。
+固定快照：2026-07-04，parent-operator 解析基础 + formatNumber 科学计数法阶段。
 
 ```text
 本地测试：moon test 174/174
-官方可比对审计：eligible 1251, pass 1084, fail 167, skip 431
-通过率：86.7%
+官方可比对审计：eligible 1251, pass 1109, fail 142, skip 431
+通过率：88.6%
 ```
 
 当前剩余失败最多的官方测试分组：
 
 ```text
-function-tomillis 34
-joins 28
 parent-operator 20
-function-formatNumber 16
-sorting 16
-function-fromMillis 15
-object-constructor 14
-flattening 13
+joins 14
+flattening 12
 transforms 11
-descendent-operator 7
+function-tomillis 10
+hof-map 6
+object-constructor 5
+variables 5
+function-formatNumber 4
+wildcards 4
 ```
 
-官方测试集审计流程与跳过策略记录在 `.codebuddy/rules/moonata_项目实现指南.mdc`。
+官方测试集审计流程与跳过策略记录在 `docs/jsonata-official-workflow.md`。
