@@ -55,6 +55,10 @@ fn Parser::parse_primary(self : Parser) -> @ast.Ast raise @error.JsonataError {
       ignore(self.advance())
       @ast.Ast::Var("#")
     }
+    @lexer.TokenKind::Percent => {
+      ignore(self.advance())
+      @ast.Ast::Path([@ast.parent_step()])
+    }
     @lexer.TokenKind::Ident(name) => {
       ignore(self.advance())
       @ast.Ast::Path([@ast.name_step(name)])

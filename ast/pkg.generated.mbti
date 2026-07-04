@@ -14,6 +14,8 @@ pub fn map_step(Ast) -> Step
 
 pub fn name_step(String, recursive? : Bool) -> Step
 
+pub fn parent_step() -> Step
+
 pub fn wildcard_step(recursive? : Bool) -> Step
 
 // Errors
@@ -68,6 +70,7 @@ pub(all) enum StepKind {
   Map(Ast)
   GroupAggregate(Ast)
   Arrayify
+  Parent
 } derive(Eq, @debug.Debug)
 
 pub(all) enum StepStage {

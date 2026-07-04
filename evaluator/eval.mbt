@@ -104,8 +104,21 @@ fn eval_path_from(
   let mut current = input
   let mut i = start
   let mut name_was_grouped = false
+  // 父级栈：维护路径上非 Parent 步的输入值，用于 % 导航
+  let parent_stack : Array[@value.JsonataValue] = []
   while i < stop_at {
     let step = steps[i]
+    // Parent 步：回到栈顶父级值；栈空时回退到 ctx.parent（Filter/Map 内部场景）
+    if step.kind == @ast.StepKind::Parent {
+      match parent_stack.pop() {
+        Some(p) => current = p
+        None => current = ctx.parent()
+      }
+      i = i + 1
+      continue
+    }
+    // 非 Parent 步：将当前值入栈（作为后续 % 的父级）
+    parent_stack.push(current)
     // 非 focus 步中的 GroupAggregate：对当前元素求值并合并
     if is_aggregate_step(step) {
       return access_group_aggregate(current, agg_ast(step).unwrap(), ctx)
@@ -279,6 +292,7 @@ fn eval_step_single(
     @ast.StepKind::Map(expr) => access_map(input, expr, ctx)
     @ast.StepKind::Arrayify => access_arrayify(input)
     @ast.StepKind::GroupAggregate(_) => input
+    @ast.StepKind::Parent => ctx.parent()
   }
 }
 

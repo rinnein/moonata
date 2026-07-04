@@ -404,6 +404,10 @@ fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
             ignore(self.advance())
             expr = append_step(expr, @ast.wildcard_step())
           }
+          @lexer.TokenKind::Percent => {
+            ignore(self.advance())
+            expr = append_step(expr, @ast.parent_step())
+          }
           @lexer.TokenKind::DoubleStar => {
             ignore(self.advance())
             // 检查 .** 后是否跟 .name 或 ."name"，合并为递归 Name/Wildcard 步
