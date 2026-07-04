@@ -25,7 +25,11 @@ fn Parser::parse_chain(self : Parser) -> @ast.Ast raise @error.JsonataError {
   let mut left = self.parse_bind()
   while self.peek_kind() == @lexer.TokenKind::Arrow {
     ignore(self.advance())
-    let right = self.parse_bind()
+    let right = if self.peek_kind() == @lexer.TokenKind::Pipe {
+      self.parse_transform()
+    } else {
+      self.parse_bind()
+    }
     // 链式：累积为 Chain
     match left {
       @ast.Ast::Chain(stages) => {
@@ -36,6 +40,22 @@ fn Parser::parse_chain(self : Parser) -> @ast.Ast raise @error.JsonataError {
     }
   }
   left
+}
+
+///|
+/// 变换表达式 `| path | update [, delete] |`。
+fn Parser::parse_transform(self : Parser) -> @ast.Ast raise @error.JsonataError {
+  ignore(self.advance()) // consume opening |
+  let path = self.parse_bind()
+  self.expect(@lexer.TokenKind::Pipe, what="|") // separator |
+  let update = self.parse_bind()
+  let mut delete = None
+  if self.peek_kind() == @lexer.TokenKind::Comma {
+    ignore(self.advance())
+    delete = Some(self.parse_bind())
+  }
+  self.expect(@lexer.TokenKind::Pipe, what="|") // closing |
+  @ast.Ast::Transform(path~, update~, delete~)
 }
 
 ///|

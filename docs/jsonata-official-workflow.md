@@ -128,16 +128,16 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-04，formatNumber 科学计数法 + parent-operator 解析基础，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-04，transforms 操作符解析基础，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1109 fail 142 skip 431
+eligible 1251 pass 1110 fail 141 skip 431
 top_failures
 parent-operator 20
 joins 14
 flattening 12
-transforms 11
 function-tomillis 10
+transforms 10
 hof-map 6
 object-constructor 5
 variables 5
@@ -150,15 +150,14 @@ timelimit 7
 bindings 6
 ```
 
-本轮修复（parent-operator 解析 + formatNumber 科学计数法）：
-- 提交：formatNumber 16→4 (-12), 总体 pass 1097→1109 (+12), fail 154→142 (-12), 通过率 87.7%→88.6%
-- 门禁：`moon check` 0e0w, `moon test` 174/174 passed, `moon info` OK，无 .mbti 变更
+本轮修复（transforms 操作符解析基础）：
+- 提交：transforms 0→1 pass (+1), 总体 pass 1109→1110 (+1), fail 142→141 (-1), 通过率 88.5%→88.7%
+- 门禁：`moon check` 0e0w, `moon test` 174/174 passed, `moon info` OK
 - 修复内容：
-  - **parent-operator**: parser 新增 `%` 解析（parse_primary + postfix Dot），evaluator 新增 parent_stack 路径父级栈
-  - 已知限制：% 在 Filter/Map/Group 内部需 per-item parent 跟踪（架构级改动），当前 20 例全为 semantic mismatch
-  - **formatNumber 科学计数法**: format_scientific 完整实现 e/E 格式（mandatory/optional 整数位、无整数部分、指数零填充）
-  - **formatNumber 前缀 + 大数**: leading_number_prefix 提取前缀，format_number_integer 替换为 Double 版避免 Int64 溢出
-  - formatNumber 剩余 4 fail: 自定义零位字符 (case011/034/035) + 正负零子图 (case016)
+  - AST: 新增 `Transform(path, update, delete?)` 节点
+  - Parser: `parse_chain` 检测 `~>` 后 `|` 进入 `parse_transform`，解析 `| path | update [, delete] |`
+  - Evaluator: `eval_chain` 新增 Transform 阶段处理，`eval_transform` 深克隆 + 路径替换基础实现
+  - 已知限制: update 模板在全量上下文求值而非 per-item（导致 multi-level path + array 变换不生效），`nomatch`/`**` 模式未实现
 
 每次更新快照时，同步记录：
 

@@ -23,6 +23,7 @@ pub(all) enum Ast {
   Apply(func~ : Ast, args~ : Array[Ast])
   Chain(Array[Ast])
   Block(Array[Ast])
+  Transform(path~ : Ast, update~ : Ast, delete~ : Ast?)
 } derive(Debug, Eq)
 
 ///|

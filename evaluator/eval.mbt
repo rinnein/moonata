@@ -28,6 +28,8 @@ pub fn eval(
     @ast.Ast::Chain(stages) => eval_chain(stages, ctx)
     @ast.Ast::Group(pairs) => eval_group(pairs, ctx)
     @ast.Ast::Sort(expr~, terms~) => eval_sort(expr, terms, ctx)
+    @ast.Ast::Transform(path~, update~, delete~) =>
+      eval_transform(ctx.current(), path, update, delete, ctx)
   }
 }
 

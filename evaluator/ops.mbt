@@ -600,6 +600,10 @@ fn eval_chain(
           result = eval_chain_apply_stage(result, func, args, ctx)
           continue
         }
+      @ast.Ast::Transform(path~, update~, delete~) => {
+        result = eval_transform(result, path, update, delete, ctx)
+        continue
+      }
       _ => ()
     }
     let stage = eval(stages[i], ctx)
@@ -688,6 +692,234 @@ fn compose_functions(
       invoke~,
     ),
   )
+}
+
+///|
+/// 变换求值：在输入结构中按路径定位并应用更新/删除。
+fn eval_transform(
+  input : @value.JsonataValue,
+  path_ast : @ast.Ast,
+  update_ast : @ast.Ast,
+  delete_ast : @ast.Ast?,
+  ctx : @value.EvalContext,
+) -> @value.JsonataValue raise @error.JsonataError {
+  // 深克隆输入
+  let cloned = deep_clone(input)
+
+  // 计算更新模板（一次性求值）
+  let update_val = eval(update_ast, ctx)
+
+  // 计算删除键（一次性求值）
+  let delete_keys = match delete_ast {
+    Some(d) => {
+      let dval = eval(d, ctx)
+      match dval {
+        @value.JsonataValue::Sequence(arr) => {
+          let keys : Array[String] = []
+          for item in arr {
+            match item {
+              @value.JsonataValue::Json(Json::String(s)) => keys.push(s)
+              _ => continue
+            }
+          }
+          keys
+        }
+        @value.JsonataValue::Json(Json::String(s)) => [s]
+        _ => []
+      }
+    }
+    None => []
+  }
+
+  // 递归在深克隆结构中替换变换匹配项
+  transform_replace(cloned, path_ast, update_val, delete_keys, ctx)
+}
+
+///|
+/// 递归在深克隆结构中替换变换匹配项。
+fn transform_replace(
+  root : @value.JsonataValue,
+  path_ast : @ast.Ast,
+  update_val : @value.JsonataValue,
+  delete_keys : Array[String],
+  ctx : @value.EvalContext,
+) -> @value.JsonataValue raise @error.JsonataError {
+  // 重新计算路径以获取匹配项索引
+  let path_result = ctx.with_context(current=root, parent=root, fn() -> @value.JsonataValue raise @error.JsonataError {
+    eval(path_ast, ctx)
+  })
+  let matches = path_result.to_array()
+  if matches.length() == 0 {
+    return root
+  }
+
+  // 遍历路径步：如果路径是简单的 Path(steps)，则按步逐层定位并替换
+  match path_ast {
+    @ast.Ast::Path(steps) if steps.length() > 0 => {
+      let mut result = root
+      for i = 0; i < steps.length(); i = i + 1 {
+        let step = steps[i]
+        let is_last = i == steps.length() - 1
+        result = transform_replace_step(
+          result, step, is_last, update_val, delete_keys, steps, i, ctx,
+        )
+      }
+      result
+    }
+    _ => root
+  }
+}
+
+///|
+/// 对单个路径步执行深克隆替换。
+fn transform_replace_step(
+  input : @value.JsonataValue,
+  step : @ast.Step,
+  is_last : Bool,
+  update_val : @value.JsonataValue,
+  delete_keys : Array[String],
+  all_steps : Array[@ast.Step],
+  step_idx : Int,
+  ctx : @value.EvalContext,
+) -> @value.JsonataValue raise @error.JsonataError {
+  match (input, step.kind) {
+    (@value.JsonataValue::Json(Json::Array(arr)), _) => {
+      let out : Array[Json] = []
+      for item in arr {
+        let result = transform_replace_step(
+          @value.JsonataValue::Json(item),
+          step,
+          is_last,
+          update_val,
+          delete_keys,
+          all_steps,
+          step_idx,
+          ctx,
+        )
+        let json_val = match result {
+          @value.JsonataValue::Json(j) => j
+          _ => item
+        }
+        out.push(json_val)
+      }
+      @value.JsonataValue::Json(Json::array(out))
+    }
+    (@value.JsonataValue::Sequence(items), _) => {
+      let out : Array[@value.JsonataValue] = []
+      for item in items {
+        let result = transform_replace_step(
+          item, step, is_last, update_val, delete_keys, all_steps, step_idx, ctx,
+        )
+        out.push(result)
+      }
+      @value.JsonataValue::sequence(out)
+    }
+    (@value.JsonataValue::Json(Json::Object(map)), @ast.StepKind::Name(name)) => {
+      let new_map : Map[String, Json] = {}
+      for k, v in map {
+        new_map[k] = v
+      }
+      let name_match = if is_last {
+        let new_val = apply_transform_update(
+          @value.JsonataValue::Json(map.get(name).unwrap_or(Json::null())),
+          update_val,
+          delete_keys,
+        )
+        match new_val {
+          @value.JsonataValue::Json(j) => Some(j)
+          _ => new_map.get(name)
+        }
+      } else {
+        let sub_result = transform_replace_step(
+          @value.JsonataValue::Json(map.get(name).unwrap_or(Json::null())),
+          all_steps[step_idx + 1],
+          step_idx + 1 == all_steps.length() - 1,
+          update_val,
+          delete_keys,
+          all_steps,
+          step_idx + 1,
+          ctx,
+        )
+        match sub_result {
+          @value.JsonataValue::Json(j) => Some(j)
+          _ => new_map.get(name)
+        }
+      }
+      match name_match {
+        Some(j) => new_map.set(name, j)
+        None => ()
+      }
+      @value.JsonataValue::Json(Json::object(new_map))
+    }
+    _ => input
+  }
+}
+
+///|
+/// 对单值应用更新/删除。
+fn apply_transform_update(
+  value : @value.JsonataValue,
+  update_val : @value.JsonataValue,
+  delete_keys : Array[String],
+) -> @value.JsonataValue {
+  match value {
+    @value.JsonataValue::Json(Json::Object(map)) => {
+      let new_map : Map[String, Json] = {}
+      for k, v in map {
+        new_map[k] = v
+      }
+      match update_val {
+        @value.JsonataValue::Json(Json::Object(update_map)) =>
+          for k, v in update_map {
+            new_map[k] = v
+          }
+        _ => ()
+      }
+      for k in delete_keys {
+        new_map.remove(k) |> ignore
+      }
+      @value.JsonataValue::Json(Json::object(new_map))
+    }
+    _ => value
+  }
+}
+
+///|
+/// 深克隆 JsonataValue。
+fn deep_clone(value : @value.JsonataValue) -> @value.JsonataValue {
+  match value {
+    @value.JsonataValue::Json(j) =>
+      @value.JsonataValue::Json(deep_clone_json(j))
+    @value.JsonataValue::Sequence(items) => {
+      let cloned : Array[@value.JsonataValue] = []
+      for item in items {
+        cloned.push(deep_clone(item))
+      }
+      @value.JsonataValue::sequence(cloned)
+    }
+    _ => value
+  }
+}
+
+///|
+fn deep_clone_json(json : Json) -> Json {
+  match json {
+    Json::Object(map) => {
+      let new_map : Map[String, Json] = {}
+      for k, v in map {
+        new_map[k] = deep_clone_json(v)
+      }
+      Json::object(new_map)
+    }
+    Json::Array(arr) => {
+      let new_arr : Array[Json] = []
+      for item in arr {
+        new_arr.push(deep_clone_json(item))
+      }
+      Json::array(new_arr)
+    }
+    _ => json
+  }
 }
 
 ///|
