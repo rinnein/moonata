@@ -128,10 +128,10 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-04，joins/GroupAggregate 兼容性修复阶段，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-04，descendent-operator 兼容性修复阶段，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1044 fail 207 skip 431
+eligible 1251 pass 1052 fail 199 skip 431
 top_failures
 joins 23
 parent-operator 20
@@ -141,8 +141,8 @@ function-fromMillis 15
 flattening 12
 transforms 11
 function-tomillis 10
-descendent-operator 7
 function-sort 6
+hof-map 6
 skip_reasons
 no_result 395
 non-string-expr 23
@@ -150,12 +150,16 @@ timelimit 7
 bindings 6
 ```
 
-本轮修复（joins/GroupAggregate 兼容性 + $string test 修复）：
-- 提交：`fa035bf` feat: implement general date picture parser
+本轮修复（descendent-operator 兼容性）：
+- 提交：descendent-operator 7→0，总体 pass 1044→1052（+8），fail 207→199（-8），通过率 83.5%→84.1%
 - 门禁：`moon check` 0 error，`moon test` 174/174 passed，`moon info` OK
-- pass 1025→1044（+19），fail 226→207（-19），通过率 81.9%→83.5%
-- joins 28→23（-5），flattening 13→12（-1）
-- 修复内容：GroupAggregate 内联处理保留变量绑定、access_map Construct 感知数组展平、to_str Sequence 单例处理、eval_group 恢复 json_for_constructor（加 Sequence 单例提升）
+- 修复内容：
+  - Parser: `"foo"` 在路径上下文中当作字段名（case003/005）
+  - Parser: `.**.name` / `**.Name` 合并为 Name(Recursive)（case000/008/012）
+  - Parser: `** .X [0]` 合并 index 到递归步（case009/013）
+  - Evaluator: replace collect_recursive with depth-first descend_apply
+  - Evaluator: Name/Index 递归步仅对 Object 应用，避免数组展开重复
+  - Evaluator: access_index 对非 Array/Sequence 值返回原值（[0] no‑op）
 
 每次更新快照时，同步记录：
 

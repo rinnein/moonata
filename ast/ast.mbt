@@ -28,11 +28,13 @@ pub(all) enum Ast {
 ///|
 /// 路径步：由种类与阶段（单层/递归）组成。
 /// `focus` 与 `tuple` 由 `@ $var` 标注：focus 绑定变量名，tuple 标记进入 tuple stream 模式。
+/// `index` 仅在 stage=Recursive 时有效：表示 `**.X[idx]` 需对每个匹配项单独索引。
 pub(all) struct Step {
   kind : StepKind
   stage : StepStage
   focus : String?
   tuple : Bool
+  index : Int?
 } derive(Debug, Eq)
 
 ///|
@@ -70,8 +72,9 @@ pub fn Step::new(
   stage~ : StepStage,
   focus? : String? = None,
   tuple? : Bool = false,
+  index? : Int? = None,
 ) -> Step {
-  { kind, stage, focus, tuple }
+  { kind, stage, focus, tuple, index }
 }
 
 ///|

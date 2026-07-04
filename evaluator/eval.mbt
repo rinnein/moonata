@@ -243,53 +243,65 @@ fn eval_step_single(
 }
 
 ///|
-/// 递归步求值（**）
+/// 递归步求值（**）：深度优先遍历，每层先应用步再下降。
 fn eval_step_recursive(
   step : @ast.Step,
   input : @value.JsonataValue,
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
-  let collected : Array[@value.JsonataValue] = []
-  collect_recursive(input, collected)
-  // 对每个收集到的值应用单层步
   let results : Array[@value.JsonataValue] = []
-  for v in collected {
-    let r = eval_step_single(step, v, ctx)
-    match r {
-      @value.JsonataValue::Undefined => continue
-      @value.JsonataValue::Sequence(arr) =>
-        for item in arr {
-          results.push(item)
-        }
-      _ => results.push(r)
-    }
-  }
+  descend_apply(input, step, ctx, results)
   @value.JsonataValue::sequence(results)
 }
 
 ///|
-/// 递归收集所有子值
-fn collect_recursive(
-  input : @value.JsonataValue,
-  out : Array[@value.JsonataValue],
-) -> Unit {
-  out.push(input)
-  match input {
+/// 深度优先下降：对当前节点应用步，再递归进入子节点。
+/// Name/Index 步仅对 Object 应用以避免数组展开与下降重复；
+/// Wildcard/Arrayify 等步对结构类型（Object/Array/Sequence）展开后丢弃容器。
+fn descend_apply(
+  current : @value.JsonataValue,
+  step : @ast.Step,
+  ctx : @value.EvalContext,
+  results : Array[@value.JsonataValue],
+) -> Unit raise @error.JsonataError {
+  // Name/Index 步仅对 Object 应用，避免数组展开与下降元素重复
+  let apply_now : Bool = match step.kind {
+    @ast.StepKind::Name(_) | @ast.StepKind::Index(_) =>
+      match current {
+        @value.JsonataValue::Json(Json::Object(_)) => true
+        _ => false
+      }
+    _ => true // Wildcard / Slice / Filter / Map / Arrayify 等都应用
+  }
+  if apply_now {
+    let r = eval_step_single(step, current, ctx)
+    // 如果步带有 index（来自 **.X[0] 解析合并），对每项单独索引
+    match step.index {
+      Some(idx) =>
+        for item in r.to_array() {
+          let indexed = access_index(item, idx)
+          push_path_result(results, indexed)
+        }
+      None => push_path_result(results, r)
+    }
+  }
+  // 下降进入子节点
+  match current {
     @value.JsonataValue::Json(j) =>
       match j {
         Json::Object(map) =>
           for _, v in map {
-            collect_recursive(@value.JsonataValue::Json(v), out)
+            descend_apply(@value.JsonataValue::Json(v), step, ctx, results)
           }
         Json::Array(arr) =>
           for v in arr {
-            collect_recursive(@value.JsonataValue::Json(v), out)
+            descend_apply(@value.JsonataValue::Json(v), step, ctx, results)
           }
         _ => ()
       }
     @value.JsonataValue::Sequence(arr) =>
       for v in arr {
-        collect_recursive(v, out)
+        descend_apply(v, step, ctx, results)
       }
     _ => ()
   }
@@ -406,7 +418,9 @@ fn access_index(input : @value.JsonataValue, i : Int) -> @value.JsonataValue {
         @value.JsonataValue::Undefined
       }
     }
-    _ => @value.JsonataValue::Undefined
+    @value.JsonataValue::Undefined => @value.JsonataValue::Undefined
+    // Non-array/sequence values: [0] is a no-op (keep as singleton)
+    _ => input
   }
 }
 

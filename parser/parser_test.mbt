@@ -50,7 +50,17 @@ test "解析：标识符路径" {
   debug_inspect(
     parse_str("foo"),
     content=(
-      #|Path([{ kind: Name("foo"), stage: Single, focus: None, tuple: false }])
+      #|Path(
+      #|  [
+      #|    {
+      #|      kind: Name("foo"),
+      #|      stage: Single,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
+      #|    },
+      #|  ],
+      #|)
     ),
   )
   debug_inspect(
@@ -58,8 +68,20 @@ test "解析：标识符路径" {
     content=(
       #|Path(
       #|  [
-      #|    { kind: Name("foo"), stage: Single, focus: None, tuple: false },
-      #|    { kind: Name("bar"), stage: Single, focus: None, tuple: false },
+      #|    {
+      #|      kind: Name("foo"),
+      #|      stage: Single,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
+      #|    },
+      #|    {
+      #|      kind: Name("bar"),
+      #|      stage: Single,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
+      #|    },
       #|  ],
       #|)
     ),
@@ -69,9 +91,27 @@ test "解析：标识符路径" {
     content=(
       #|Path(
       #|  [
-      #|    { kind: Name("foo"), stage: Single, focus: None, tuple: false },
-      #|    { kind: Name("bar"), stage: Single, focus: None, tuple: false },
-      #|    { kind: Name("baz"), stage: Single, focus: None, tuple: false },
+      #|    {
+      #|      kind: Name("foo"),
+      #|      stage: Single,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
+      #|    },
+      #|    {
+      #|      kind: Name("bar"),
+      #|      stage: Single,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
+      #|    },
+      #|    {
+      #|      kind: Name("baz"),
+      #|      stage: Single,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
+      #|    },
       #|  ],
       #|)
     ),
@@ -85,8 +125,20 @@ test "解析：数组下标与切片" {
     content=(
       #|Path(
       #|  [
-      #|    { kind: Name("foo"), stage: Single, focus: None, tuple: false },
-      #|    { kind: Index(0), stage: Single, focus: None, tuple: false },
+      #|    {
+      #|      kind: Name("foo"),
+      #|      stage: Single,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
+      #|    },
+      #|    {
+      #|      kind: Index(0),
+      #|      stage: Single,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
+      #|    },
       #|  ],
       #|)
     ),
@@ -96,12 +148,19 @@ test "解析：数组下标与切片" {
     content=(
       #|Path(
       #|  [
-      #|    { kind: Name("foo"), stage: Single, focus: None, tuple: false },
+      #|    {
+      #|      kind: Name("foo"),
+      #|      stage: Single,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
+      #|    },
       #|    {
       #|      kind: Slice(Some(1), Some(3)),
       #|      stage: Single,
       #|      focus: None,
       #|      tuple: false,
+      #|      index: None,
       #|    },
       #|  ],
       #|)
@@ -112,12 +171,19 @@ test "解析：数组下标与切片" {
     content=(
       #|Path(
       #|  [
-      #|    { kind: Name("foo"), stage: Single, focus: None, tuple: false },
+      #|    {
+      #|      kind: Name("foo"),
+      #|      stage: Single,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
+      #|    },
       #|    {
       #|      kind: Slice(None, Some(3)),
       #|      stage: Single,
       #|      focus: None,
       #|      tuple: false,
+      #|      index: None,
       #|    },
       #|  ],
       #|)
@@ -128,12 +194,19 @@ test "解析：数组下标与切片" {
     content=(
       #|Path(
       #|  [
-      #|    { kind: Name("foo"), stage: Single, focus: None, tuple: false },
+      #|    {
+      #|      kind: Name("foo"),
+      #|      stage: Single,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
+      #|    },
       #|    {
       #|      kind: Slice(Some(1), None),
       #|      stage: Single,
       #|      focus: None,
       #|      tuple: false,
+      #|      index: None,
       #|    },
       #|  ],
       #|)
@@ -148,12 +221,31 @@ test "解析：谓词过滤" {
     content=(
       #|Path(
       #|  [
-      #|    { kind: Name("foo"), stage: Single, focus: None, tuple: false },
       #|    {
-      #|      kind: Filter(Path([{ kind: Name("bar"), stage: Single, focus: None, tuple: false }])),
+      #|      kind: Name("foo"),
       #|      stage: Single,
       #|      focus: None,
       #|      tuple: false,
+      #|      index: None,
+      #|    },
+      #|    {
+      #|      kind: Filter(
+      #|        Path(
+      #|          [
+      #|            {
+      #|              kind: Name("bar"),
+      #|              stage: Single,
+      #|              focus: None,
+      #|              tuple: false,
+      #|              index: None,
+      #|            },
+      #|          ],
+      #|        ),
+      #|      ),
+      #|      stage: Single,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
       #|    },
       #|  ],
       #|)
@@ -164,18 +256,35 @@ test "解析：谓词过滤" {
     content=(
       #|Path(
       #|  [
-      #|    { kind: Name("foo"), stage: Single, focus: None, tuple: false },
+      #|    {
+      #|      kind: Name("foo"),
+      #|      stage: Single,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
+      #|    },
       #|    {
       #|      kind: Filter(
       #|        Binary(
       #|          op=">",
-      #|          lhs=Path([{ kind: Name("price"), stage: Single, focus: None, tuple: false }]),
+      #|          lhs=Path(
+      #|            [
+      #|              {
+      #|                kind: Name("price"),
+      #|                stage: Single,
+      #|                focus: None,
+      #|                tuple: false,
+      #|                index: None,
+      #|              },
+      #|            ],
+      #|          ),
       #|          rhs=Number(10),
       #|        ),
       #|      ),
       #|      stage: Single,
       #|      focus: None,
       #|      tuple: false,
+      #|      index: None,
       #|    },
       #|  ],
       #|)
@@ -190,8 +299,20 @@ test "解析：通配符与递归" {
     content=(
       #|Path(
       #|  [
-      #|    { kind: Name("foo"), stage: Single, focus: None, tuple: false },
-      #|    { kind: Wildcard, stage: Single, focus: None, tuple: false },
+      #|    {
+      #|      kind: Name("foo"),
+      #|      stage: Single,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
+      #|    },
+      #|    {
+      #|      kind: Wildcard,
+      #|      stage: Single,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
+      #|    },
       #|  ],
       #|)
     ),
@@ -201,8 +322,20 @@ test "解析：通配符与递归" {
     content=(
       #|Path(
       #|  [
-      #|    { kind: Name("foo"), stage: Single, focus: None, tuple: false },
-      #|    { kind: Wildcard, stage: Recursive, focus: None, tuple: false },
+      #|    {
+      #|      kind: Name("foo"),
+      #|      stage: Single,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
+      #|    },
+      #|    {
+      #|      kind: Wildcard,
+      #|      stage: Recursive,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
+      #|    },
       #|  ],
       #|)
     ),
@@ -212,8 +345,20 @@ test "解析：通配符与递归" {
     content=(
       #|Path(
       #|  [
-      #|    { kind: Name("foo"), stage: Single, focus: None, tuple: false },
-      #|    { kind: Wildcard, stage: Recursive, focus: None, tuple: false },
+      #|    {
+      #|      kind: Name("foo"),
+      #|      stage: Single,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
+      #|    },
+      #|    {
+      #|      kind: Wildcard,
+      #|      stage: Recursive,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
+      #|    },
       #|  ],
       #|)
     ),
@@ -221,7 +366,17 @@ test "解析：通配符与递归" {
   debug_inspect(
     parse_str("**"),
     content=(
-      #|Path([{ kind: Wildcard, stage: Recursive, focus: None, tuple: false }])
+      #|Path(
+      #|  [
+      #|    {
+      #|      kind: Wildcard,
+      #|      stage: Recursive,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
+      #|    },
+      #|  ],
+      #|)
     ),
   )
 }
@@ -273,8 +428,28 @@ test "解析：比较与逻辑" {
     content=(
       #|Binary(
       #|  op="=",
-      #|  lhs=Path([{ kind: Name("a"), stage: Single, focus: None, tuple: false }]),
-      #|  rhs=Path([{ kind: Name("b"), stage: Single, focus: None, tuple: false }]),
+      #|  lhs=Path(
+      #|    [
+      #|      {
+      #|        kind: Name("a"),
+      #|        stage: Single,
+      #|        focus: None,
+      #|        tuple: false,
+      #|        index: None,
+      #|      },
+      #|    ],
+      #|  ),
+      #|  rhs=Path(
+      #|    [
+      #|      {
+      #|        kind: Name("b"),
+      #|        stage: Single,
+      #|        focus: None,
+      #|        tuple: false,
+      #|        index: None,
+      #|      },
+      #|    ],
+      #|  ),
       #|)
     ),
   )
@@ -283,8 +458,28 @@ test "解析：比较与逻辑" {
     content=(
       #|Binary(
       #|  op="!=",
-      #|  lhs=Path([{ kind: Name("a"), stage: Single, focus: None, tuple: false }]),
-      #|  rhs=Path([{ kind: Name("b"), stage: Single, focus: None, tuple: false }]),
+      #|  lhs=Path(
+      #|    [
+      #|      {
+      #|        kind: Name("a"),
+      #|        stage: Single,
+      #|        focus: None,
+      #|        tuple: false,
+      #|        index: None,
+      #|      },
+      #|    ],
+      #|  ),
+      #|  rhs=Path(
+      #|    [
+      #|      {
+      #|        kind: Name("b"),
+      #|        stage: Single,
+      #|        focus: None,
+      #|        tuple: false,
+      #|        index: None,
+      #|      },
+      #|    ],
+      #|  ),
       #|)
     ),
   )
@@ -295,13 +490,53 @@ test "解析：比较与逻辑" {
       #|  op="&&",
       #|  lhs=Binary(
       #|    op="<",
-      #|    lhs=Path([{ kind: Name("a"), stage: Single, focus: None, tuple: false }]),
-      #|    rhs=Path([{ kind: Name("b"), stage: Single, focus: None, tuple: false }]),
+      #|    lhs=Path(
+      #|      [
+      #|        {
+      #|          kind: Name("a"),
+      #|          stage: Single,
+      #|          focus: None,
+      #|          tuple: false,
+      #|          index: None,
+      #|        },
+      #|      ],
+      #|    ),
+      #|    rhs=Path(
+      #|      [
+      #|        {
+      #|          kind: Name("b"),
+      #|          stage: Single,
+      #|          focus: None,
+      #|          tuple: false,
+      #|          index: None,
+      #|        },
+      #|      ],
+      #|    ),
       #|  ),
       #|  rhs=Binary(
       #|    op="<",
-      #|    lhs=Path([{ kind: Name("b"), stage: Single, focus: None, tuple: false }]),
-      #|    rhs=Path([{ kind: Name("c"), stage: Single, focus: None, tuple: false }]),
+      #|    lhs=Path(
+      #|      [
+      #|        {
+      #|          kind: Name("b"),
+      #|          stage: Single,
+      #|          focus: None,
+      #|          tuple: false,
+      #|          index: None,
+      #|        },
+      #|      ],
+      #|    ),
+      #|    rhs=Path(
+      #|      [
+      #|        {
+      #|          kind: Name("c"),
+      #|          stage: Single,
+      #|          focus: None,
+      #|          tuple: false,
+      #|          index: None,
+      #|        },
+      #|      ],
+      #|    ),
       #|  ),
       #|)
     ),
@@ -311,8 +546,28 @@ test "解析：比较与逻辑" {
     content=(
       #|Binary(
       #|  op="||",
-      #|  lhs=Path([{ kind: Name("a"), stage: Single, focus: None, tuple: false }]),
-      #|  rhs=Path([{ kind: Name("b"), stage: Single, focus: None, tuple: false }]),
+      #|  lhs=Path(
+      #|    [
+      #|      {
+      #|        kind: Name("a"),
+      #|        stage: Single,
+      #|        focus: None,
+      #|        tuple: false,
+      #|        index: None,
+      #|      },
+      #|    ],
+      #|  ),
+      #|  rhs=Path(
+      #|    [
+      #|      {
+      #|        kind: Name("b"),
+      #|        stage: Single,
+      #|        focus: None,
+      #|        tuple: false,
+      #|        index: None,
+      #|      },
+      #|    ],
+      #|  ),
       #|)
     ),
   )
@@ -326,7 +581,17 @@ test "解析：字符串拼接" {
       #|Binary(
       #|  op="&",
       #|  lhs=String("Hello"),
-      #|  rhs=Path([{ kind: Name("name"), stage: Single, focus: None, tuple: false }]),
+      #|  rhs=Path(
+      #|    [
+      #|      {
+      #|        kind: Name("name"),
+      #|        stage: Single,
+      #|        focus: None,
+      #|        tuple: false,
+      #|        index: None,
+      #|      },
+      #|    ],
+      #|  ),
       #|)
     ),
   )
@@ -351,11 +616,33 @@ test "解析：序列构造" {
     content=(
       #|Construct(
       #|  [
-      #|    Path([{ kind: Name("foo"), stage: Single, focus: None, tuple: false }]),
       #|    Path(
       #|      [
-      #|        { kind: Name("bar"), stage: Single, focus: None, tuple: false },
-      #|        { kind: Name("baz"), stage: Single, focus: None, tuple: false },
+      #|        {
+      #|          kind: Name("foo"),
+      #|          stage: Single,
+      #|          focus: None,
+      #|          tuple: false,
+      #|          index: None,
+      #|        },
+      #|      ],
+      #|    ),
+      #|    Path(
+      #|      [
+      #|        {
+      #|          kind: Name("bar"),
+      #|          stage: Single,
+      #|          focus: None,
+      #|          tuple: false,
+      #|          index: None,
+      #|        },
+      #|        {
+      #|          kind: Name("baz"),
+      #|          stage: Single,
+      #|          focus: None,
+      #|          tuple: false,
+      #|          index: None,
+      #|        },
       #|      ],
       #|    ),
       #|  ],
@@ -378,16 +665,48 @@ test "解析：分组表达式" {
       #|Group(
       #|  [
       #|    (
-      #|      Path([{ kind: Name("name"), stage: Single, focus: None, tuple: false }]),
       #|      Path(
       #|        [
-      #|          { kind: Name("foo"), stage: Single, focus: None, tuple: false },
-      #|          { kind: Name("bar"), stage: Single, focus: None, tuple: false },
+      #|          {
+      #|            kind: Name("name"),
+      #|            stage: Single,
+      #|            focus: None,
+      #|            tuple: false,
+      #|            index: None,
+      #|          },
+      #|        ],
+      #|      ),
+      #|      Path(
+      #|        [
+      #|          {
+      #|            kind: Name("foo"),
+      #|            stage: Single,
+      #|            focus: None,
+      #|            tuple: false,
+      #|            index: None,
+      #|          },
+      #|          {
+      #|            kind: Name("bar"),
+      #|            stage: Single,
+      #|            focus: None,
+      #|            tuple: false,
+      #|            index: None,
+      #|          },
       #|        ],
       #|      ),
       #|    ),
       #|    (
-      #|      Path([{ kind: Name("age"), stage: Single, focus: None, tuple: false }]),
+      #|      Path(
+      #|        [
+      #|          {
+      #|            kind: Name("age"),
+      #|            stage: Single,
+      #|            focus: None,
+      #|            tuple: false,
+      #|            index: None,
+      #|          },
+      #|        ],
+      #|      ),
       #|      Number(30),
       #|    ),
       #|  ],
@@ -461,7 +780,17 @@ test "解析：函数调用" {
       #|Apply(
       #|  func=Var("map"),
       #|  args=[
-      #|    Path([{ kind: Name("data"), stage: Single, focus: None, tuple: false }]),
+      #|    Path(
+      #|      [
+      #|        {
+      #|          kind: Name("data"),
+      #|          stage: Single,
+      #|          focus: None,
+      #|          tuple: false,
+      #|          index: None,
+      #|        },
+      #|      ],
+      #|    ),
       #|    Lambda(
       #|      params=["x"],
       #|      body=Binary(op="*", lhs=Var("x"), rhs=Number(2)),
@@ -511,6 +840,7 @@ test "解析：Lambda" {
       #|      stage: Single,
       #|      focus: None,
       #|      tuple: false,
+      #|      index: None,
       #|    },
       #|    {
       #|      kind: Map(
@@ -526,6 +856,7 @@ test "解析：Lambda" {
       #|      stage: Single,
       #|      focus: None,
       #|      tuple: false,
+      #|      index: None,
       #|    },
       #|  ],
       #|)
@@ -540,8 +871,28 @@ test "解析：函数链" {
     content=(
       #|Chain(
       #|  [
-      #|    Path([{ kind: Name("foo"), stage: Single, focus: None, tuple: false }]),
-      #|    Path([{ kind: Name("bar"), stage: Single, focus: None, tuple: false }]),
+      #|    Path(
+      #|      [
+      #|        {
+      #|          kind: Name("foo"),
+      #|          stage: Single,
+      #|          focus: None,
+      #|          tuple: false,
+      #|          index: None,
+      #|        },
+      #|      ],
+      #|    ),
+      #|    Path(
+      #|      [
+      #|        {
+      #|          kind: Name("bar"),
+      #|          stage: Single,
+      #|          focus: None,
+      #|          tuple: false,
+      #|          index: None,
+      #|        },
+      #|      ],
+      #|    ),
       #|  ],
       #|)
     ),
@@ -551,9 +902,39 @@ test "解析：函数链" {
     content=(
       #|Chain(
       #|  [
-      #|    Path([{ kind: Name("foo"), stage: Single, focus: None, tuple: false }]),
-      #|    Path([{ kind: Name("bar"), stage: Single, focus: None, tuple: false }]),
-      #|    Path([{ kind: Name("baz"), stage: Single, focus: None, tuple: false }]),
+      #|    Path(
+      #|      [
+      #|        {
+      #|          kind: Name("foo"),
+      #|          stage: Single,
+      #|          focus: None,
+      #|          tuple: false,
+      #|          index: None,
+      #|        },
+      #|      ],
+      #|    ),
+      #|    Path(
+      #|      [
+      #|        {
+      #|          kind: Name("bar"),
+      #|          stage: Single,
+      #|          focus: None,
+      #|          tuple: false,
+      #|          index: None,
+      #|        },
+      #|      ],
+      #|    ),
+      #|    Path(
+      #|      [
+      #|        {
+      #|          kind: Name("baz"),
+      #|          stage: Single,
+      #|          focus: None,
+      #|          tuple: false,
+      #|          index: None,
+      #|        },
+      #|      ],
+      #|    ),
       #|  ],
       #|)
     ),
@@ -566,10 +947,30 @@ test "解析：排序表达式" {
     parse_str("foo^(name)"),
     content=(
       #|Sort(
-      #|  expr=Path([{ kind: Name("foo"), stage: Single, focus: None, tuple: false }]),
+      #|  expr=Path(
+      #|    [
+      #|      {
+      #|        kind: Name("foo"),
+      #|        stage: Single,
+      #|        focus: None,
+      #|        tuple: false,
+      #|        index: None,
+      #|      },
+      #|    ],
+      #|  ),
       #|  terms=[
       #|    {
-      #|      expr: Path([{ kind: Name("name"), stage: Single, focus: None, tuple: false }]),
+      #|      expr: Path(
+      #|        [
+      #|          {
+      #|            kind: Name("name"),
+      #|            stage: Single,
+      #|            focus: None,
+      #|            tuple: false,
+      #|            index: None,
+      #|          },
+      #|        ],
+      #|      ),
       #|      descending: false,
       #|    },
       #|  ],
@@ -580,14 +981,44 @@ test "解析：排序表达式" {
     parse_str("foo^(-price, name)"),
     content=(
       #|Sort(
-      #|  expr=Path([{ kind: Name("foo"), stage: Single, focus: None, tuple: false }]),
+      #|  expr=Path(
+      #|    [
+      #|      {
+      #|        kind: Name("foo"),
+      #|        stage: Single,
+      #|        focus: None,
+      #|        tuple: false,
+      #|        index: None,
+      #|      },
+      #|    ],
+      #|  ),
       #|  terms=[
       #|    {
-      #|      expr: Path([{ kind: Name("price"), stage: Single, focus: None, tuple: false }]),
+      #|      expr: Path(
+      #|        [
+      #|          {
+      #|            kind: Name("price"),
+      #|            stage: Single,
+      #|            focus: None,
+      #|            tuple: false,
+      #|            index: None,
+      #|          },
+      #|        ],
+      #|      ),
       #|      descending: true,
       #|    },
       #|    {
-      #|      expr: Path([{ kind: Name("name"), stage: Single, focus: None, tuple: false }]),
+      #|      expr: Path(
+      #|        [
+      #|          {
+      #|            kind: Name("name"),
+      #|            stage: Single,
+      #|            focus: None,
+      #|            tuple: false,
+      #|            index: None,
+      #|          },
+      #|        ],
+      #|      ),
       #|      descending: false,
       #|    },
       #|  ],
@@ -644,7 +1075,17 @@ test "解析：in 运算符" {
       #|Binary(
       #|  op="in",
       #|  lhs=String("hello"),
-      #|  rhs=Path([{ kind: Name("names"), stage: Single, focus: None, tuple: false }]),
+      #|  rhs=Path(
+      #|    [
+      #|      {
+      #|        kind: Name("names"),
+      #|        stage: Single,
+      #|        focus: None,
+      #|        tuple: false,
+      #|        index: None,
+      #|      },
+      #|    ],
+      #|  ),
       #|)
     ),
   )
@@ -653,8 +1094,28 @@ test "解析：in 运算符" {
     content=(
       #|Binary(
       #|  op="in",
-      #|  lhs=Path([{ kind: Name("in"), stage: Single, focus: None, tuple: false }]),
-      #|  rhs=Path([{ kind: Name("names"), stage: Single, focus: None, tuple: false }]),
+      #|  lhs=Path(
+      #|    [
+      #|      {
+      #|        kind: Name("in"),
+      #|        stage: Single,
+      #|        focus: None,
+      #|        tuple: false,
+      #|        index: None,
+      #|      },
+      #|    ],
+      #|  ),
+      #|  rhs=Path(
+      #|    [
+      #|      {
+      #|        kind: Name("names"),
+      #|        stage: Single,
+      #|        focus: None,
+      #|        tuple: false,
+      #|        index: None,
+      #|      },
+      #|    ],
+      #|  ),
       #|)
     ),
   )

@@ -275,9 +275,86 @@ fn Parser::parse_unary(self : Parser) -> @ast.Ast raise @error.JsonataError {
 
 ///|
 /// 后缀：函数调用、路径步、过滤
+fn is_path_postfix_kind(kind : @lexer.TokenKind) -> Bool {
+  match kind {
+    @lexer.TokenKind::Dot
+    | @lexer.TokenKind::DotStar
+    | @lexer.TokenKind::DoubleStar
+    | @lexer.TokenKind::At
+    | @lexer.TokenKind::LBracket
+    | @lexer.TokenKind::LBrace
+    | @lexer.TokenKind::LParen => true
+    _ => false
+  }
+}
+
+///|
+/// 后缀：函数调用、路径步、过滤
 fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
   let mut expr = self.parse_primary()
+  // 路径上下文中的裸字符串 → 字段名
+  if is_path_postfix_kind(self.peek_kind()) {
+    match expr {
+      @ast.Ast::String(name) => expr = @ast.Ast::Path([@ast.name_step(name)])
+      _ => ()
+    }
+  }
   for ;; {
+    // 合并 `** .Name` → Name(Recursive)
+    if self.peek_kind() == @lexer.TokenKind::Dot {
+      let should_merge = match expr {
+        @ast.Ast::Path(steps) if steps.length() > 0 => {
+          let last = steps[steps.length() - 1]
+          last.stage == @ast.StepStage::Recursive &&
+          last.kind == @ast.StepKind::Wildcard
+        }
+        _ => false
+      }
+      if should_merge {
+        ignore(self.advance()) // Dot
+        match self.peek_kind() {
+          @lexer.TokenKind::Ident(_) => {
+            let name = match self.advance().kind {
+              @lexer.TokenKind::Ident(n) => n
+              _ => abort("unreachable")
+            }
+            let mut step = @ast.name_step(name, recursive=true)
+            match self.try_absorb_index_0() {
+              Some(idx) => step = with_index(step, idx)
+              None => ()
+            }
+            match expr {
+              @ast.Ast::Path(steps) => {
+                ignore(steps.pop())
+                steps.push(step)
+              }
+              _ => abort("unreachable")
+            }
+            continue
+          }
+          @lexer.TokenKind::String(_) => {
+            let name = match self.advance().kind {
+              @lexer.TokenKind::String(n) => n
+              _ => abort("unreachable")
+            }
+            let mut step = @ast.name_step(name, recursive=true)
+            match self.try_absorb_index_0() {
+              Some(idx) => step = with_index(step, idx)
+              None => ()
+            }
+            match expr {
+              @ast.Ast::Path(steps) => {
+                ignore(steps.pop())
+                steps.push(step)
+              }
+              _ => abort("unreachable")
+            }
+            continue
+          }
+          _ => ()
+        }
+      }
+    }
     match self.peek_kind() {
       @lexer.TokenKind::Dot => {
         ignore(self.advance())
@@ -339,7 +416,44 @@ fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
           }
           @lexer.TokenKind::DoubleStar => {
             ignore(self.advance())
-            expr = append_step(expr, @ast.wildcard_step(recursive=true))
+            // 检查 .** 后是否跟 .name 或 ."name"，合并为递归 Name/Wildcard 步
+            if self.peek_kind() == @lexer.TokenKind::Dot {
+              ignore(self.advance())
+              match self.peek_kind() {
+                @lexer.TokenKind::Ident(_) => {
+                  let name = match self.advance().kind {
+                    @lexer.TokenKind::Ident(n) => n
+                    _ => abort("unreachable")
+                  }
+                  let mut step = @ast.name_step(name, recursive=true)
+                  match self.try_absorb_index_0() {
+                    Some(idx) => step = with_index(step, idx)
+                    None => ()
+                  }
+                  expr = append_step(expr, step)
+                }
+                @lexer.TokenKind::String(_) => {
+                  let name = match self.advance().kind {
+                    @lexer.TokenKind::String(n) => n
+                    _ => abort("unreachable")
+                  }
+                  let mut step = @ast.name_step(name, recursive=true)
+                  match self.try_absorb_index_0() {
+                    Some(idx) => step = with_index(step, idx)
+                    None => ()
+                  }
+                  expr = append_step(expr, step)
+                }
+                @lexer.TokenKind::Star => {
+                  ignore(self.advance())
+                  expr = append_step(expr, @ast.wildcard_step(recursive=true))
+                }
+                _ =>
+                  expr = append_step(expr, @ast.wildcard_step(recursive=true))
+              }
+            } else {
+              expr = append_step(expr, @ast.wildcard_step(recursive=true))
+            }
           }
           _ =>
             raise @error.syntax_error(
@@ -363,7 +477,12 @@ fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
               @lexer.TokenKind::Ident(n) => n
               _ => abort("unreachable")
             }
-            expr = append_step(expr, @ast.name_step(name, recursive=true))
+            let mut step = @ast.name_step(name, recursive=true)
+            match self.try_absorb_index_0() {
+              Some(idx) => step = with_index(step, idx)
+              None => ()
+            }
+            expr = append_step(expr, step)
           }
           @lexer.TokenKind::Star => {
             ignore(self.advance())
@@ -538,6 +657,40 @@ fn append_step(target : @ast.Ast, step : @ast.Step) -> @ast.Ast {
     }
     _ => @ast.Ast::Path([@ast.eval_step(target), step])
   }
+}
+
+///|
+/// 若当前 token 是 `[0]`，则吸收并返回 Some(0)，否则不消费且返回 None。
+fn Parser::try_absorb_index_0(self : Parser) -> Int? {
+  if self.peek_kind() != @lexer.TokenKind::LBracket {
+    return None
+  }
+  let saved = self.pos
+  ignore(self.advance()) // [
+  match self.peek_kind() {
+    @lexer.TokenKind::Number(n) if n == 0.0 => {
+      ignore(self.advance()) // 0
+      if self.peek_kind() == @lexer.TokenKind::RBracket {
+        ignore(self.advance()) // ]
+        return Some(0)
+      }
+    }
+    _ => ()
+  }
+  self.pos = saved
+  None
+}
+
+///|
+/// 用 step 的 index 字段创建一个新步（保持其他字段不变）。
+fn with_index(step : @ast.Step, idx : Int) -> @ast.Step {
+  @ast.Step::new(
+    kind=step.kind,
+    stage=step.stage,
+    focus=step.focus,
+    tuple=step.tuple,
+    index=Some(idx),
+  )
 }
 
 ///|

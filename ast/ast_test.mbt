@@ -23,8 +23,20 @@ test "Ast 路径构造与相等" {
     content=(
       #|Path(
       #|  [
-      #|    { kind: Name("foo"), stage: Single, focus: None, tuple: false },
-      #|    { kind: Name("bar"), stage: Single, focus: None, tuple: false },
+      #|    {
+      #|      kind: Name("foo"),
+      #|      stage: Single,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
+      #|    },
+      #|    {
+      #|      kind: Name("bar"),
+      #|      stage: Single,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
+      #|    },
       #|  ],
       #|)
     ),
@@ -50,22 +62,54 @@ test "Ast 路径步种类" {
     content=(
       #|Path(
       #|  [
-      #|    { kind: Name("a"), stage: Single, focus: None, tuple: false },
-      #|    { kind: Wildcard, stage: Single, focus: None, tuple: false },
-      #|    { kind: Wildcard, stage: Recursive, focus: None, tuple: false },
-      #|    { kind: Name("b"), stage: Recursive, focus: None, tuple: false },
-      #|    { kind: Index(0), stage: Single, focus: None, tuple: false },
+      #|    {
+      #|      kind: Name("a"),
+      #|      stage: Single,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
+      #|    },
+      #|    {
+      #|      kind: Wildcard,
+      #|      stage: Single,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
+      #|    },
+      #|    {
+      #|      kind: Wildcard,
+      #|      stage: Recursive,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
+      #|    },
+      #|    {
+      #|      kind: Name("b"),
+      #|      stage: Recursive,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
+      #|    },
+      #|    {
+      #|      kind: Index(0),
+      #|      stage: Single,
+      #|      focus: None,
+      #|      tuple: false,
+      #|      index: None,
+      #|    },
       #|    {
       #|      kind: Slice(Some(1), None),
       #|      stage: Single,
       #|      focus: None,
       #|      tuple: false,
+      #|      index: None,
       #|    },
       #|    {
       #|      kind: Filter(Boolean(true)),
       #|      stage: Single,
       #|      focus: None,
       #|      tuple: false,
+      #|      index: None,
       #|    },
       #|  ],
       #|)
@@ -120,10 +164,30 @@ test "Ast 表达式节点构造" {
     sort,
     content=(
       #|Sort(
-      #|  expr=Path([{ kind: Name("x"), stage: Single, focus: None, tuple: false }]),
+      #|  expr=Path(
+      #|    [
+      #|      {
+      #|        kind: Name("x"),
+      #|        stage: Single,
+      #|        focus: None,
+      #|        tuple: false,
+      #|        index: None,
+      #|      },
+      #|    ],
+      #|  ),
       #|  terms=[
       #|    {
-      #|      expr: Path([{ kind: Name("y"), stage: Single, focus: None, tuple: false }]),
+      #|      expr: Path(
+      #|        [
+      #|          {
+      #|            kind: Name("y"),
+      #|            stage: Single,
+      #|            focus: None,
+      #|            tuple: false,
+      #|            index: None,
+      #|          },
+      #|        ],
+      #|      ),
       #|      descending: false,
       #|    },
       #|  ],
@@ -135,7 +199,17 @@ test "Ast 表达式节点构造" {
     content=(
       #|Lambda(
       #|  params=["a", "b"],
-      #|  body=Path([{ kind: Name("a"), stage: Single, focus: None, tuple: false }]),
+      #|  body=Path(
+      #|    [
+      #|      {
+      #|        kind: Name("a"),
+      #|        stage: Single,
+      #|        focus: None,
+      #|        tuple: false,
+      #|        index: None,
+      #|      },
+      #|    ],
+      #|  ),
       #|  signature=None,
       #|)
     ),

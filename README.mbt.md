@@ -79,12 +79,12 @@ docs: update official test status
 
 ## 兼容性状态
 
-固定快照：2026-07-04，joins/GroupAggregate 兼容性修复阶段。
+固定快照：2026-07-04，descendent-operator 兼容性修复阶段。
 
 ```text
 本地测试：moon test 174/174
-官方可比对审计：eligible 1251, pass 1044, fail 207, skip 431
-通过率：83.5%
+官方可比对审计：eligible 1251, pass 1052, fail 199, skip 431
+通过率：84.1%
 ```
 
 当前剩余失败最多的官方测试分组：
