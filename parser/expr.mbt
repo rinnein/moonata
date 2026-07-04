@@ -515,6 +515,43 @@ fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
           _ => expr = @ast.Ast::Path([@ast.eval_step(expr)])
         }
       }
+      @lexer.TokenKind::Hash => {
+        ignore(self.advance())
+        let pos_name = match self.peek_kind() {
+          @lexer.TokenKind::Var(name) => {
+            ignore(self.advance())
+            name
+          }
+          _ =>
+            raise @error.syntax_error(
+              "# 后期望 $name",
+              position=Some(self.peek().pos),
+              token=Some(debug_tok(self.peek())),
+            )
+        }
+        // 标注当前路径最后一个步的 pos_var（位置索引绑定）
+        match expr {
+          @ast.Ast::Path(steps) if steps.length() > 0 => {
+            let last = steps[steps.length() - 1]
+            steps[steps.length() - 1] = @ast.Step::new(
+              kind=last.kind,
+              stage=last.stage,
+              focus=last.focus,
+              tuple=last.tuple,
+              index=last.index,
+              pos_var=Some(pos_name),
+            )
+          }
+          _ => {
+            let step = @ast.Step::new(
+              kind=@ast.StepKind::Eval(expr),
+              stage=@ast.StepStage::Single,
+              pos_var=Some(pos_name),
+            )
+            expr = @ast.Ast::Path([step])
+          }
+        }
+      }
       @lexer.TokenKind::LBracket => expr = self.parse_bracket_access(expr)
       @lexer.TokenKind::LParen =>
         // 函数调用

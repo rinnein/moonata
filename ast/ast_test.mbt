@@ -29,6 +29,7 @@ test "Ast 路径构造与相等" {
       #|      focus: None,
       #|      tuple: false,
       #|      index: None,
+      #|      pos_var: None,
       #|    },
       #|    {
       #|      kind: Name("bar"),
@@ -36,6 +37,7 @@ test "Ast 路径构造与相等" {
       #|      focus: None,
       #|      tuple: false,
       #|      index: None,
+      #|      pos_var: None,
       #|    },
       #|  ],
       #|)
@@ -68,6 +70,7 @@ test "Ast 路径步种类" {
       #|      focus: None,
       #|      tuple: false,
       #|      index: None,
+      #|      pos_var: None,
       #|    },
       #|    {
       #|      kind: Wildcard,
@@ -75,6 +78,7 @@ test "Ast 路径步种类" {
       #|      focus: None,
       #|      tuple: false,
       #|      index: None,
+      #|      pos_var: None,
       #|    },
       #|    {
       #|      kind: Wildcard,
@@ -82,6 +86,7 @@ test "Ast 路径步种类" {
       #|      focus: None,
       #|      tuple: false,
       #|      index: None,
+      #|      pos_var: None,
       #|    },
       #|    {
       #|      kind: Name("b"),
@@ -89,6 +94,7 @@ test "Ast 路径步种类" {
       #|      focus: None,
       #|      tuple: false,
       #|      index: None,
+      #|      pos_var: None,
       #|    },
       #|    {
       #|      kind: Index(0),
@@ -96,6 +102,7 @@ test "Ast 路径步种类" {
       #|      focus: None,
       #|      tuple: false,
       #|      index: None,
+      #|      pos_var: None,
       #|    },
       #|    {
       #|      kind: Slice(Some(1), None),
@@ -103,6 +110,7 @@ test "Ast 路径步种类" {
       #|      focus: None,
       #|      tuple: false,
       #|      index: None,
+      #|      pos_var: None,
       #|    },
       #|    {
       #|      kind: Filter(Boolean(true)),
@@ -110,6 +118,7 @@ test "Ast 路径步种类" {
       #|      focus: None,
       #|      tuple: false,
       #|      index: None,
+      #|      pos_var: None,
       #|    },
       #|  ],
       #|)
@@ -172,6 +181,7 @@ test "Ast 表达式节点构造" {
       #|        focus: None,
       #|        tuple: false,
       #|        index: None,
+      #|        pos_var: None,
       #|      },
       #|    ],
       #|  ),
@@ -185,6 +195,7 @@ test "Ast 表达式节点构造" {
       #|            focus: None,
       #|            tuple: false,
       #|            index: None,
+      #|            pos_var: None,
       #|          },
       #|        ],
       #|      ),
@@ -207,6 +218,7 @@ test "Ast 表达式节点构造" {
       #|        focus: None,
       #|        tuple: false,
       #|        index: None,
+      #|        pos_var: None,
       #|      },
       #|    ],
       #|  ),

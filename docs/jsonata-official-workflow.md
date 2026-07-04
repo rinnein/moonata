@@ -128,14 +128,14 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-04，simple-array-selectors 兼容性修复，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-04，#$pos 位置变量绑定，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1089 fail 162 skip 431
+eligible 1251 pass 1097 fail 154 skip 431
 top_failures
-joins 22
 parent-operator 20
 function-formatNumber 16
+joins 14
 flattening 12
 transforms 11
 function-tomillis 10
@@ -150,17 +150,15 @@ timelimit 7
 bindings 6
 ```
 
-本轮修复（$sort natural sort + comparator + string comparison fix）：
-- 提交：function-sort 6→2，总体 pass 1080→1084 (+4), fail 171→167 (-4), 通过率 86.3%→86.7%
-- 门禁：`moon check` 0 error，`moon test` 174/174 passed，`moon info` OK
+本轮修复（#$pos 位置变量绑定路径步）：
+- 提交：joins 22→14 (-8), 总体 pass 1089→1097 (+8), fail 162→154 (-8), 通过率 87.1%→87.7%
+- 门禁：`moon check` 0 error 0 warning, `moon test` 174/174 passed, `moon info` OK
 - 修复内容：
-  - Functions: `$sort` 自然排序（Number 数值、String 字典序、回退 toString）
-  - Functions: `$sort` 支持 arity=2 comparator（`fn($a,$b){...}` → true 表示 $a>$b）
-  - Functions: `compare_natural` 使用 `str_cmp` 字节序（规避 MoonBit String< collation bug）
-  - Evaluator: `to_number` 添加 Sequence 单例提升
-  - Evaluator: 所有比较运算符 `<`/`>`/`<=`/`>=` 使用 `str_lt`/`str_gt`（字节序）
-  - Evaluator: `compare_sort_value` 使用 `str_cmp`
-  - 已知差异: `$sort(1)` 返回 `1` 而非 `[1]`（因 `to_json` 单例解包，全局修复会引入回归 4 case）
+  - AST: `Step` 新增 `pos_var : String?` 字段用于 #$var 位置索引绑定
+  - Parser: `parse_postfix` 新增 `Hash` 分支解析 `# $name` 并标注步的 pos_var
+  - Evaluator: `eval_path_from` 遇到 pos_var 时注入 `__pos__` 上下文标记
+  - Evaluator: `access_filter` / `access_map` 在迭代时检查 `__pos__` 并绑定 $var 名
+- 已知限制: `$[[1..4]]#$pos` 模式尚未正确处理（Construct 在 filter 位置被当作值而非索引）
 
 每次更新快照时，同步记录：
 

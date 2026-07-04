@@ -128,11 +128,11 @@ _build/native/debug/build/cmd/main/main.exe '<expr>' --file '<tmp-json-data>'
 当前固定快照（2026-07-04，simple-array-selectors 兼容性修复，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1089 fail 162 skip 431
+eligible 1251 pass 1097 fail 154 skip 431
 top_failures
-joins 22
 parent-operator 20
 function-formatNumber 16
+joins 14
 flattening 12
 transforms 11
 function-tomillis 10

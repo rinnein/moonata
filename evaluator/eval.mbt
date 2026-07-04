@@ -110,73 +110,84 @@ fn eval_path_from(
     if is_aggregate_step(step) {
       return access_group_aggregate(current, agg_ast(step).unwrap(), ctx)
     }
-    match step.focus {
-      Some(name) => {
+    // #$var 位置索引绑定：在上下文中持久化 pos_var 名，后续 filter/map 步迭代时自动绑定
+    match step.pos_var {
+      Some(pos_name) => {
         name_was_grouped = false
-        // 步带 focus：求值步结果，对每项绑变量，后续步从原始 input 开始
-        let step_result = eval_step(step, current, ctx)
-        // 检查剩余步是否以 GroupAggregate 结尾
-        let has_group = stop_at > i + 1 && is_aggregate_step(steps[stop_at - 1])
-        if has_group {
-          let merged : Map[String, Array[Json]] = {}
-          for item in step_result.to_array() {
-            let r = ctx.with_binding(name, item, fn() -> @value.JsonataValue raise @error.JsonataError {
-              eval_path_from(input, steps, i + 1, ctx, stop_at)
-            })
-            merge_into_group(r, merged)
-          }
-          return @value.JsonataValue::Json(
-            Json::object(build_merged_group(merged)),
-          )
-        } else {
-          let results : Array[@value.JsonataValue] = []
-          for item in step_result.to_array() {
-            let r = ctx.with_binding(name, item, fn() -> @value.JsonataValue raise @error.JsonataError {
-              eval_path_from(input, steps, i + 1, ctx, stop_at)
-            })
-            match r {
-              @value.JsonataValue::Undefined => continue
-              @value.JsonataValue::Sequence(arr) =>
-                for v in arr {
-                  results.push(v)
-                }
-              _ => results.push(r)
-            }
-          }
-          return @value.JsonataValue::Sequence(results)
-        }
-      }
-      None => {
-        // Group-aware evaluation for Name→Index/Slice patterns:
-        // a.b[N] means index each b individually, not the flat result.
-        // Only when the Name step was processed via access_field_grouped
-        // (i.e., it had an Index/Slice step following).
-        if name_was_grouped {
-          match step.kind {
-            @ast.StepKind::Index(_) | @ast.StepKind::Slice(_, _) =>
-              current = access_grouped(current, step, ctx)
-            _ => current = eval_step(step, current, ctx)
-          }
-          name_was_grouped = false
-        } else {
-          match step.kind {
-            @ast.StepKind::Name(name) =>
-              if i + 1 < stop_at {
-                match steps[i + 1].kind {
-                  @ast.StepKind::Index(_) | @ast.StepKind::Slice(_, _) => {
-                    current = access_field_grouped(current, name)
-                    name_was_grouped = true
-                  }
-                  _ => current = eval_step(step, current, ctx)
-                }
-              } else {
-                current = eval_step(step, current, ctx)
-              }
-            _ => current = eval_step(step, current, ctx)
-          }
-        }
+        current = eval_step(step, current, ctx)
+        ctx.bind("__pos__", @value.JsonataValue::Json(Json::string(pos_name)))
         i = i + 1
       }
+      None =>
+        match step.focus {
+          Some(name) => {
+            name_was_grouped = false
+            // 步带 focus：求值步结果，对每项绑变量，后续步从原始 input 开始
+            let step_result = eval_step(step, current, ctx)
+            // 检查剩余步是否以 GroupAggregate 结尾
+            let has_group = stop_at > i + 1 &&
+              is_aggregate_step(steps[stop_at - 1])
+            if has_group {
+              let merged : Map[String, Array[Json]] = {}
+              for item in step_result.to_array() {
+                let r = ctx.with_binding(name, item, fn() -> @value.JsonataValue raise @error.JsonataError {
+                  eval_path_from(input, steps, i + 1, ctx, stop_at)
+                })
+                merge_into_group(r, merged)
+              }
+              return @value.JsonataValue::Json(
+                Json::object(build_merged_group(merged)),
+              )
+            } else {
+              let results : Array[@value.JsonataValue] = []
+              for item in step_result.to_array() {
+                let r = ctx.with_binding(name, item, fn() -> @value.JsonataValue raise @error.JsonataError {
+                  eval_path_from(input, steps, i + 1, ctx, stop_at)
+                })
+                match r {
+                  @value.JsonataValue::Undefined => continue
+                  @value.JsonataValue::Sequence(arr) =>
+                    for v in arr {
+                      results.push(v)
+                    }
+                  _ => results.push(r)
+                }
+              }
+              return @value.JsonataValue::Sequence(results)
+            }
+          }
+          None => {
+            // Group-aware evaluation for Name→Index/Slice patterns:
+            // a.b[N] means index each b individually, not the flat result.
+            // Only when the Name step was processed via access_field_grouped
+            // (i.e., it had an Index/Slice step following).
+            if name_was_grouped {
+              match step.kind {
+                @ast.StepKind::Index(_) | @ast.StepKind::Slice(_, _) =>
+                  current = access_grouped(current, step, ctx)
+                _ => current = eval_step(step, current, ctx)
+              }
+              name_was_grouped = false
+            } else {
+              match step.kind {
+                @ast.StepKind::Name(name) =>
+                  if i + 1 < stop_at {
+                    match steps[i + 1].kind {
+                      @ast.StepKind::Index(_) | @ast.StepKind::Slice(_, _) => {
+                        current = access_field_grouped(current, name)
+                        name_was_grouped = true
+                      }
+                      _ => current = eval_step(step, current, ctx)
+                    }
+                  } else {
+                    current = eval_step(step, current, ctx)
+                  }
+                _ => current = eval_step(step, current, ctx)
+              }
+            }
+            i = i + 1
+          }
+        }
     }
   }
   current
@@ -569,11 +580,21 @@ fn access_filter(
 ) -> @value.JsonataValue raise @error.JsonataError {
   let items = input.to_array()
   let results : Array[@value.JsonataValue] = []
+  let pos_var : String? = match ctx.lookup("__pos__") {
+    Some(@value.JsonataValue::Json(Json::String(name))) => Some(name)
+    _ => None
+  }
   for i, item in items {
     // 将当前项绑定为 @，父级设为 input
     let r = ctx.with_context(current=item, parent=input, fn() -> @value.JsonataValue raise @error.JsonataError {
       // 同时绑定 # 为当前索引
       ctx.bind("#", @value.JsonataValue::Json(Json::number(i.to_double())))
+      // 若有 #$var 位置变量，一并绑定
+      match pos_var {
+        Some(name) =>
+          ctx.bind(name, @value.JsonataValue::Json(Json::number(i.to_double())))
+        None => ()
+      }
       ctx.with_depth(() => eval(expr, ctx))
     })
     match r {
@@ -624,8 +645,17 @@ fn access_map(
   let items = input.to_array()
   let results : Array[@value.JsonataValue] = []
   let top_is_construct = expr is @ast.Ast::Construct(_)
-  for item in items {
+  let pos_var : String? = match ctx.lookup("__pos__") {
+    Some(@value.JsonataValue::Json(Json::String(name))) => Some(name)
+    _ => None
+  }
+  for i, item in items {
     let r = ctx.with_context(current=item, parent=input, fn() -> @value.JsonataValue raise @error.JsonataError {
+      match pos_var {
+        Some(name) =>
+          ctx.bind(name, @value.JsonataValue::Json(Json::number(i.to_double())))
+        None => ()
+      }
       ctx.with_depth(() => eval(expr, ctx))
     })
     match r {

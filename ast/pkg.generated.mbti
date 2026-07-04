@@ -54,8 +54,9 @@ pub(all) struct Step {
   focus : String?
   tuple : Bool
   index : Int?
+  pos_var : String?
 } derive(Eq, @debug.Debug)
-pub fn Step::new(kind~ : StepKind, stage~ : StepStage, focus? : String?, tuple? : Bool, index? : Int?) -> Self
+pub fn Step::new(kind~ : StepKind, stage~ : StepStage, focus? : String?, tuple? : Bool, index? : Int?, pos_var? : String?) -> Self
 
 pub(all) enum StepKind {
   Name(String)
