@@ -365,6 +365,15 @@ fn descend_apply(
   ctx : @value.EvalContext,
   results : Array[@value.JsonataValue],
 ) -> Unit raise @error.JsonataError {
+  if step.kind == @ast.StepKind::Wildcard {
+    match current {
+      @value.JsonataValue::Json(Json::Object(_))
+      | @value.JsonataValue::Json(Json::Array(_))
+      | @value.JsonataValue::Sequence(_) =>
+        push_unique_recursive_result(results, current)
+      _ => ()
+    }
+  }
   // Name/Index 步仅对 Object 应用，避免数组展开与下降元素重复
   let apply_now : Bool = match step.kind {
     @ast.StepKind::Name(_) | @ast.StepKind::Index(_) =>
@@ -383,7 +392,12 @@ fn descend_apply(
           let indexed = access_index(item, idx)
           push_path_result(results, indexed)
         }
-      None => push_path_result(results, r)
+      None =>
+        if step.kind == @ast.StepKind::Wildcard {
+          push_unique_recursive_path_result(results, r)
+        } else {
+          push_path_result(results, r)
+        }
     }
   }
   // 下降进入子节点
@@ -406,6 +420,38 @@ fn descend_apply(
       }
     _ => ()
   }
+}
+
+///|
+fn push_unique_recursive_path_result(
+  results : Array[@value.JsonataValue],
+  value : @value.JsonataValue,
+) -> Unit {
+  match value {
+    @value.JsonataValue::Undefined => ()
+    @value.JsonataValue::Sequence(arr) =>
+      for item in arr {
+        push_unique_recursive_path_result(results, item)
+      }
+    @value.JsonataValue::Json(Json::Array(arr)) =>
+      for item in arr {
+        push_unique_recursive_result(results, @value.JsonataValue::Json(item))
+      }
+    _ => push_unique_recursive_result(results, value)
+  }
+}
+
+///|
+fn push_unique_recursive_result(
+  results : Array[@value.JsonataValue],
+  value : @value.JsonataValue,
+) -> Unit {
+  for item in results {
+    if item.equal(value) {
+      return
+    }
+  }
+  results.push(value)
 }
 
 ///|

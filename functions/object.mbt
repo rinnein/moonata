@@ -128,11 +128,13 @@ fn register_object_functions(ctx : @value.EvalContext) -> Unit {
     match args[0] {
       @value.JsonataValue::Json(Json::Object(map)) => {
         let result : Map[String, Json] = {}
+        let object = @value.JsonataValue::Json(Json::object(map))
         for k, v in map {
           let r = (f.invoke)(
             [
               @value.JsonataValue::Json(v),
               @value.JsonataValue::Json(Json::string(k)),
+              object,
             ],
             ctx,
           )
@@ -140,7 +142,11 @@ fn register_object_functions(ctx : @value.EvalContext) -> Unit {
             result[k] = v
           }
         }
-        @value.JsonataValue::Json(Json::object(result))
+        if result.length() == 0 {
+          @value.JsonataValue::Undefined
+        } else {
+          @value.JsonataValue::Json(Json::object(result))
+        }
       }
       _ => @value.JsonataValue::Undefined
     }

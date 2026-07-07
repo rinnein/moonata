@@ -177,6 +177,20 @@ test "函数：$keys $values" {
 }
 
 ///|
+test "函数：$sift predicate 参数" {
+  assert_true(
+    eval_fn(
+      "$sift({'a':'hello','b':'world','hello':'again'}, function($v,$k,$o){$lookup($o,$v)})",
+      Json::null(),
+    ) ==
+    @json.parse("{\"a\":\"hello\"}"),
+  )
+  assert_true(
+    eval_fn("$sift({'a':1}, function($v){false})", Json::null()) == Json::null(),
+  )
+}
+
+///|
 test "函数：$type" {
   assert_true(
     eval_fn("$type(\"hello\")", Json::null()) == Json::string("string"),

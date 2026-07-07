@@ -479,6 +479,22 @@ test "官方套件：$keys $values" {
 }
 
 ///|
+test "官方套件：$sift predicate 参数与空对象省略" {
+  assert_eval(
+    "$sift({'a':'hello','b':'world','hello':'again'}, function($v,$k,$o){$lookup($o,$v)})",
+    Json::null(),
+    data("{\"a\":\"hello\"}"),
+  )
+  assert_eval(
+    "$.$sift(function($v){$v.Postcode})",
+    data(
+      "[{\"a\":{\"Postcode\":\"x\"}},{\"b\":1},{\"c\":{\"Postcode\":\"y\"}}]",
+    ),
+    data("[{\"a\":{\"Postcode\":\"x\"}},{\"c\":{\"Postcode\":\"y\"}}]"),
+  )
+}
+
+///|
 test "官方套件：$merge" {
   let d = data("[{\"a\":1},{\"b\":2}]")
   let result = evaluate("$merge($)", d)

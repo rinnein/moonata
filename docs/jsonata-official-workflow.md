@@ -128,10 +128,10 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-07，`$reverse` 与数组构造展开修复，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-07，`$sift` predicate 与递归通配去重修复，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1153 fail 98 skip 431
+eligible 1251 pass 1156 fail 95 skip 431
 top_failures
 parent-operator 20
 joins 13
@@ -142,13 +142,21 @@ variables 5
 simple-array-selectors 3
 transform 3
 function-applications 2
-function-sift 2
+function-spread 2
 skip_reasons
 no_result 395
 non-string-expr 23
 timelimit 7
 bindings 6
 ```
+
+本轮修复（`$sift` predicate 与递归通配去重）：
+- 提交：function-sift 3→5 pass（全绿），descendent-operator 14→15 pass（全绿），总体 pass 1153→1156 (+3)，fail 98→95 (-3)，通过率 92.2%→92.4%
+- 门禁：`moon check` 0e0w，`moon test` 178/178 passed，`moon fmt` 与 `moon info` 已执行
+- 修复内容：
+  - Functions: `$sift` predicate 传入 `(value, key, object)`，并在过滤结果为空时返回 Undefined，使路径映射自然省略空对象
+  - Evaluator: 递归 wildcard 保留当前结构节点，并对递归通配结果做唯一化，避免 `**.*` 后续路径重复访问同一结构
+  - Tests: 增加官方 function-sift case001/case004 等价回归断言
 
 本轮修复（`$reverse` 与数组构造展开）：
 - 提交：function-reverse 1→3 pass（全绿），flattening 失败 11→7，总体 pass 1146→1153 (+7)，fail 105→98 (-7)，通过率 91.6%→92.2%
