@@ -238,6 +238,19 @@ test "官方套件：字符串拼接 &" {
     Json::null(),
     Json::string("Hello World"),
   )
+  let d0 = data(
+    "{\"foo\":{\"blah\":[{\"baz\":{\"fud\":\"hello\"}},{\"baz\":{\"fud\":\"world\"}}]}}",
+  )
+  assert_eval("foo.(blah[0].baz.fud & none)", d0, Json::string("hello"))
+  assert_eval("foo.(none.here & blah[1].baz.fud)", d0, Json::string("world"))
+  let d5 = data(
+    "{\"Account\":{\"Order\":[{\"Product\":[{\"Price\":34.45},{\"Price\":21.67}]},{\"Product\":[{\"Price\":34.45},{\"Price\":107.99}]}]}}",
+  )
+  assert_eval(
+    "\"Prices: \" & Account.Order.Product.Price",
+    d5,
+    Json::string("Prices: [34.45,21.67,34.45,107.99]"),
+  )
 }
 
 // ============ 内建函数 ============

@@ -128,10 +128,10 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-07，$formatNumber zero-digit 与负数子图修复，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-07，string-concat undefined 与序列字符串化修复，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1126 fail 125 skip 431
+eligible 1251 pass 1129 fail 122 skip 431
 top_failures
 parent-operator 20
 joins 14
@@ -142,13 +142,21 @@ object-constructor 5
 variables 5
 function-fromMillis 3
 simple-array-selectors 3
-string-concat 3
+transform 3
 skip_reasons
 no_result 395
 non-string-expr 23
 timelimit 7
 bindings 6
 ```
+
+本轮修复（string-concat undefined 与序列字符串化）：
+- 提交：string-concat 9→12 pass（全绿），总体 pass 1126→1129 (+3)，fail 125→122 (-3)，通过率 90.0%→90.2%
+- 门禁：`moon check` 0e0w，`moon test` 174/174 passed，`moon fmt` 与 `moon info` 已执行
+- 修复内容：
+  - Evaluator: `&` 运算遇到 undefined 时不走通用传播，改为按 JSONata 字符串拼接规则处理为空字符串
+  - Evaluator: 多值 `Sequence` 转字符串时输出 JSON 数组字符串，避免 `lift_singleton` 对多值序列递归回自身导致超时
+  - Tests: 增加官方 string-concat case004/case005/case011 等价回归断言
 
 本轮修复（$formatNumber zero-digit 与负数子图）：
 - 提交：function-formatNumber 22→26 pass（全绿），总体 pass 1122→1126 (+4)，fail 129→125 (-4)，通过率 89.7%→90.0%

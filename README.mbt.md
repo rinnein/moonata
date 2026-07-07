@@ -93,12 +93,12 @@ CI 在 `master` 分支推送、PR 以及手动触发时运行。
 
 ## 兼容性状态
 
-固定快照：2026-07-07，$formatNumber zero-digit 与负数子图修复阶段。
+固定快照：2026-07-07，string-concat undefined 与序列字符串化修复阶段。
 
 ```text
 本地测试：moon test 174/174
-官方可比对审计：eligible 1251, pass 1126, fail 125, skip 431
-通过率：90.0%
+官方可比对审计：eligible 1251, pass 1129, fail 122, skip 431
+通过率：90.2%
 ```
 
 当前剩余失败最多的官方测试分组：
@@ -113,7 +113,7 @@ object-constructor 5
 variables 5
 function-fromMillis 3
 simple-array-selectors 3
-string-concat 3
+transform 3
 ```
 
 官方测试集审计流程与跳过策略记录在 `docs/jsonata-official-workflow.md`。

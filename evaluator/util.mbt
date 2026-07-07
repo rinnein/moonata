@@ -34,7 +34,18 @@ fn to_str(v : @value.JsonataValue) -> String {
     @value.JsonataValue::Json(Json::False) => "false"
     @value.JsonataValue::Json(Json::Null) => "null"
     @value.JsonataValue::Undefined => ""
-    @value.JsonataValue::Sequence(_) => to_str(v.lift_singleton())
+    @value.JsonataValue::Sequence(arr) =>
+      match arr.length() {
+        0 => ""
+        1 => to_str(arr[0])
+        _ => {
+          let out : Array[Json] = []
+          for item in arr {
+            out.push(item.to_json())
+          }
+          Json::array(out).stringify()
+        }
+      }
     _ => v.to_json().stringify()
   }
 }

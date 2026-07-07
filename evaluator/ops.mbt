@@ -39,6 +39,7 @@ fn eval_binary(
       "=" => return compare_eq(lhs, rhs)
       "!=" => return compare_neq(lhs, rhs)
       "in" => return in_op(lhs, rhs)
+      "&" => return concat_or_merge(lhs, rhs)
       "&&" =>
         // 短路：若 lhs 为 false 则结果 false
         match lhs {
