@@ -374,6 +374,14 @@ fn eval_construct(
             _ => results.push(json_for_constructor(item))
           }
         }
+      @value.JsonataValue::Json(Json::Array(arr)) =>
+        if item is @ast.Ast::Construct(_) {
+          results.push(Json::array(arr))
+        } else {
+          for value in arr {
+            results.push(value)
+          }
+        }
       _ => results.push(json_for_constructor(v))
     }
   }

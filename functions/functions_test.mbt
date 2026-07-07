@@ -224,6 +224,7 @@ test "函数：$reverse" {
       #|Array([Number(3), Number(2), Number(1)])
     ),
   )
+  assert_true(eval_fn("$reverse([1])", Json::null()) == @json.parse("[1]"))
 }
 
 ///|

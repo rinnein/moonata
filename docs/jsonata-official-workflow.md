@@ -128,27 +128,35 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-07，`$keys` 对象序列修复，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-07，`$reverse` 与数组构造展开修复，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1146 fail 105 skip 431
+eligible 1251 pass 1153 fail 98 skip 431
 top_failures
 parent-operator 20
 joins 13
-flattening 11
 function-tomillis 10
 transforms 10
+flattening 7
 variables 5
 simple-array-selectors 3
 transform 3
 function-applications 2
-function-reverse 2
+function-sift 2
 skip_reasons
 no_result 395
 non-string-expr 23
 timelimit 7
 bindings 6
 ```
+
+本轮修复（`$reverse` 与数组构造展开）：
+- 提交：function-reverse 1→3 pass（全绿），flattening 失败 11→7，总体 pass 1146→1153 (+7)，fail 105→98 (-7)，通过率 91.6%→92.2%
+- 门禁：`moon check` 0e0w，`moon test` 176/176 passed，`moon fmt` 与 `moon info` 已执行
+- 修复内容：
+  - Functions: `$reverse` 返回显式 JSON array，单元素数组不再被序列提升为标量
+  - Evaluator: 数组构造中非显式构造表达式求得的 JSON array 按元素展开，保留显式嵌套数组构造
+  - Tests: 增加官方 function-reverse case001/case003 等价回归断言
 
 本轮修复（`$keys` 对象序列）：
 - 提交：function-keys 1→3 pass（全绿），总体 pass 1144→1146 (+2)，fail 107→105 (-2)，通过率 91.4%→91.6%

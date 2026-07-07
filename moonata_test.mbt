@@ -629,6 +629,8 @@ test "官方套件：$reverse" {
       #|Array([Number(3), Number(2), Number(1)])
     ),
   )
+  assert_eval("$reverse([1])", Json::null(), data("[1]"))
+  assert_eval("[[$], [$reverse($)], [$]]", d, data("[[1,2,3],[3,2,1],[1,2,3]]"))
 }
 
 ///|

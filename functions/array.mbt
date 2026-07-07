@@ -172,7 +172,11 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
   register(ctx, "reverse", arity=1, invoke=fn(args, _ctx) {
     let items = args[0].to_array()
     let reversed = items.rev()
-    @value.JsonataValue::sequence(reversed)
+    let arr : Array[Json] = []
+    for item in reversed {
+      arr.push(item.to_json())
+    }
+    @value.JsonataValue::Json(Json::array(arr))
   })
   // $shuffle
   register(ctx, "shuffle", arity=1, invoke=fn(args, _ctx) {

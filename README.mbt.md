@@ -93,12 +93,12 @@ CI 在 `master` 分支推送、PR 以及手动触发时运行。
 
 ## 兼容性状态
 
-固定快照：2026-07-07，`$keys` 对象序列修复阶段。
+固定快照：2026-07-07，`$reverse` 与数组构造展开修复阶段。
 
 ```text
 本地测试：moon test 176/176
-官方可比对审计：eligible 1251, pass 1146, fail 105, skip 431
-通过率：91.6%
+官方可比对审计：eligible 1251, pass 1153, fail 98, skip 431
+通过率：92.2%
 ```
 
 当前剩余失败最多的官方测试分组：
@@ -106,14 +106,14 @@ CI 在 `master` 分支推送、PR 以及手动触发时运行。
 ```text
 parent-operator 20
 joins 13
-flattening 11
 function-tomillis 10
 transforms 10
+flattening 7
 variables 5
 simple-array-selectors 3
 transform 3
 function-applications 2
-function-reverse 2
+function-sift 2
 ```
 
 官方测试集审计流程与跳过策略记录在 `docs/jsonata-official-workflow.md`。
