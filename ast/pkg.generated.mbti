@@ -38,7 +38,7 @@ pub(all) enum Ast {
   Sort(expr~ : Ast, terms~ : Array[SortTerm])
   Lambda(params~ : Array[String], body~ : Ast, signature~ : String?)
   Var(String)
-  Bind(name~ : String, value~ : Ast, body~ : Ast)
+  Bind(name~ : String, value~ : Ast)
   Apply(func~ : Ast, args~ : Array[Ast])
   Chain(Array[Ast])
   Block(Array[Ast])

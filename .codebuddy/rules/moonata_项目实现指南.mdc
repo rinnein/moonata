@@ -126,21 +126,21 @@ _build/native/debug/build/cmd/main/main.exe '<expr>' --file '<tmp-json-data>'
 - 失败最多的前 10 个 group。
 - skip 原因计数。
 
-当前固定快照（2026-07-07，parent-operator 父级链路修复，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-07，variables 链式赋值与块级作用域修复，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1184 fail 67 skip 431
+eligible 1251 pass 1189 fail 62 skip 431
 top_failures
 function-tomillis 10
 joins 10
 transforms 10
 parent-operator 6
-variables 5
 flattening 4
 function-applications 2
 object-constructor 2
 transform 2
 boolean-expresssions 1
+function-decodeUrl 1
 skip_reasons
 no_result 395
 non-string-expr 23

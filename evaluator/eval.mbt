@@ -90,8 +90,7 @@ fn ast_contains_parent(ast : @ast.Ast) -> Bool {
         found
       }
     @ast.Ast::Lambda(body~, ..) => ast_contains_parent(body)
-    @ast.Ast::Bind(value~, body~, ..) =>
-      ast_contains_parent(value) || ast_contains_parent(body)
+    @ast.Ast::Bind(value~, ..) => ast_contains_parent(value)
     @ast.Ast::Apply(func~, args~) =>
       if ast_contains_parent(func) {
         true
@@ -175,7 +174,7 @@ pub fn eval(
     @ast.Ast::Conditional(condition~, consequent~, alternate~) =>
       eval_conditional(condition, consequent, alternate, ctx)
     @ast.Ast::Construct(items) => eval_construct(items, ctx)
-    @ast.Ast::Bind(name~, value~, body~) => eval_bind(name, value, body, ctx)
+    @ast.Ast::Bind(name~, value~) => eval_bind(name, value, ctx)
     @ast.Ast::Block(exprs) => eval_block(exprs, ctx)
     @ast.Ast::Apply(func~, args~) => eval_apply(func, args, ctx)
     @ast.Ast::Lambda(params~, body~, signature~) =>

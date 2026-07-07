@@ -141,7 +141,7 @@ test "Ast 表达式节点构造" {
     signature=None,
   )
   let var_ = Ast::Var("x")
-  let bind = Ast::Bind(name="x", value=Ast::Number(1.0), body=Ast::Var("x"))
+  let bind = Ast::Bind(name="x", value=Ast::Number(1.0))
   let apply = Ast::Apply(func=Ast::Var("f"), args=[Ast::Number(1.0)])
   let chain = Ast::Chain([Ast::Var("f"), Ast::Var("g")])
   let block = Ast::Block([Ast::Number(1.0), Ast::Number(2.0)])
@@ -235,7 +235,7 @@ test "Ast 表达式节点构造" {
   debug_inspect(
     bind,
     content=(
-      #|Bind(name="x", value=Number(1), body=Var("x"))
+      #|Bind(name="x", value=Number(1))
     ),
   )
   debug_inspect(

@@ -118,7 +118,10 @@ fn Parser::parse_transform(self : Parser) -> @ast.Ast raise @error.JsonataError 
 }
 
 ///|
-/// 绑定表达式：`$var := expr; body` 或 `$var(expr) := ...`
+/// 绑定表达式：`$var := expr`
+/// 返回 Bind(name, value)，分号由 parse_block 在链/块层级消费。
+/// 多个 `:=` 链式赋值时，每个 `:=` 返回独立 Bind 节点，
+/// 由外层 Block 串联（如 `$a := $b := 5` → `Bind("b", 5)`, `Bind("a", ...)`）。
 fn Parser::parse_bind(self : Parser) -> @ast.Ast raise @error.JsonataError {
   // 检测 $var := 模式
   if self.peek_kind() is @lexer.TokenKind::Var(_) {
@@ -133,10 +136,7 @@ fn Parser::parse_bind(self : Parser) -> @ast.Ast raise @error.JsonataError {
       if self.peek_kind() == @lexer.TokenKind::Eq {
         ignore(self.advance())
         let value = self.parse_chain()
-        // 消费分隔 value 和 body 的分号
-        ignore(self.match_kind(@lexer.TokenKind::Semicolon))
-        let body = self.parse_block()
-        return @ast.Ast::Bind(name~, value~, body~)
+        return @ast.Ast::Bind(name~, value~)
       }
     }
     // 回退：不是绑定

@@ -431,7 +431,7 @@ test "解析：算术表达式" {
     content=(
       #|Binary(
       #|  op="*",
-      #|  lhs=Binary(op="+", lhs=Number(1), rhs=Number(2)),
+      #|  lhs=Block([Binary(op="+", lhs=Number(1), rhs=Number(2))]),
       #|  rhs=Number(3),
       #|)
     ),
@@ -1090,10 +1090,11 @@ test "解析：绑定表达式" {
   debug_inspect(
     parse_str("$x := 5; $x * 2"),
     content=(
-      #|Bind(
-      #|  name="x",
-      #|  value=Number(5),
-      #|  body=Binary(op="*", lhs=Var("x"), rhs=Number(2)),
+      #|Block(
+      #|  [
+      #|    Bind(name="x", value=Number(5)),
+      #|    Binary(op="*", lhs=Var("x"), rhs=Number(2)),
+      #|  ],
       #|)
     ),
   )

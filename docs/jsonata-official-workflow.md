@@ -128,27 +128,38 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-07，parent-operator 父级链路修复，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-07，variables 链式赋值与块级作用域修复，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1184 fail 67 skip 431
+eligible 1251 pass 1189 fail 62 skip 431
 top_failures
 function-tomillis 10
 joins 10
 transforms 10
 parent-operator 6
-variables 5
 flattening 4
 function-applications 2
 object-constructor 2
 transform 2
 boolean-expresssions 1
+function-decodeUrl 1
 skip_reasons
 no_result 395
 non-string-expr 23
 timelimit 7
 bindings 6
 ```
+
+本轮修复（variables 链式赋值与块级作用域）：
+- 提交：variables 1→6 pass（全绿），整体 pass 1184→1189 (+5)，fail 67→62 (-5)，通过率 94.6%→95.0%
+- 门禁：`moon check` 0e0w，`moon test` 182/182 passed，`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - AST: `Bind` 从 `(name, value, body)` 三元节点变为 `(name, value)` 二元节点，`:=` 作为赋值表达式返回赋值的值
+  - Parser: `parse_bind` 不再吞掉分号和 body，`;` 由上层 `parse_block` 自然消费，支持 `$a := $b := 5` 链式赋值
+  - Parser: 括号表达式 `(...)` 永远包裹在 `Block` 中，为顶层单表达式绑定提供块级作用域
+  - Evaluator: `eval_bind` 使用 `ctx.bind` 持久绑定并返回赋值结果；`eval_block` 在块结束时恢复绑定快照，实现块级作用域
+  - Value: EvalContext 增加 `bindings_snapshot`/`restore_bindings` 方法
+  - Tests: 增加官方 variables case004/case005/case006/case007/case010 等价回归断言
 
 本轮修复（parent-operator 父级链路）：
 - 提交：parent-operator 0→14 pass，整体 pass 1170→1184 (+14)，fail 81→67 (-14)，通过率 93.5%→94.6%

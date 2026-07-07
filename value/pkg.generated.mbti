@@ -14,7 +14,7 @@ pub fn flatten_sequence(Array[JsonataValue]) -> Array[JsonataValue]
 // Types and methods
 pub struct EvalContext {
   root : JsonataValue
-  bindings : Map[String, JsonataValue]
+  mut bindings : Map[String, JsonataValue]
   mut depth : Int
   max_depth : Int
   mut steps : Int
@@ -25,6 +25,7 @@ pub struct EvalContext {
 }
 pub fn EvalContext::ancestors(Self) -> Array[JsonataValue]
 pub fn EvalContext::bind(Self, String, JsonataValue) -> Unit
+pub fn EvalContext::bindings_snapshot(Self) -> Map[String, JsonataValue]
 pub fn EvalContext::capture(Self) -> Self
 pub fn EvalContext::current(Self) -> JsonataValue
 pub fn EvalContext::enter(Self) -> Unit raise @error.JsonataError
@@ -34,6 +35,7 @@ pub fn EvalContext::lookup(Self, String) -> JsonataValue?
 pub fn EvalContext::new(JsonataValue) -> Self
 pub fn EvalContext::new_with_limits(JsonataValue, max_depth? : Int, max_steps? : Int) -> Self
 pub fn EvalContext::parent(Self) -> JsonataValue
+pub fn EvalContext::restore_bindings(Self, Map[String, JsonataValue]) -> Unit
 pub fn EvalContext::root(Self) -> JsonataValue
 pub fn EvalContext::set_current(Self, JsonataValue) -> JsonataValue
 pub fn EvalContext::set_parent(Self, JsonataValue) -> JsonataValue

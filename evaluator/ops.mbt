@@ -389,29 +389,30 @@ fn eval_construct(
 }
 
 ///|
-/// 绑定求值
+/// 绑定求值：`$name := value`，绑定变量并返回赋值结果。
 fn eval_bind(
   name : String,
   value_ast : @ast.Ast,
-  body_ast : @ast.Ast,
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
   let value = eval(value_ast, ctx)
-  ctx.with_binding(name, value, fn() -> @value.JsonataValue raise @error.JsonataError {
-    eval(body_ast, ctx)
-  })
+  ctx.bind(name, value)
+  value
 }
 
 ///|
-/// 块求值
+/// 块求值：按顺序求值每个表达式，返回最后一个结果。
+/// 块内变量绑定（:=）在块结束后自动恢复，实现块级别作用域。
 fn eval_block(
   exprs : Array[@ast.Ast],
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
+  let saved = ctx.bindings_snapshot()
   let mut result = @value.JsonataValue::Undefined
   for expr in exprs {
     result = eval(expr, ctx)
   }
+  ctx.restore_bindings(saved)
   result
 }
 

@@ -95,7 +95,13 @@ fn Parser::parse_primary(self : Parser) -> @ast.Ast raise @error.JsonataError {
       let expr = if self.peek_kind() == @lexer.TokenKind::RParen {
         @ast.Ast::Block([])
       } else {
-        self.parse_block()
+        let inner = self.parse_block()
+        // Always wrap in Block so that single-expression parenthesized
+        // forms like ($foo := nothing) get block-level variable scoping.
+        match inner {
+          @ast.Ast::Block(_) => inner
+          _ => @ast.Ast::Block([inner])
+        }
       }
       self.expect(@lexer.TokenKind::RParen, what="')'")
       // Parenthesized expression followed by path postfix (.[{):

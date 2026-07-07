@@ -18,7 +18,7 @@ let default_max_steps : Int = 1_000_000
 /// - `ancestors`：当前项的父级链，首项为 `%`，后续项支持 `%.%`。
 pub struct EvalContext {
   root : JsonataValue
-  bindings : Map[String, JsonataValue]
+  mut bindings : Map[String, JsonataValue]
   mut depth : Int
   max_depth : Int
   mut steps : Int
@@ -262,6 +262,31 @@ fn restore_binding(
 /// 查找绑定，未找到返回 None。
 pub fn EvalContext::lookup(self : EvalContext, name : String) -> JsonataValue? {
   self.bindings.get(name)
+}
+
+///|
+/// 获取绑定的不可变快照（用于块级作用域保存/恢复）。
+pub fn EvalContext::bindings_snapshot(
+  self : EvalContext,
+) -> Map[String, JsonataValue] {
+  let copy : Map[String, JsonataValue] = {}
+  for name, value in self.bindings {
+    copy[name] = value
+  }
+  copy
+}
+
+///|
+/// 恢复绑定的快照（用于块级作用域退出时）。
+pub fn EvalContext::restore_bindings(
+  self : EvalContext,
+  snapshot : Map[String, JsonataValue],
+) -> Unit {
+  let new_map : Map[String, JsonataValue] = {}
+  for name, value in snapshot {
+    new_map[name] = value
+  }
+  self.bindings = new_map
 }
 
 ///|

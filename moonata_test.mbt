@@ -775,6 +775,16 @@ test "官方套件：分组表达式" {
 ///|
 test "官方套件：绑定表达式" {
   assert_eval("$x := 5; $x * 2", Json::null(), Json::number(10.0))
+  // 官方 variables group 回归测试
+  assert_eval("$a := 5", Json::null(), Json::number(5.0))
+  assert_eval("$a := $b := 5", Json::null(), Json::number(5.0))
+  assert_eval("($a := $b := 5; $a)", Json::null(), Json::number(5.0))
+  assert_eval("($a := $b := 5; $b)", Json::null(), Json::number(5.0))
+  assert_eval(
+    "( $foo := \"defined\"; ( $foo := nothing ); $foo )",
+    Json::null(),
+    Json::string("defined"),
+  )
 }
 
 ///|
