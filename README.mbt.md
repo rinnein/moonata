@@ -1,5 +1,7 @@
 # Moonata
 
+[![CI](https://github.com/moonbitlang/moonata/actions/workflows/ci.yml/badge.svg)](https://github.com/moonbitlang/moonata/actions/workflows/ci.yml)
+
 Moonata 是 [JSONata](https://jsonata.org/) 的 MoonBit 实现。JSONata 是一门面向 JSON 数据的查询与转换语言。
 
 本项目目前提供解析器、求值器、内建函数注册表、对外 facade API 与 native CLI。项目仍在对齐上游 `jsonata-js` 官方测试集，因此当前状态是“可用但尚未完全替代原版 JSONata”。
@@ -77,6 +79,18 @@ fix(evaluator): align predicate context semantics
 docs: update official test status
 ```
 
+## CI
+
+仓库使用 GitHub Actions 执行以下门禁：
+
+- `moon check --deny-warn`：类型检查、语法检查，警告视为错误
+- `moon fmt --check`：格式校验
+- `moon info`：接口生成
+- `moon build --deny-warn`：构建，警告视为错误
+- `moon test --deny-warn`：测试执行，警告视为错误
+
+CI 在 `master` 分支推送、PR 以及手动触发时运行。
+
 ## 兼容性状态
 
 固定快照：2026-07-04，$map 回调参数 + chain regex + filter truthy + parser `~>` 优先级修复阶段。
@@ -98,7 +112,8 @@ transforms 10
 object-constructor 5
 variables 5
 function-formatNumber 4
-function-applications 3
+function-fromMillis 3
+simple-array-selectors 3
 ```
 
 官方测试集审计流程与跳过策略记录在 `docs/jsonata-official-workflow.md`。
