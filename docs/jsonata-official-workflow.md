@@ -128,27 +128,35 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-07，`$spread` 对象序列修复，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-07，多索引数组选择器修复，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1158 fail 93 skip 431
+eligible 1251 pass 1164 fail 87 skip 431
 top_failures
 parent-operator 20
-joins 13
 function-tomillis 10
+joins 10
 transforms 10
 flattening 7
 variables 5
 simple-array-selectors 3
-transform 3
 function-applications 2
-multiple-array-selectors 2
+object-constructor 2
+transform 2
 skip_reasons
 no_result 395
 non-string-expr 23
 timelimit 7
 bindings 6
 ```
+
+本轮修复（多索引数组选择器）：
+- 提交：multiple-array-selectors 1→3 pass（全绿），joins 失败 13→10，总体 pass 1158→1164 (+6)，fail 93→87 (-6)，通过率 92.6%→93.0%
+- 门禁：`moon check` 0e0w，`moon test` 181/181 passed，`moon fmt` 与 `moon info` 已执行
+- 修复内容：
+  - Evaluator: 谓词过滤支持纯数字数组/序列作为多索引选择器，并复用负索引归一化
+  - Evaluator: 混入非数字值的数组谓词退回原 truthy 行为，避免把 `[1..3,8,false]` 错当索引列表
+  - Tests: 增加官方 multiple-array-selectors case000/case001/case002 等价回归断言
 
 本轮修复（`$spread` 对象序列）：
 - 提交：function-spread 1→3 pass（全绿），总体 pass 1156→1158 (+2)，fail 95→93 (-2)，通过率 92.4%→92.6%

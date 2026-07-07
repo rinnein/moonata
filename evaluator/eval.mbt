@@ -703,21 +703,62 @@ fn access_filter(
       @value.JsonataValue::Undefined => continue
       _ =>
         // 位置过滤：数字匹配索引，负数从末尾算起
-        match r {
-          @value.JsonataValue::Json(Json::Number(n, ..)) => {
-            let num = n.to_int()
-            let target = if num < 0 { items.length() + num } else { num }
-            if target == i {
-              results.push(item)
-            }
-          }
-          _ => results.push(item)
+        match filter_index_match(r, i, items.length()) {
+          Some(true) => results.push(item)
+          Some(false) => continue
+          None => results.push(item)
         }
     }
   }
   match results.length() {
     0 => @value.JsonataValue::Undefined
     _ => @value.JsonataValue::Sequence(results)
+  }
+}
+
+///|
+fn filter_index_match(
+  value : @value.JsonataValue,
+  index : Int,
+  length : Int,
+) -> Bool? {
+  match value {
+    @value.JsonataValue::Json(Json::Number(n, ..)) =>
+      Some(normalize_index(n.to_int(), length) == index)
+    @value.JsonataValue::Json(Json::Array(arr)) => {
+      let mut matched = false
+      for item in arr {
+        match item {
+          Json::Number(n, ..) =>
+            if normalize_index(n.to_int(), length) == index {
+              matched = true
+            }
+          _ => return None
+        }
+      }
+      Some(matched)
+    }
+    @value.JsonataValue::Sequence(arr) => {
+      let mut matched = false
+      for item in arr {
+        match filter_index_match(item, index, length) {
+          Some(true) => matched = true
+          Some(false) => ()
+          None => return None
+        }
+      }
+      Some(matched)
+    }
+    _ => None
+  }
+}
+
+///|
+fn normalize_index(index : Int, length : Int) -> Int {
+  if index < 0 {
+    length + index
+  } else {
+    index
   }
 }
 

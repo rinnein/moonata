@@ -93,27 +93,27 @@ CI 在 `master` 分支推送、PR 以及手动触发时运行。
 
 ## 兼容性状态
 
-固定快照：2026-07-07，`$spread` 对象序列修复阶段。
+固定快照：2026-07-07，多索引数组选择器修复阶段。
 
 ```text
-本地测试：moon test 180/180
-官方可比对审计：eligible 1251, pass 1158, fail 93, skip 431
-通过率：92.6%
+本地测试：moon test 181/181
+官方可比对审计：eligible 1251, pass 1164, fail 87, skip 431
+通过率：93.0%
 ```
 
 当前剩余失败最多的官方测试分组：
 
 ```text
 parent-operator 20
-joins 13
 function-tomillis 10
+joins 10
 transforms 10
 flattening 7
 variables 5
 simple-array-selectors 3
-transform 3
 function-applications 2
-multiple-array-selectors 2
+object-constructor 2
+transform 2
 ```
 
 官方测试集审计流程与跳过策略记录在 `docs/jsonata-official-workflow.md`。
