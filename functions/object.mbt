@@ -2,16 +2,21 @@
 fn register_object_functions(ctx : @value.EvalContext) -> Unit {
   // $keys
   register(ctx, "keys", arity=1, invoke=fn(args, _ctx) {
-    match args[0] {
-      @value.JsonataValue::Json(Json::Object(map)) => {
-        let keys : Array[Json] = []
-        for k, _ in map {
-          keys.push(Json::string(k))
-        }
-        @value.JsonataValue::Json(Json::array(keys))
+    let keys : Array[@value.JsonataValue] = []
+    let seen : Map[String, Unit] = {}
+    for item in args[0].to_array() {
+      match item {
+        @value.JsonataValue::Json(Json::Object(map)) =>
+          for k, _ in map {
+            if !seen.contains(k) {
+              seen[k] = ()
+              keys.push(@value.JsonataValue::Json(Json::string(k)))
+            }
+          }
+        _ => ()
       }
-      _ => @value.JsonataValue::Undefined
     }
+    @value.JsonataValue::sequence(keys)
   })
   // $values
   register(ctx, "values", arity=1, invoke=fn(args, _ctx) {

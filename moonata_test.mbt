@@ -459,6 +459,16 @@ test "官方套件：$keys $values" {
       #|Array([String("a"), String("b")])
     ),
   )
+  assert_eval("$keys({\"foo\":{}})", Json::null(), Json::string("foo"))
+  assert_eval(
+    "$keys($)",
+    data(
+      "[{\"Product Name\":\"Cloak\",\"ProductID\":345664,\"SKU\":\"0406654603\",\"Description\":{},\"Price\":107.99,\"Quantity\":1},{\"Product Name\":\"Hat\",\"ProductID\":858383,\"SKU\":\"040657863\",\"Description\":{},\"Price\":34.45,\"Quantity\":4}]",
+    ),
+    data(
+      "[\"Product Name\",\"ProductID\",\"SKU\",\"Description\",\"Price\",\"Quantity\"]",
+    ),
+  )
   let vals = evaluate("$values($)", d)
   debug_inspect(
     vals,

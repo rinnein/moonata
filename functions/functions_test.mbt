@@ -160,6 +160,13 @@ test "函数：$keys $values" {
       #|Array([String("a"), String("b")])
     ),
   )
+  assert_true(
+    eval_fn("$keys({\"foo\":{}})", Json::null()) == Json::string("foo"),
+  )
+  assert_true(
+    eval_fn("$keys($)", @json.parse("[{\"a\":1,\"b\":2},{\"b\":3,\"c\":4}]")) ==
+    @json.parse("[\"a\",\"b\",\"c\"]"),
+  )
   let vals = eval_fn("$values($)", data)
   debug_inspect(
     vals,
