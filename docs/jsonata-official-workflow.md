@@ -128,27 +128,36 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-07，string-concat undefined 与序列字符串化修复，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-07，function-fromMillis picture 与空括号修复，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1129 fail 122 skip 431
+eligible 1251 pass 1133 fail 118 skip 431
 top_failures
 parent-operator 20
 joins 14
 flattening 11
 function-tomillis 10
 transforms 10
-object-constructor 5
 variables 5
-function-fromMillis 3
+object-constructor 4
 simple-array-selectors 3
 transform 3
+closures 2
 skip_reasons
 no_result 395
 non-string-expr 23
 timelimit 7
 bindings 6
 ```
+
+本轮修复（function-fromMillis picture 与空括号）：
+- 提交：function-fromMillis 85→88 pass（全绿），object-constructor 额外减少 1 fail，总体 pass 1129→1133 (+4)，fail 122→118 (-4)，通过率 90.2%→90.6%
+- 门禁：`moon check` 0e0w，`moon test` 174/174 passed，`moon fmt` 与 `moon info` 已执行
+- 修复内容：
+  - Functions: `$fromMillis`/`$formatDateTime` 支持 `[YI]`/`[Yi]` 罗马数字年份与 `[DA]`/`[Da]`、`[MA]`/`[Ma]` 字母序 day/month marker
+  - Functions: 第二个 picture 参数为 undefined 时使用默认 ISO date-time picture，并继续应用第三个 timezone 参数
+  - Parser: `()` 解析为空 block，求值为 undefined，用于官方函数参数中的空 picture
+  - Tests: 增加官方 function-fromMillis 剩余 3 个失败用例的等价回归断言
 
 本轮修复（string-concat undefined 与序列字符串化）：
 - 提交：string-concat 9→12 pass（全绿），总体 pass 1126→1129 (+3)，fail 125→122 (-3)，通过率 90.0%→90.2%

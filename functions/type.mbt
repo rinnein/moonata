@@ -307,7 +307,11 @@ fn register_special_functions(ctx : @value.EvalContext) -> Unit {
       } else {
         0
       }
-      format_date_picture(millis, value_to_str(args[1]), offset)
+      if args[1].is_undefined() {
+        format_default_date_time(millis, offset)
+      } else {
+        format_date_picture(millis, value_to_str(args[1]), offset)
+      }
     } else {
       format_iso_time(millis)
     }
@@ -346,7 +350,11 @@ fn register_special_functions(ctx : @value.EvalContext) -> Unit {
       } else {
         0
       }
-      format_date_picture(millis, value_to_str(args[1]), offset)
+      if args[1].is_undefined() {
+        format_default_date_time(millis, offset)
+      } else {
+        format_date_picture(millis, value_to_str(args[1]), offset)
+      }
     } else {
       format_iso_time(millis)
     }
@@ -411,6 +419,16 @@ fn floor_div64(a : Int64, b : Int64) -> Int64 {
 }
 
 ///|
+fn format_default_date_time(
+  millis : Double,
+  offset_seconds : Int,
+) -> String raise @error.JsonataError {
+  format_date_picture(
+    millis, "[Y0001]-[M01]-[D01]T[H01]:[m01]:[s01].[f001][Z01:01t]", offset_seconds,
+  )
+}
+
+///|
 fn format_date_picture(
   millis : Double,
   picture : String,
@@ -466,12 +484,16 @@ fn format_date_marker(
     "Y" => dt.year().to_string()
     "Y0001" => pad4(dt.year())
     "Y9,999,*" => group_thousands(dt.year())
+    "YI" => to_roman(dt.year())
+    "Yi" => to_roman(dt.year()).to_lower()
     "Yw" => number_to_words(dt.year().to_double())
     "Ywo" => number_to_ordinal_words(dt.year().to_double())
     "X0001" => pad4(iso_week_year(dt))
     "M" | "M#1" => dt.month().to_string()
     "M01" => pad2(dt.month())
     "M1,2" => pad2(dt.month())
+    "MA" => to_letters(dt.month())
+    "Ma" => to_letters(dt.month()).to_lower()
     "MNn" => month_name(dt.month(), "title")
     "MN" => month_name(dt.month(), "upper")
     "MNn,3-3" =>
@@ -479,6 +501,8 @@ fn format_date_marker(
     "D" | "D#1" => dt.day().to_string()
     "D01" => pad2(dt.day())
     "D#1,2" | "D1" => pad2(dt.day())
+    "DA" => to_letters(dt.day())
+    "Da" => to_letters(dt.day()).to_lower()
     "D1o" => "\{dt.day()}\{ordinal_suffix(dt.day())}"
     "Dwo" => number_to_ordinal_words(dt.day().to_double())
     "H" | "H#1" => dt.hour().to_string()

@@ -536,6 +536,23 @@ test "P11：日期 picture 支持 ISO 周和紧凑解析" {
     Json::string("365 days in 2018"),
   )
   assert_true(
+    eval_fn("$fromMillis(1521801216617, \"[D1] [M01] [YI]\")", Json::null()) ==
+    Json::string("23 03 MMXVIII"),
+  )
+  assert_true(
+    eval_fn("$fromMillis(1521801216617, \"[Da] [MA] [Yi]\")", Json::null()) ==
+    Json::string("w C mmxviii"),
+  )
+  assert_true(
+    eval_fn(
+      "$toMillis(\"2018-10-21T13:05:00Z\").[$fromMillis(), $fromMillis($, (), \"-0500\"), $fromMillis($, (), \"0000\")]",
+      Json::null(),
+    ) ==
+    @json.parse(
+      "[\"2018-10-21T13:05:00.000Z\",\"2018-10-21T08:05:00.000-05:00\",\"2018-10-21T13:05:00.000Z\"]",
+    ),
+  )
+  assert_true(
     eval_fn("$toMillis(\"201802\", \"[Y0001][M01]\")", Json::null()) ==
     Json::number(1517443200000.0),
   )
