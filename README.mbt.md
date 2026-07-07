@@ -93,12 +93,12 @@ CI 在 `master` 分支推送、PR 以及手动触发时运行。
 
 ## 兼容性状态
 
-固定快照：2026-07-07，Lambda 闭包与反引号字段名修复阶段。
+固定快照：2026-07-07，字符串字面量谓词过滤修复阶段。
 
 ```text
 本地测试：moon test 176/176
-官方可比对审计：eligible 1251, pass 1142, fail 109, skip 431
-通过率：91.3%
+官方可比对审计：eligible 1251, pass 1144, fail 107, skip 431
+通过率：91.4%
 ```
 
 当前剩余失败最多的官方测试分组：
@@ -112,8 +112,8 @@ transforms 10
 variables 5
 simple-array-selectors 3
 transform 3
-conditionals 2
 function-applications 2
+function-keys 2
 ```
 
 官方测试集审计流程与跳过策略记录在 `docs/jsonata-official-workflow.md`。

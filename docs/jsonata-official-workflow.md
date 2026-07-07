@@ -128,10 +128,10 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-07，Lambda 闭包与反引号字段名修复，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-07，字符串字面量谓词过滤修复，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1142 fail 109 skip 431
+eligible 1251 pass 1144 fail 107 skip 431
 top_failures
 parent-operator 20
 joins 13
@@ -141,14 +141,21 @@ transforms 10
 variables 5
 simple-array-selectors 3
 transform 3
-conditionals 2
 function-applications 2
+function-keys 2
 skip_reasons
 no_result 395
 non-string-expr 23
 timelimit 7
 bindings 6
 ```
+
+本轮修复（字符串字面量谓词过滤）：
+- 提交：conditionals 5→7 pass（全绿），总体 pass 1142→1144 (+2)，fail 109→107 (-2)，通过率 91.3%→91.4%
+- 门禁：`moon check` 0e0w，`moon test` 176/176 passed，`moon fmt` 与 `moon info` 已执行
+- 修复内容：
+  - Parser: 普通字符串字面量后接 `[]` 时保持字面量求值，不再误转为字段路径
+  - Tests: 增加官方 conditionals case000/case001 等价回归断言，并覆盖 `"Red"[true]` 最小形态
 
 本轮修复（Lambda 闭包与反引号字段名）：
 - 提交：closures 0→2 pass（全绿），object-constructor 16→18 pass，joins 14→15 pass，总体 pass 1133→1142 (+9)，fail 118→109 (-9)，通过率 90.6%→91.3%

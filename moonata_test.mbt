@@ -76,6 +76,17 @@ test "官方套件：数组构造保留嵌套数组并支持路径映射数组" 
     Json::null(),
     data("[0,2,4,6,8]"),
   )
+  assert_eval("\"Red\"[true]", Json::null(), Json::string("Red"))
+  assert_eval(
+    "[\"Red\"[$$=\"Bus\"], \"White\"[$$=\"Police Car\"]][0]",
+    Json::string("Bus"),
+    Json::string("Red"),
+  )
+  assert_eval(
+    "[\"Red\"[$$=\"Bus\"], \"White\"[$$=\"Police Car\"]][0]",
+    Json::string("Police Car"),
+    Json::string("White"),
+  )
   assert_eval("[1, 2, 3].$", Json::null(), data("[1,2,3]"))
   assert_eval(
     "and=1 and or=2",

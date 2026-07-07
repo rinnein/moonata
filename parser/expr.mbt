@@ -361,10 +361,13 @@ fn is_path_postfix_kind(kind : @lexer.TokenKind) -> Bool {
 /// 后缀：函数调用、路径步、过滤
 fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
   let mut expr = self.parse_primary()
-  // 路径上下文中的裸字符串 → 字段名
+  // 路径上下文中的 quoted name → 字段名；普通字符串后接 [] 保持字面量。
   if is_path_postfix_kind(self.peek_kind()) {
     match expr {
-      @ast.Ast::String(name) => expr = @ast.Ast::Path([@ast.name_step(name)])
+      @ast.Ast::String(name) =>
+        if self.peek_kind() != @lexer.TokenKind::LBracket {
+          expr = @ast.Ast::Path([@ast.name_step(name)])
+        }
       @ast.Ast::QuotedName(name) =>
         expr = @ast.Ast::Path([@ast.name_step(name)])
       _ => ()
