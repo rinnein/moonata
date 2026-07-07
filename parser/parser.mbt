@@ -87,6 +87,7 @@ fn Parser::expect(
 fn debug_tok(t : @lexer.Token) -> String {
   match t.kind {
     @lexer.TokenKind::String(_) => "string"
+    @lexer.TokenKind::QuotedName(_) => "quoted-name"
     @lexer.TokenKind::Regex(pattern~, flags~) => "/\{pattern}/\{flags}"
     @lexer.TokenKind::Number(_) => "number"
     @lexer.TokenKind::Boolean(_) => "boolean"

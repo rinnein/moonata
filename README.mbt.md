@@ -93,27 +93,27 @@ CI 在 `master` 分支推送、PR 以及手动触发时运行。
 
 ## 兼容性状态
 
-固定快照：2026-07-07，function-fromMillis picture 与空括号修复阶段。
+固定快照：2026-07-07，Lambda 闭包与反引号字段名修复阶段。
 
 ```text
-本地测试：moon test 174/174
-官方可比对审计：eligible 1251, pass 1133, fail 118, skip 431
-通过率：90.6%
+本地测试：moon test 176/176
+官方可比对审计：eligible 1251, pass 1142, fail 109, skip 431
+通过率：91.3%
 ```
 
 当前剩余失败最多的官方测试分组：
 
 ```text
 parent-operator 20
-joins 14
+joins 13
 flattening 11
 function-tomillis 10
 transforms 10
 variables 5
-object-constructor 4
 simple-array-selectors 3
 transform 3
-closures 2
+conditionals 2
+function-applications 2
 ```
 
 官方测试集审计流程与跳过策略记录在 `docs/jsonata-official-workflow.md`。

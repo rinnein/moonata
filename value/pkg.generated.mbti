@@ -23,9 +23,11 @@ pub struct EvalContext {
   mut parent : JsonataValue
 }
 pub fn EvalContext::bind(Self, String, JsonataValue) -> Unit
+pub fn EvalContext::capture(Self) -> Self
 pub fn EvalContext::current(Self) -> JsonataValue
 pub fn EvalContext::enter(Self) -> Unit raise @error.JsonataError
 pub fn EvalContext::exit(Self) -> Unit
+pub fn EvalContext::inherit_missing_bindings_from(Self, Self) -> Unit
 pub fn EvalContext::lookup(Self, String) -> JsonataValue?
 pub fn EvalContext::new(JsonataValue) -> Self
 pub fn EvalContext::new_with_limits(JsonataValue, max_depth? : Int, max_steps? : Int) -> Self

@@ -555,21 +555,24 @@ fn eval_lambda(
   params : Array[String],
   body : @ast.Ast,
   signature : String?,
-  _ctx : @value.EvalContext,
+  ctx : @value.EvalContext,
 ) -> @value.JsonataValue {
   let arity = params.length()
+  let captured_ctx = ctx.capture()
   let invoke = fn(
     args : Array[@value.JsonataValue],
     ctx2 : @value.EvalContext,
   ) -> @value.JsonataValue raise @error.JsonataError {
+    let call_ctx = captured_ctx.capture()
+    call_ctx.inherit_missing_bindings_from(ctx2)
     for i, param in params {
       if i < args.length() {
-        ctx2.bind(param, args[i])
+        call_ctx.bind(param, args[i])
       } else if lambda_missing_arg_uses_context(signature) {
-        ctx2.bind(param, ctx2.current())
+        call_ctx.bind(param, ctx2.current())
       }
     }
-    eval(body, ctx2)
+    eval(body, call_ctx)
   }
   @value.JsonataValue::Func(
     @value.JsonataFunc::new(arity~, signature~, invoke~),

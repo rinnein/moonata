@@ -23,6 +23,7 @@ pub fn wildcard_step(recursive? : Bool) -> Step
 // Types and methods
 pub(all) enum Ast {
   String(String)
+  QuotedName(String)
   Regex(pattern~ : String, flags~ : String)
   Number(Double)
   Boolean(Bool)

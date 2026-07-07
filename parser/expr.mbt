@@ -365,6 +365,8 @@ fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
   if is_path_postfix_kind(self.peek_kind()) {
     match expr {
       @ast.Ast::String(name) => expr = @ast.Ast::Path([@ast.name_step(name)])
+      @ast.Ast::QuotedName(name) =>
+        expr = @ast.Ast::Path([@ast.name_step(name)])
       _ => ()
     }
   }
@@ -401,9 +403,10 @@ fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
             }
             continue
           }
-          @lexer.TokenKind::String(_) => {
+          @lexer.TokenKind::String(_) | @lexer.TokenKind::QuotedName(_) => {
             let name = match self.advance().kind {
               @lexer.TokenKind::String(n) => n
+              @lexer.TokenKind::QuotedName(n) => n
               _ => abort("unreachable")
             }
             let mut step = @ast.name_step(name, recursive=true)
@@ -450,9 +453,10 @@ fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
               expr = append_step(expr, @ast.name_step(field))
             }
           }
-          @lexer.TokenKind::String(_) => {
+          @lexer.TokenKind::String(_) | @lexer.TokenKind::QuotedName(_) => {
             let name = match self.advance().kind {
               @lexer.TokenKind::String(n) => n
+              @lexer.TokenKind::QuotedName(n) => n
               _ => abort("unreachable")
             }
             expr = append_step(expr, @ast.name_step(name))
@@ -505,9 +509,10 @@ fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
                   }
                   expr = append_step(expr, step)
                 }
-                @lexer.TokenKind::String(_) => {
+                @lexer.TokenKind::String(_) | @lexer.TokenKind::QuotedName(_) => {
                   let name = match self.advance().kind {
                     @lexer.TokenKind::String(n) => n
+                    @lexer.TokenKind::QuotedName(n) => n
                     _ => abort("unreachable")
                   }
                   let mut step = @ast.name_step(name, recursive=true)

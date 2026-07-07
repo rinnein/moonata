@@ -128,27 +128,36 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-07，function-fromMillis picture 与空括号修复，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-07，Lambda 闭包与反引号字段名修复，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1133 fail 118 skip 431
+eligible 1251 pass 1142 fail 109 skip 431
 top_failures
 parent-operator 20
-joins 14
+joins 13
 flattening 11
 function-tomillis 10
 transforms 10
 variables 5
-object-constructor 4
 simple-array-selectors 3
 transform 3
-closures 2
+conditionals 2
+function-applications 2
 skip_reasons
 no_result 395
 non-string-expr 23
 timelimit 7
 bindings 6
 ```
+
+本轮修复（Lambda 闭包与反引号字段名）：
+- 提交：closures 0→2 pass（全绿），object-constructor 16→18 pass，joins 14→15 pass，总体 pass 1133→1142 (+9)，fail 118→109 (-9)，通过率 90.6%→91.3%
+- 门禁：`moon check` 0e0w，`moon test` 176/176 passed，`moon fmt` 与 `moon info` 已执行
+- 修复内容：
+  - Lexer/AST/Parser: 区分反引号字段名与普通字符串字面量，表达式位置的 `` `field` `` 按当前上下文字段访问求值，路径后缀继续支持 quoted name
+  - Evaluator: Lambda 捕获定义时上下文，并在调用时补齐调用点新增绑定，恢复递归与互递归函数可见性
+  - Evaluator: 对象聚合中重复的相同字符串值折叠为标量，保留数值等其它重复值的数组聚合语义
+  - Tests: 增加官方 closures 两个失败形态的等价回归断言，以及反引号 token 回归
 
 本轮修复（function-fromMillis picture 与空括号）：
 - 提交：function-fromMillis 85→88 pass（全绿），object-constructor 额外减少 1 fail，总体 pass 1129→1133 (+4)，fail 122→118 (-4)，通过率 90.2%→90.6%

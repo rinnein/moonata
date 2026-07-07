@@ -20,6 +20,7 @@ pub fn Token::new(kind~ : TokenKind, pos~ : Int) -> Self
 
 pub(all) enum TokenKind {
   String(String)
+  QuotedName(String)
   Regex(pattern~ : String, flags~ : String)
   Number(Double)
   Boolean(Bool)

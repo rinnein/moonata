@@ -27,6 +27,12 @@ test "词法：字面量" {
     ),
   )
   debug_inspect(
+    tok_kind("`quoted name`"),
+    content=(
+      #|[QuotedName("quoted name")]
+    ),
+  )
+  debug_inspect(
     tok_kind("42"),
     content=(
       #|[Number(42)]

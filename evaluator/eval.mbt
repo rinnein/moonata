@@ -7,6 +7,8 @@ pub fn eval(
   ctx.tick()
   match ast {
     @ast.Ast::String(s) => @value.JsonataValue::Json(Json::string(s))
+    @ast.Ast::QuotedName(name) =>
+      eval_path([@ast.name_step(name)], ctx.current(), ctx)
     @ast.Ast::Regex(pattern~, flags~) =>
       @value.JsonataValue::Regex(pattern~, flags~)
     @ast.Ast::Number(n) => @value.JsonataValue::Json(Json::number(n))
@@ -271,17 +273,40 @@ fn merge_into_group(
 
 ///|
 /// 从合并后的 accumulator 构建最终 Json::Object。
-/// 单值保持原样，多值转为数组。
+/// 单值保持原样；重复的相同字符串折叠为标量，否则转为数组。
 fn build_merged_group(merged : Map[String, Array[Json]]) -> Map[String, Json] {
   let out : Map[String, Json] = {}
   for name, values in merged {
-    out[name] = if values.length() == 1 {
-      values[0]
-    } else {
-      Json::array(values)
-    }
+    out[name] = json_for_merged_values(values)
   }
   out
+}
+
+///|
+fn json_for_merged_values(values : Array[Json]) -> Json {
+  if values.length() == 1 || all_string_values_equal(values) {
+    values[0]
+  } else {
+    Json::array(values)
+  }
+}
+
+///|
+fn all_string_values_equal(values : Array[Json]) -> Bool {
+  if values.length() <= 1 {
+    return true
+  }
+  let first = match values[0] {
+    Json::String(s) => s
+    _ => return false
+  }
+  for i in 1..<values.length() {
+    match values[i] {
+      Json::String(s) if s == first => ()
+      _ => return false
+    }
+  }
+  true
 }
 
 ///|
@@ -736,14 +761,10 @@ fn access_group_aggregate(
       _ => ()
     }
   }
-  // 将合并结果转为最终对象：单值保持单值，多值作为数组
+  // 将合并结果转为最终对象。
   let out : Map[String, Json] = {}
   for name, values in merged {
-    out[name] = if values.length() == 1 {
-      values[0]
-    } else {
-      Json::array(values)
-    }
+    out[name] = json_for_merged_values(values)
   }
   @value.JsonataValue::Json(Json::object(out))
 }

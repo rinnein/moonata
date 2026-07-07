@@ -3,6 +3,7 @@
 pub(all) enum TokenKind {
   // 字面量
   String(String)
+  QuotedName(String)
   Regex(pattern~ : String, flags~ : String)
   Number(Double)
   Boolean(Bool)
@@ -103,6 +104,7 @@ pub fn lex(src : String) -> Array[Token] raise @error.JsonataError {
 fn token_expects_operand_after(kind : TokenKind) -> Bool {
   match kind {
     String(_)
+    | QuotedName(_)
     | Regex(_)
     | Number(_)
     | Boolean(_)
@@ -337,7 +339,12 @@ fn Lexer::lex_string(
       self.pos = self.pos + c.utf16_len()
     }
   }
-  Token::new(kind=TokenKind::String(buf.to_string()), pos=start)
+  let kind = if quote == '`' {
+    TokenKind::QuotedName(buf.to_string())
+  } else {
+    TokenKind::String(buf.to_string())
+  }
+  Token::new(kind~, pos=start)
 }
 
 ///|

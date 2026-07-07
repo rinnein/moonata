@@ -156,6 +156,52 @@ test "求值：变量与绑定" {
 }
 
 ///|
+test "求值：Lambda 捕获定义时上下文字段" {
+  let data = make_data(
+    (
+      #|{"Account":{"Account Name":"Firefly","Order":[{"OrderID":"order104","Product":[{"ProductID":"345664","Product Name":"Cloak"},{"ProductID":"858383","Product Name":"Bowler Hat"}]}]}}
+    ),
+  )
+  let result = eval_to_json(
+    (
+      #|Account.($AccName := function() { $."Account Name" }; Order[OrderID = "order104"].Product{ "Account": $AccName(), "SKU-" & ProductID: $."Product Name" })
+    ),
+    data,
+  )
+  assert_true(
+    result ==
+    make_data(
+      (
+        #|{"Account":"Firefly","SKU-345664":"Cloak","SKU-858383":"Bowler Hat"}
+      ),
+    ),
+  )
+}
+
+///|
+test "求值：反引号字段名参与 Lambda 闭包" {
+  let data = make_data(
+    (
+      #|{"Account":{"Account Name":"Firefly","Order":[{"OrderID":"order104","Product":[{"ProductID":"345664","Product Name":"Cloak"},{"ProductID":"858383","Product Name":"Bowler Hat"}]}]}}
+    ),
+  )
+  let result = eval_to_json(
+    (
+      #|Account.($AccName := function() { `Account Name` }; Order[OrderID = "order104"].Product{ "Account": $AccName(), "SKU-" & ProductID: `Product Name` })
+    ),
+    data,
+  )
+  assert_true(
+    result ==
+    make_data(
+      (
+        #|{"Account":"Firefly","SKU-345664":"Cloak","SKU-858383":"Bowler Hat"}
+      ),
+    ),
+  )
+}
+
+///|
 test "求值：Undefined 传播" {
   let data = make_data("{\"a\":1}")
   let result = eval_to_json("missing", data)

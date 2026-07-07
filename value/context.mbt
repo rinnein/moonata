@@ -61,6 +61,38 @@ pub fn EvalContext::new_with_limits(
 }
 
 ///|
+/// 复制求值上下文，保留当前项、父级、护栏计数与已有绑定。
+pub fn EvalContext::capture(self : EvalContext) -> EvalContext {
+  let bindings : Map[String, JsonataValue] = {}
+  for name, value in self.bindings {
+    bindings[name] = value
+  }
+  {
+    root: self.root,
+    bindings,
+    depth: self.depth,
+    max_depth: self.max_depth,
+    steps: self.steps,
+    max_steps: self.max_steps,
+    current: self.current,
+    parent: self.parent,
+  }
+}
+
+///|
+/// 从另一个上下文补齐当前尚未捕获的绑定。
+pub fn EvalContext::inherit_missing_bindings_from(
+  self : EvalContext,
+  other : EvalContext,
+) -> Unit {
+  for name, value in other.bindings {
+    if self.bindings.get(name) is None {
+      self.bindings[name] = value
+    }
+  }
+}
+
+///|
 /// 获取根数据（`$`）。
 pub fn EvalContext::root(self : EvalContext) -> JsonataValue {
   self.root
