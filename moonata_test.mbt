@@ -495,6 +495,22 @@ test "官方套件：$sift predicate 参数与空对象省略" {
 }
 
 ///|
+test "官方套件：$spread 非对象与对象序列" {
+  assert_eval(
+    "$spread(\"Hello World\")",
+    Json::null(),
+    Json::string("Hello World"),
+  )
+  assert_eval(
+    "$spread((Product.Description))",
+    data(
+      "{\"Product\":[{\"Description\":{\"Colour\":\"Purple\",\"Width\":300}},{\"Description\":{\"Height\":200}}]}",
+    ),
+    data("[{\"Colour\":\"Purple\"},{\"Width\":300},{\"Height\":200}]"),
+  )
+}
+
+///|
 test "官方套件：$merge" {
   let d = data("[{\"a\":1},{\"b\":2}]")
   let result = evaluate("$merge($)", d)

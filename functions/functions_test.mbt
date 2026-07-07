@@ -177,6 +177,18 @@ test "函数：$keys $values" {
 }
 
 ///|
+test "函数：$spread" {
+  assert_true(
+    eval_fn("$spread(\"Hello World\")", Json::null()) ==
+    Json::string("Hello World"),
+  )
+  assert_true(
+    eval_fn("$spread([{ \"a\": 1 }, { \"b\": 2, \"c\": 3 }])", Json::null()) ==
+    @json.parse("[{\"a\":1},{\"b\":2},{\"c\":3}]"),
+  )
+}
+
+///|
 test "函数：$sift predicate 参数" {
   assert_true(
     eval_fn(

@@ -61,18 +61,19 @@ fn register_object_functions(ctx : @value.EvalContext) -> Unit {
   })
   // $spread
   register(ctx, "spread", arity=1, invoke=fn(args, _ctx) {
-    match args[0] {
-      @value.JsonataValue::Json(Json::Object(map)) => {
-        let items : Array[Json] = []
-        for k, v in map {
-          let m : Map[String, Json] = {}
-          m[k] = v
-          items.push(Json::object(m))
-        }
-        @value.JsonataValue::Json(Json::array(items))
+    let items : Array[@value.JsonataValue] = []
+    for item in args[0].to_array() {
+      match item {
+        @value.JsonataValue::Json(Json::Object(map)) =>
+          for k, v in map {
+            let m : Map[String, Json] = {}
+            m[k] = v
+            items.push(@value.JsonataValue::Json(Json::object(m)))
+          }
+        _ => items.push(item)
       }
-      _ => @value.JsonataValue::Undefined
     }
+    @value.JsonataValue::sequence(items)
   })
   // $lookup
   register(ctx, "lookup", arity=2, invoke=fn(args, _ctx) {

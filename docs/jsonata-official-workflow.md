@@ -128,10 +128,10 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-07，`$sift` predicate 与递归通配去重修复，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-07，`$spread` 对象序列修复，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1156 fail 95 skip 431
+eligible 1251 pass 1158 fail 93 skip 431
 top_failures
 parent-operator 20
 joins 13
@@ -142,13 +142,21 @@ variables 5
 simple-array-selectors 3
 transform 3
 function-applications 2
-function-spread 2
+multiple-array-selectors 2
 skip_reasons
 no_result 395
 non-string-expr 23
 timelimit 7
 bindings 6
 ```
+
+本轮修复（`$spread` 对象序列）：
+- 提交：function-spread 1→3 pass（全绿），总体 pass 1156→1158 (+2)，fail 95→93 (-2)，通过率 92.4%→92.6%
+- 门禁：`moon check` 0e0w，`moon test` 180/180 passed，`moon fmt` 与 `moon info` 已执行
+- 修复内容：
+  - Functions: `$spread` 对非对象输入按原值返回，兼容 `$spread("Hello World")`
+  - Functions: `$spread` 支持对象数组/序列，按每个对象的字段顺序展开为单键对象序列
+  - Tests: 增加官方 function-spread case000/case001 等价回归断言
 
 本轮修复（`$sift` predicate 与递归通配去重）：
 - 提交：function-sift 3→5 pass（全绿），descendent-operator 14→15 pass（全绿），总体 pass 1153→1156 (+3)，fail 98→95 (-3)，通过率 92.2%→92.4%
