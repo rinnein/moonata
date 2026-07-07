@@ -133,6 +133,31 @@ test "官方套件：多索引数组选择器" {
 }
 
 ///|
+test "官方套件：简单数组选择器逐项索引" {
+  assert_eval(
+    "nest0.nest1[0]",
+    data(
+      "{\"nest0\":[{\"nest1\":[1,2]},{\"nest1\":[3,4]},{\"nest1\":[5]},{\"nest1\":[6]}]}",
+    ),
+    data("[1,3,5,6]"),
+  )
+  assert_eval(
+    "foo.blah.baz.fud[0]",
+    data(
+      "{\"foo\":{\"blah\":[{\"baz\":{\"fud\":\"hello\"}},{\"baz\":{\"fud\":\"world\"}}]}}",
+    ),
+    data("[\"hello\",\"world\"]"),
+  )
+  assert_eval(
+    "foo.blah.baz.fud[-1]",
+    data(
+      "{\"foo\":{\"blah\":[{\"baz\":{\"fud\":\"hello\"}},{\"baz\":{\"fud\":\"world\"}}]}}",
+    ),
+    data("[\"hello\",\"world\"]"),
+  )
+}
+
+///|
 test "官方套件：通配符 .*" {
   let d = data("{\"a\":1,\"b\":2,\"c\":3}")
   let result = evaluate(".*", d)

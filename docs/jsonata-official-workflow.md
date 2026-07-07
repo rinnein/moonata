@@ -128,27 +128,35 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-07，多索引数组选择器修复，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-07，简单数组选择器逐项索引修复，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1164 fail 87 skip 431
+eligible 1251 pass 1170 fail 81 skip 431
 top_failures
 parent-operator 20
 function-tomillis 10
 joins 10
 transforms 10
-flattening 7
 variables 5
-simple-array-selectors 3
+flattening 4
 function-applications 2
 object-constructor 2
 transform 2
+boolean-expresssions 1
 skip_reasons
 no_result 395
 non-string-expr 23
 timelimit 7
 bindings 6
 ```
+
+本轮修复（简单数组选择器逐项索引）：
+- 提交：simple-array-selectors 20→23 pass（全绿），flattening 失败 7→4，总体 pass 1164→1170 (+6)，fail 87→81 (-6)，通过率 93.0%→93.5%
+- 门禁：`moon check` 0e0w，`moon test` 182/182 passed，`moon fmt` 与 `moon info` 已执行
+- 修复内容：
+  - Evaluator: 分组字段访问在 Sequence 输入上推回字段求值结果，而不是原始 item
+  - Evaluator: 分组 Index/Slice 在 Sequence 输入上推回逐项索引结果，恢复 `a.b[0]` / `foo.bar[-1]` 逐项选择语义
+  - Tests: 增加官方 simple-array-selectors case000/case005/case006 等价回归断言
 
 本轮修复（多索引数组选择器）：
 - 提交：multiple-array-selectors 1→3 pass（全绿），joins 失败 13→10，总体 pass 1158→1164 (+6)，fail 93→87 (-6)，通过率 92.6%→93.0%

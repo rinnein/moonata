@@ -525,7 +525,7 @@ fn access_field_grouped(
             for e in inner {
               results.push(e)
             }
-          _ => results.push(item)
+          _ => results.push(r)
         }
       }
       @value.JsonataValue::sequence(results)
@@ -659,7 +659,7 @@ fn access_grouped(
         let r = eval_step_single(step, item, ctx)
         match r {
           @value.JsonataValue::Undefined => continue
-          _ => results.push(item)
+          _ => results.push(r)
         }
       }
       @value.JsonataValue::sequence(results)
