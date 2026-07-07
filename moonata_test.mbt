@@ -972,4 +972,24 @@ test "官方套件：函数链部分应用参数顺序" {
     Json::null(),
     Json::string("HELLO WORLD"),
   )
+  assert_eval(
+    "$decodeUrl(\"https://mozilla.org/?x=%D1%88%D0%B5%D0%BB%D0%BB%D1%8B\")",
+    Json::null(),
+    Json::string("https://mozilla.org/?x=шеллы"),
+  )
+  assert_eval(
+    "$encodeUrl(\"https://mozilla.org/?x=шеллы\")",
+    Json::null(),
+    Json::string("https://mozilla.org/?x=%D1%88%D0%B5%D0%BB%D0%BB%D1%8B"),
+  )
+  assert_eval(
+    "$decodeUrlComponent(\"%3Fx%3Dtest\")",
+    Json::null(),
+    Json::string("?x=test"),
+  )
+  assert_eval(
+    "$encodeUrlComponent(\"?x=test\")",
+    Json::null(),
+    Json::string("%3Fx%3Dtest"),
+  )
 }

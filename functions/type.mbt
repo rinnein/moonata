@@ -377,6 +377,28 @@ fn register_special_functions(ctx : @value.EvalContext) -> Unit {
   ) -> @value.JsonataValue raise @error.JsonataError {
     raise @error.runtime_error(value_to_str(args[0]))
   })
+  // $encodeUrl — 对整个 URL 做百分号编码，保留 URL 保留字符
+  register(ctx, "encodeUrl", arity=1, invoke=fn(args, _ctx) {
+    let s = value_to_str(args[0])
+    @value.JsonataValue::Json(Json::string(percent_encode(s, UrlMode::FullUrl)))
+  })
+  // $decodeUrl — 解码百分号编码的 URL
+  register(ctx, "decodeUrl", arity=1, invoke=fn(args, _ctx) {
+    let s = value_to_str(args[0])
+    @value.JsonataValue::Json(Json::string(percent_decode(s)))
+  })
+  // $encodeUrlComponent — 对 URL 组件做百分号编码（不保留任何保留字符）
+  register(ctx, "encodeUrlComponent", arity=1, invoke=fn(args, _ctx) {
+    let s = value_to_str(args[0])
+    @value.JsonataValue::Json(
+      Json::string(percent_encode(s, UrlMode::Component)),
+    )
+  })
+  // $decodeUrlComponent — 解码百分号编码的 URL 组件
+  register(ctx, "decodeUrlComponent", arity=1, invoke=fn(args, _ctx) {
+    let s = value_to_str(args[0])
+    @value.JsonataValue::Json(Json::string(percent_decode(s)))
+  })
 }
 
 ///|
@@ -2204,4 +2226,166 @@ fn base64_decode(s : String) -> String {
     i += 4
   }
   result.to_string()
+}
+
+///|
+/// URL 编码模式。
+priv enum UrlMode {
+  FullUrl // 对整个 URL 编码，保留 :/?#[]@!$&'()*+,;=
+  Component // 对组件编码，不保留任何保留字符
+}
+
+///|
+/// 百分号编码，按模式选择保留字符集。
+fn percent_encode(s : String, mode : UrlMode) -> String {
+  let reserved = match mode {
+    UrlMode::FullUrl => ":/?#[]@!$&'()*+,;="
+    UrlMode::Component => ""
+  }
+  let result = StringBuilder::new()
+  for c in s {
+    let code = c.to_int()
+    if (code >= 0x41 && code <= 0x5A) || // A-Z
+      (code >= 0x61 && code <= 0x7A) || // a-z
+      (code >= 0x30 && code <= 0x39) || // 0-9
+      c == '-' ||
+      c == '_' ||
+      c == '.' ||
+      c == '~' ||
+      reserved.contains_char(c) {
+      result.write_char(c)
+    } else {
+      for byte in utf8_bytes(c) {
+        result.write_char('%')
+        result.write_string(hex_byte(byte))
+      }
+    }
+  }
+  result.to_string()
+}
+
+///|
+/// 百分号解码：将 %XX 序列还原为 UTF-8 字符串。
+fn percent_decode(s : String) -> String {
+  let chars = s.to_array()
+  let bytes : Array[Int] = []
+  let mut i = 0
+  while i < chars.length() {
+    if chars[i] == '%' && i + 2 < chars.length() {
+      let hi = hex_digit(chars[i + 1])
+      let lo = hex_digit(chars[i + 2])
+      if hi >= 0 && lo >= 0 {
+        bytes.push((hi << 4) | lo)
+        i += 3
+        continue
+      }
+    }
+    // 非百分号字符直接转为 UTF-8 字节再追加
+    for byte in utf8_bytes(chars[i]) {
+      bytes.push(byte)
+    }
+    i += 1
+  }
+  utf8_decode(bytes)
+}
+
+///|
+/// 将 UTF-8 字节序列解码为字符串。
+fn utf8_decode(bytes : Array[Int]) -> String {
+  let result = StringBuilder::new()
+  let mut i = 0
+  while i < bytes.length() {
+    let b = bytes[i]
+    if b < 0x80 {
+      result.write_char(Int::unsafe_to_char(b))
+      i += 1
+    } else if b < 0xE0 && i + 1 < bytes.length() {
+      let c = ((b & 0x1F) << 6) | (bytes[i + 1] & 0x3F)
+      result.write_char(Int::unsafe_to_char(c))
+      i += 2
+    } else if b < 0xF0 && i + 2 < bytes.length() {
+      let c = ((b & 0x0F) << 12) |
+        ((bytes[i + 1] & 0x3F) << 6) |
+        (bytes[i + 2] & 0x3F)
+      result.write_char(Int::unsafe_to_char(c))
+      i += 3
+    } else if i + 3 < bytes.length() {
+      let c = ((b & 0x07) << 18) |
+        ((bytes[i + 1] & 0x3F) << 12) |
+        ((bytes[i + 2] & 0x3F) << 6) |
+        (bytes[i + 3] & 0x3F)
+      result.write_char(Int::unsafe_to_char(c))
+      i += 4
+    } else {
+      // 无效字节序列，跳过
+      i += 1
+    }
+  }
+  result.to_string()
+}
+
+///|
+/// 将字符编码为 UTF-8 字节序列。
+fn utf8_bytes(c : Char) -> Array[Int] {
+  let code = c.to_int()
+  if code < 0x80 {
+    [code]
+  } else if code < 0x800 {
+    [0xC0 | (code >> 6), 0x80 | (code & 0x3F)]
+  } else if code < 0x10000 {
+    [0xE0 | (code >> 12), 0x80 | ((code >> 6) & 0x3F), 0x80 | (code & 0x3F)]
+  } else {
+    [
+      0xF0 | (code >> 18),
+      0x80 | ((code >> 12) & 0x3F),
+      0x80 | ((code >> 6) & 0x3F),
+      0x80 | (code & 0x3F),
+    ]
+  }
+}
+
+///|
+/// 将字节转为两位十六进制字符串（大写）。
+fn hex_byte(b : Int) -> String {
+  let hi = (b >> 4) & 0xF
+  let lo = b & 0xF
+  hex_char(hi) + hex_char(lo)
+}
+
+///|
+/// 半字节转十六进制字符。
+fn hex_char(n : Int) -> String {
+  match n {
+    0 => "0"
+    1 => "1"
+    2 => "2"
+    3 => "3"
+    4 => "4"
+    5 => "5"
+    6 => "6"
+    7 => "7"
+    8 => "8"
+    9 => "9"
+    10 => "A"
+    11 => "B"
+    12 => "C"
+    13 => "D"
+    14 => "E"
+    15 => "F"
+    _ => "0"
+  }
+}
+
+///|
+/// 十六进制字符转数字。
+fn hex_digit(c : Char) -> Int {
+  if c >= '0' && c <= '9' {
+    c.to_int() - '0'.to_int()
+  } else if c >= 'A' && c <= 'F' {
+    c.to_int() - 'A'.to_int() + 10
+  } else if c >= 'a' && c <= 'f' {
+    c.to_int() - 'a'.to_int() + 10
+  } else {
+    -1
+  }
 }

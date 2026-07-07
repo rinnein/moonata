@@ -128,10 +128,10 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-07，variables 链式赋值与块级作用域修复，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-07，URL 百分号编码/解码函数实现，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1189 fail 62 skip 431
+eligible 1251 pass 1193 fail 58 skip 431
 top_failures
 function-tomillis 10
 joins 10
@@ -142,13 +142,23 @@ function-applications 2
 object-constructor 2
 transform 2
 boolean-expresssions 1
-function-decodeUrl 1
+function-distinct 1
 skip_reasons
 no_result 395
 non-string-expr 23
 timelimit 7
 bindings 6
 ```
+
+本轮修复（URL 百分号编码/解码函数）：
+- 提交：function-decodeUrl 0→1 pass（全绿），function-encodeUrl 0→1 pass（全绿），function-decodeUrlComponent 0→1 pass（全绿），function-encodeUrlComponent 0→1 pass（全绿），整体 pass 1189→1193 (+4)，fail 62→58 (-4)，通过率 95.0%→95.4%
+- 门禁：`moon check` 0e0w，`moon test` 183/183 passed，`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Functions: 新增 `$encodeUrl` / `$decodeUrl` / `$encodeUrlComponent` / `$decodeUrlComponent` 四个百分号编码/解码函数
+  - Functions: `$encodeUrl` 保留 URL 保留字符 `:/?#[]@!$&'()*+,;=`，`$encodeUrlComponent` 不保留任何保留字符
+  - Functions: `$decodeUrl` / `$decodeUrlComponent` 将 `%XX` 序列还原为 UTF-8 字符串
+  - Functions: 百分号编码使用 UTF-8 字节序列编码，支持非 ASCII 字符
+  - Tests: 增加官方 function-decodeUrl/function-encodeUrl/function-decodeUrlComponent/function-encodeUrlComponent case000 等价回归断言
 
 本轮修复（variables 链式赋值与块级作用域）：
 - 提交：variables 1→6 pass（全绿），整体 pass 1184→1189 (+5)，fail 67→62 (-5)，通过率 94.6%→95.0%

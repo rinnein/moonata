@@ -93,12 +93,12 @@ CI 在 `master` 分支推送、PR 以及手动触发时运行。
 
 ## 兼容性状态
 
-固定快照：2026-07-07，variables 链式赋值与块级作用域修复阶段。
+固定快照：2026-07-07，URL 百分号编码/解码函数实现阶段。
 
 ```text
-本地测试：moon test 182/182
-官方可比对审计：eligible 1251, pass 1189, fail 62, skip 431
-通过率：95.0%
+本地测试：moon test 183/183
+官方可比对审计：eligible 1251, pass 1193, fail 58, skip 431
+通过率：95.4%
 ```
 
 当前剩余失败最多的官方测试分组：
@@ -113,7 +113,7 @@ function-applications 2
 object-constructor 2
 transform 2
 boolean-expresssions 1
-function-decodeUrl 1
+function-distinct 1
 ```
 
 官方测试集审计流程与跳过策略记录在 `docs/jsonata-official-workflow.md`。

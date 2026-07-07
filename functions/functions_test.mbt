@@ -651,3 +651,31 @@ test "P10：标准正则函数名兼容" {
     Json::string("hello x"),
   )
 }
+
+///|
+test "P11：$encodeUrl $decodeUrl $encodeUrlComponent $decodeUrlComponent" {
+  // $encodeUrl: 对整个 URL 编码，保留 URL 保留字符
+  let encoded_url = eval_fn(
+    "$encodeUrl(\"https://mozilla.org/?x=шеллы\")",
+    Json::null(),
+  )
+  assert_true(
+    encoded_url ==
+    Json::string("https://mozilla.org/?x=%D1%88%D0%B5%D0%BB%D0%BB%D1%8B"),
+  )
+  // $decodeUrl: 解码百分号编码的 URL
+  let decoded_url = eval_fn(
+    "$decodeUrl(\"https://mozilla.org/?x=%D1%88%D0%B5%D0%BB%D0%BB%D1%8B\")",
+    Json::null(),
+  )
+  assert_true(decoded_url == Json::string("https://mozilla.org/?x=шеллы"))
+  // $encodeUrlComponent: 对组件编码，不保留任何保留字符
+  let encoded_comp = eval_fn("$encodeUrlComponent(\"?x=test\")", Json::null())
+  assert_true(encoded_comp == Json::string("%3Fx%3Dtest"))
+  // $decodeUrlComponent: 解码百分号编码的组件
+  let decoded_comp = eval_fn(
+    "$decodeUrlComponent(\"%3Fx%3Dtest\")",
+    Json::null(),
+  )
+  assert_true(decoded_comp == Json::string("?x=test"))
+}
