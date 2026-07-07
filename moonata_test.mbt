@@ -48,6 +48,23 @@ test "官方套件：Account 样例 quoted field 与路径映射" {
     d,
     data("[[34.45,21.67],[34.45,107.99]]"),
   )
+  assert_eval(
+    "Account.Order.Product.(%.OrderID)",
+    d,
+    data("[\"order103\",\"order103\",\"order104\",\"order104\"]"),
+  )
+  assert_eval(
+    "Account.Order.Product[%.OrderID=\"order104\"].SKU",
+    d,
+    data("[\"040657863\",\"0406654603\"]"),
+  )
+  assert_eval(
+    "Account.Order.Product.Description.{ \"Item\": Colour & \" \" & %.`Product Name`, \"Discounted\": (%.%.OrderID = \"order103\") ? %.Price / 2 : %.Price }",
+    d,
+    data(
+      "[{\"Item\":\"Purple Bowler Hat\",\"Discounted\":17.225},{\"Item\":\"Orange Trilby hat\",\"Discounted\":10.835},{\"Item\":\"Purple Bowler Hat\",\"Discounted\":34.45},{\"Item\":\"Black Cloak\",\"Discounted\":107.99}]",
+    ),
+  )
 }
 
 ///|

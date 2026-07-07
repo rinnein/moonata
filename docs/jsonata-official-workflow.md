@@ -128,15 +128,15 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-07，简单数组选择器逐项索引修复，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-07，parent-operator 父级链路修复，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1170 fail 81 skip 431
+eligible 1251 pass 1184 fail 67 skip 431
 top_failures
-parent-operator 20
 function-tomillis 10
 joins 10
 transforms 10
+parent-operator 6
 variables 5
 flattening 4
 function-applications 2
@@ -149,6 +149,14 @@ non-string-expr 23
 timelimit 7
 bindings 6
 ```
+
+本轮修复（parent-operator 父级链路）：
+- 提交：parent-operator 0→14 pass，整体 pass 1170→1184 (+14)，fail 81→67 (-14)，通过率 93.5%→94.6%
+- 门禁：`moon check` 0e0w，`moon test` 182/182 passed，`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Value: `EvalContext` 记录父级链，支持 `%` 与 `%.%` 读取直接父级和祖先级上下文
+  - Evaluator: 含 `%` 的路径使用父级感知帧求值，在字段展开、map、filter、group 和 sort 中保留每项来源上下文
+  - Tests: 增加 parent-operator 等价回归断言，覆盖 map、filter 与 Description→Product→Order 祖先链
 
 本轮修复（简单数组选择器逐项索引）：
 - 提交：simple-array-selectors 20→23 pass（全绿），flattening 失败 7→4，总体 pass 1164→1170 (+6)，fail 87→81 (-6)，通过率 93.0%→93.5%

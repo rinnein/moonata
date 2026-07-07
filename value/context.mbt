@@ -15,6 +15,7 @@ let default_max_steps : Int = 1_000_000
 /// - `steps`/`max_steps`：求值步数护栏。
 /// - `current`：`@` 当前项（谓词过滤/路径迭代时绑定）。
 /// - `parent`：`$$` 父级上下文。
+/// - `ancestors`：当前项的父级链，首项为 `%`，后续项支持 `%.%`。
 pub struct EvalContext {
   root : JsonataValue
   bindings : Map[String, JsonataValue]
@@ -24,6 +25,7 @@ pub struct EvalContext {
   max_steps : Int
   mut current : JsonataValue
   mut parent : JsonataValue
+  mut ancestors : Array[JsonataValue]
 }
 
 ///|
@@ -38,6 +40,7 @@ pub fn EvalContext::new(root : JsonataValue) -> EvalContext {
     max_steps: default_max_steps,
     current: root,
     parent: root,
+    ancestors: [root],
   }
 }
 
@@ -57,6 +60,7 @@ pub fn EvalContext::new_with_limits(
     max_steps,
     current: root,
     parent: root,
+    ancestors: [root],
   }
 }
 
@@ -76,6 +80,7 @@ pub fn EvalContext::capture(self : EvalContext) -> EvalContext {
     max_steps: self.max_steps,
     current: self.current,
     parent: self.parent,
+    ancestors: self.ancestors.copy(),
   }
 }
 
@@ -107,7 +112,16 @@ pub fn EvalContext::current(self : EvalContext) -> JsonataValue {
 ///|
 /// 获取父级上下文（`$$`）。
 pub fn EvalContext::parent(self : EvalContext) -> JsonataValue {
-  self.parent
+  match self.ancestors {
+    [first, ..] => first
+    [] => self.parent
+  }
+}
+
+///|
+/// 获取父级链副本。
+pub fn EvalContext::ancestors(self : EvalContext) -> Array[JsonataValue] {
+  self.ancestors.copy()
 }
 
 ///|
@@ -129,6 +143,7 @@ pub fn EvalContext::set_parent(
 ) -> JsonataValue {
   let old = self.parent
   self.parent = v
+  self.ancestors = [v]
   old
 }
 
@@ -142,17 +157,58 @@ pub fn[T] EvalContext::with_context(
 ) -> T raise @error.JsonataError {
   let old_current = self.current
   let old_parent = self.parent
+  let old_ancestors = self.ancestors
   self.current = current
   self.parent = parent
+  let next_ancestors : Array[JsonataValue] = [parent]
+  for ancestor in old_ancestors {
+    next_ancestors.push(ancestor)
+  }
+  self.ancestors = next_ancestors
   try {
     let r = f()
     self.current = old_current
     self.parent = old_parent
+    self.ancestors = old_ancestors
     r
   } catch {
     e => {
       self.current = old_current
       self.parent = old_parent
+      self.ancestors = old_ancestors
+      raise e
+    }
+  }
+}
+
+///|
+/// 在指定当前项与完整父级链下执行函数，自动恢复。
+pub fn[T] EvalContext::with_lineage(
+  self : EvalContext,
+  current~ : JsonataValue,
+  ancestors~ : Array[JsonataValue],
+  f : () -> T raise @error.JsonataError,
+) -> T raise @error.JsonataError {
+  let old_current = self.current
+  let old_parent = self.parent
+  let old_ancestors = self.ancestors
+  self.current = current
+  self.ancestors = ancestors.copy()
+  self.parent = match self.ancestors {
+    [first, ..] => first
+    [] => JsonataValue::Undefined
+  }
+  try {
+    let r = f()
+    self.current = old_current
+    self.parent = old_parent
+    self.ancestors = old_ancestors
+    r
+  } catch {
+    e => {
+      self.current = old_current
+      self.parent = old_parent
+      self.ancestors = old_ancestors
       raise e
     }
   }

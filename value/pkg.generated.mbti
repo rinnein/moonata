@@ -21,7 +21,9 @@ pub struct EvalContext {
   max_steps : Int
   mut current : JsonataValue
   mut parent : JsonataValue
+  mut ancestors : Array[JsonataValue]
 }
+pub fn EvalContext::ancestors(Self) -> Array[JsonataValue]
 pub fn EvalContext::bind(Self, String, JsonataValue) -> Unit
 pub fn EvalContext::capture(Self) -> Self
 pub fn EvalContext::current(Self) -> JsonataValue
@@ -39,6 +41,7 @@ pub fn EvalContext::tick(Self) -> Unit raise @error.JsonataError
 pub fn[T] EvalContext::with_binding(Self, String, JsonataValue, () -> T raise @error.JsonataError) -> T raise @error.JsonataError
 pub fn[T] EvalContext::with_context(Self, current~ : JsonataValue, parent~ : JsonataValue, () -> T raise @error.JsonataError) -> T raise @error.JsonataError
 pub fn[T] EvalContext::with_depth(Self, () -> T raise @error.JsonataError) -> T raise @error.JsonataError
+pub fn[T] EvalContext::with_lineage(Self, current~ : JsonataValue, ancestors~ : Array[JsonataValue], () -> T raise @error.JsonataError) -> T raise @error.JsonataError
 
 pub struct JsonataFunc {
   arity : Int

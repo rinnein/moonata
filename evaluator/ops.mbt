@@ -1030,6 +1030,9 @@ fn eval_sort(
   terms : Array[@ast.SortTerm],
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
+  if sort_terms_contain_parent(terms) {
+    return eval_sort_with_lineage(expr_ast, terms, ctx)
+  }
   let input = eval(expr_ast, ctx)
   let items = input.to_array()
   if items.length() <= 1 {
@@ -1063,6 +1066,78 @@ fn eval_sort(
     sorted.push(item)
   }
   @value.JsonataValue::sequence(sorted)
+}
+
+///|
+fn sort_terms_contain_parent(terms : Array[@ast.SortTerm]) -> Bool {
+  let mut found = false
+  for term in terms {
+    if ast_contains_parent(term.expr) {
+      found = true
+      break
+    }
+  }
+  found
+}
+
+///|
+fn eval_sort_with_lineage(
+  expr_ast : @ast.Ast,
+  terms : Array[@ast.SortTerm],
+  ctx : @value.EvalContext,
+) -> @value.JsonataValue raise @error.JsonataError {
+  let frames = match expr_ast {
+    @ast.Ast::Path(steps) =>
+      eval_path_frames(
+        [path_frame(ctx.current(), ctx.ancestors())],
+        steps,
+        0,
+        ctx,
+        steps.length(),
+      )
+    _ => {
+      let input = eval(expr_ast, ctx)
+      let out : Array[PathFrame] = []
+      for item in input.to_array() {
+        out.push(path_frame(item, ctx.ancestors()))
+      }
+      out
+    }
+  }
+  if frames.length() <= 1 {
+    return frames_to_value(frames)
+  }
+  let keyed : Array[(Array[@value.JsonataValue], Int, PathFrame)] = []
+  for i, frame in frames {
+    let keys : Array[@value.JsonataValue] = []
+    for term in terms {
+      let key = ctx.with_lineage(
+        current=frame.value,
+        ancestors=frame.ancestors,
+        fn() -> @value.JsonataValue raise @error.JsonataError {
+          eval(term.expr, ctx)
+        },
+      )
+      keys.push(key)
+    }
+    keyed.push((keys, i, frame))
+  }
+  keyed.sort_by(fn(a, b) {
+    let (ka, ia, _) = a
+    let (kb, ib, _) = b
+    let cmp = compare_keys(ka, kb, terms)
+    if cmp != 0 {
+      cmp
+    } else {
+      ia - ib
+    }
+  })
+  let sorted : Array[PathFrame] = []
+  for kv in keyed {
+    let (_, _, frame) = kv
+    sorted.push(frame)
+  }
+  frames_to_value(sorted)
 }
 
 ///|
