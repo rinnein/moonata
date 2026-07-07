@@ -181,8 +181,13 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
     } else {
       None
     }
+    let zero_digit = if args.length() > 2 {
+      option_string(args[2], "zero-digit")
+    } else {
+      None
+    }
     @value.JsonataValue::Json(
-      Json::string(format_number(n, picture, per_mille)),
+      Json::string(format_number(n, picture, per_mille, zero_digit)),
     )
   })
   // $formatInteger(number, picture)
@@ -291,6 +296,33 @@ fn format_number(
   n : Double,
   picture : String,
   per_mille_option : String?,
+  zero_digit_option : String?,
+) -> String {
+  let normalized_picture = normalize_number_picture_digits(
+    picture, zero_digit_option,
+  )
+  let semicolon = normalized_picture.find(";")
+  let (selected, value, emit_sign) = match semicolon {
+    Some(i) =>
+      if n < 0.0 {
+        (normalized_picture[i + 1:].to_owned(), -n, false)
+      } else {
+        (normalized_picture[:i].to_owned(), n, true)
+      }
+    None => (normalized_picture, n, true)
+  }
+  translate_number_output_digits(
+    format_number_picture(value, selected, per_mille_option, emit_sign),
+    zero_digit_option,
+  )
+}
+
+///|
+fn format_number_picture(
+  n : Double,
+  picture : String,
+  per_mille_option : String?,
+  emit_sign : Bool,
 ) -> String {
   let per_mille = per_mille_option.unwrap_or("‰")
   let multiplier = if picture.contains("%") {
@@ -340,7 +372,7 @@ fn format_number(
       let frac_str = format_number_fraction_from_double(
         abs_value, frac_pic, frac_places,
       )
-      let sign = if negative { "-" } else { "" }
+      let sign = if negative && emit_sign { "-" } else { "" }
       if frac_str == "" {
         prefix + sign + int_str + suffix
       } else {
@@ -348,6 +380,80 @@ fn format_number(
       }
     }
   }
+}
+
+///|
+fn normalize_number_picture_digits(
+  picture : String,
+  zero_digit_option : String?,
+) -> String {
+  match zero_digit_option {
+    None => picture
+    Some(zero_digit) => {
+      let zero = first_char(zero_digit)
+      match zero {
+        None => picture
+        Some(z) => {
+          let out = StringBuilder::new()
+          for _, c in picture {
+            if custom_digit_value(c, z) is Some(_) {
+              out.write_char('0')
+            } else {
+              out.write_char(c)
+            }
+          }
+          out.to_string()
+        }
+      }
+    }
+  }
+}
+
+///|
+fn translate_number_output_digits(
+  text : String,
+  zero_digit_option : String?,
+) -> String {
+  match zero_digit_option {
+    None => text
+    Some(zero_digit) => {
+      let zero = first_char(zero_digit)
+      match zero {
+        None => text
+        Some(z) => {
+          let out = StringBuilder::new()
+          for _, c in text {
+            if c >= '0' && c <= '9' {
+              out.write_char(
+                Int::unsafe_to_char(z.to_int() + c.to_int() - '0'.to_int()),
+              )
+            } else {
+              out.write_char(c)
+            }
+          }
+          out.to_string()
+        }
+      }
+    }
+  }
+}
+
+///|
+fn custom_digit_value(c : Char, zero : Char) -> Int? {
+  let offset = c.to_int() - zero.to_int()
+  if offset >= 0 && offset <= 9 {
+    Some(offset)
+  } else {
+    None
+  }
+}
+
+///|
+fn first_char(s : String) -> Char? {
+  for _, c in s {
+    return Some(c)
+  }
+  None
 }
 
 ///|

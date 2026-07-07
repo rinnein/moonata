@@ -311,6 +311,26 @@ test "官方套件：$formatNumber 基础格式" {
     Json::null(),
     Json::string("123412345,6,78.90"),
   )
+  assert_eval(
+    "$formatNumber(1234.5678, \"①①.①①①e①\", {\"zero-digit\": \"⑟\"})",
+    Json::null(),
+    Json::string("①②.③④⑥e②"),
+  )
+  assert_eval(
+    "$formatNumber(2392.14*(-36.58), \"000,000.000###;###,###.000###\")",
+    Json::null(),
+    Json::string("87,504.4812"),
+  )
+  assert_eval(
+    "$formatNumber(2, 'AAA.AAA', {'zero-digit': 'A'})",
+    Json::null(),
+    Json::string("AAC.AAA"),
+  )
+  assert_eval(
+    "$formatNumber(0.1, 'AeAAA', {'zero-digit': 'A'})",
+    Json::null(),
+    Json::string("Be-AAB"),
+  )
 }
 
 ///|
