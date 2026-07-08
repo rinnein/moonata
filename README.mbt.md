@@ -93,12 +93,12 @@ CI 在 `master` 分支推送、PR 以及手动触发时运行。
 
 ## 兼容性状态
 
-固定快照：2026-07-07，parent-operator 父级链路修复阶段。
+固定快照：2026-07-08，`[]` 空数组选择器语义对齐 + 分组聚合 per-group 求值修复阶段。
 
 ```text
-本地测试：moon test 182/182
-官方可比对审计：eligible 1251, pass 1184, fail 67, skip 431
-通过率：94.6%
+本地测试：moon test 183/183
+官方可比对审计：eligible 1251, pass 1209, fail 42, skip 431
+通过率：96.6%
 ```
 
 当前剩余失败最多的官方测试分组：
@@ -108,12 +108,11 @@ function-tomillis 10
 joins 10
 transforms 10
 parent-operator 6
-variables 5
-flattening 4
 function-applications 2
-object-constructor 2
-transform 2
-boolean-expresssions 1
+lambdas 1
+performance 1
+predicates 1
+sorting 1
 ```
 
 官方测试集审计流程与跳过策略记录在 `docs/jsonata-official-workflow.md`。

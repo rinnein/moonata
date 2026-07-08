@@ -131,24 +131,33 @@ skip_reasons
 当前固定快照（2026-07-08，快照同步验证，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1202 fail 49 skip 431
+eligible 1251 pass 1209 fail 42 skip 431
 top_failures
 function-tomillis 10
 joins 10
 transforms 10
 parent-operator 6
-flattening 4
 function-applications 2
-object-constructor 2
-boolean-expresssions 1
 lambdas 1
 performance 1
+predicates 1
+sorting 1
 skip_reasons
 no_result 395
 non-string-expr 23
 timelimit 7
 bindings 6
 ```
+
+本轮修复（`[]` 空数组选择器语义对齐 + 分组聚合 per-group 求值 + 合并值展平）：
+- 提交：flattening 4→0 pass（全绿），object-constructor 2→0 pass（全绿），boolean-expresssions 1→0 pass（全绿），整体 pass 1202→1209 (+7)，fail 49→42 (-7)，通过率 96.0%→96.6%
+- 门禁：`moon check` 0e0w，`moon test` 183/183 passed，`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Evaluator: `[]`（Arrayify 步）改为路径求值中的 no-op 标记，阻止最终值的单例提升；`arrayify_wrap` 在路径末尾将结果包装为 `Json::Array`
+  - Evaluator: `eval_path` 新增 `steps_has_arrayify` 检查和 `arrayify_wrap` 函数，`eval_step_frame_single` 中 Arrayify 步改为 no-op
+  - Evaluator: `access_group_aggregate` 改为 per-group 求值（先按 key 分组合并输入项，再对每组求值 value-expression），匹配 JSONata-js `evaluateGroupExpression` 语义
+  - Evaluator: `json_for_merged_values` 新增 `all_are_json_arrays` 分支，全数组值时展平为单个数组（如 `[[1], [2]]` → `[1, 2]`）
+  - Tests: 增加官方 flattening case037/case038/case041/case043 等价回归断言
 
 本轮修复（URL 百分号编码/解码函数）：
 - 提交：function-decodeUrl 0→1 pass（全绿），function-encodeUrl 0→1 pass（全绿），function-decodeUrlComponent 0→1 pass（全绿），function-encodeUrlComponent 0→1 pass（全绿），整体 pass 1189→1193 (+4)，fail 62→58 (-4)，通过率 95.0%→95.4%

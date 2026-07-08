@@ -129,18 +129,17 @@ _build/native/debug/build/cmd/main/main.exe '<expr>' --file '<tmp-json-data>'
 当前固定快照（2026-07-08，快照同步验证，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1202 fail 49 skip 431
+eligible 1251 pass 1209 fail 42 skip 431
 top_failures
 function-tomillis 10
 joins 10
 transforms 10
 parent-operator 6
-flattening 4
 function-applications 2
-object-constructor 2
-boolean-expresssions 1
 lambdas 1
 performance 1
+predicates 1
+sorting 1
 skip_reasons
 no_result 395
 non-string-expr 23

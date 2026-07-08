@@ -993,3 +993,45 @@ test "官方套件：函数链部分应用参数顺序" {
     Json::string("%3Fx%3Dtest"),
   )
 }
+
+// ============ flattening `[]` 语义 ============
+
+///|
+test "官方套件：flattening [] 保持数组" {
+  let d = data("{\"Phone\":[{\"type\":\"home\",\"number\":\"0203 544 1234\"},{\"type\":\"office\",\"number\":\"01962 001234\"},{\"type\":\"office\",\"number\":\"01962 001235\"},{\"type\":\"mobile\",\"number\":\"077 7700 1234\"}]}")
+  // Phone[type="mobile"][].number — [] 后 .number 应保持数组
+  assert_eval(
+    "Phone[type=\"mobile\"][].number",
+    d,
+    data("[\"077 7700 1234\"]"),
+  )
+  // Phone[][type="mobile"].number — [] 前 filter 再 .number 应保持数组
+  assert_eval(
+    "Phone[][type=\"mobile\"].number",
+    d,
+    data("[\"077 7700 1234\"]"),
+  )
+  // $[][type='command'] — 根路径 [] 后 filter 保持数组
+  assert_eval(
+    "$[][type=\"command\"]",
+    data("[{\"type\":\"command\"},{\"type\":\"commands\"}]"),
+    data("[{\"type\":\"command\"}]"),
+  )
+  // Phone{type: number[]} — 分组内 [] 合并展平
+  assert_eval(
+    "Phone{type: number[]}",
+    d,
+    data("{\"home\":[\"0203 544 1234\"],\"office\":[\"01962 001234\",\"01962 001235\"],\"mobile\":[\"077 7700 1234\"]}"),
+  )
+}
+
+///|
+test "官方套件：object-constructor 分组聚合 per-group 求值" {
+  let d = data("{\"Phone\":[{\"type\":\"home\",\"number\":\"0203 544 1234\"},{\"type\":\"office\",\"number\":\"01962 001234\"},{\"type\":\"office\",\"number\":\"01962 001235\"},{\"type\":\"mobile\",\"number\":\"077 7700 1234\"}]}")
+  // $join 应在每组上求值，而不是 per-item
+  assert_eval(
+    "Phone{type: $join(number, \", \"), \"phone\":number}",
+    d,
+    data("{\"home\":\"0203 544 1234\",\"mobile\":\"077 7700 1234\",\"office\":\"01962 001234, 01962 001235\",\"phone\":[\"0203 544 1234\",\"01962 001234\",\"01962 001235\",\"077 7700 1234\"]}"),
+  )
+}

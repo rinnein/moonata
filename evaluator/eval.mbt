@@ -230,6 +230,7 @@ fn eval_var(name : String, ctx : @value.EvalContext) -> @value.JsonataValue {
 /// 路径求值：逐步遍历。
 /// 处理 focus/tuple 变量绑定步（由 `@ $var` 标注）。
 /// GroupAggregate 步在 eval_path_from 内联处理以保留变量绑定。
+/// `[]`（Arrayify）步在路径末尾阻止单例提升，确保结果始终为 JSON array。
 fn eval_path(
   steps : Array[@ast.Step],
   input : @value.JsonataValue,
@@ -238,7 +239,8 @@ fn eval_path(
   if steps.length() == 0 {
     return input
   }
-  if steps_contain_parent(steps) {
+  let has_arrayify = steps_has_arrayify(steps)
+  let result = if steps_contain_parent(steps) {
     let frames = eval_path_frames(
       [path_frame(input, ctx.ancestors())],
       steps,
@@ -246,9 +248,44 @@ fn eval_path(
       ctx,
       steps.length(),
     )
-    return frames_to_value(frames)
+    frames_to_value(frames)
+  } else {
+    eval_path_from(input, steps, 0, ctx, steps.length())
   }
-  eval_path_from(input, steps, 0, ctx, steps.length())
+  if has_arrayify {
+    arrayify_wrap(result)
+  } else {
+    result
+  }
+}
+
+///|
+/// 检查路径步中是否包含 Arrayify 步。
+fn steps_has_arrayify(steps : Array[@ast.Step]) -> Bool {
+  let mut found = false
+  for step in steps {
+    if step.kind == @ast.StepKind::Arrayify {
+      found = true
+      break
+    }
+  }
+  found
+}
+
+///|
+/// 将值包装为 JSON array（用于 `[]` 步的语义）。
+/// `Sequence` → 保持为 `Json::Array`（阻止单例提升）
+/// `Json::Array` → 保持原样（已是数组）
+/// 其它单值 → `Json::Array([value])`
+fn arrayify_wrap(value : @value.JsonataValue) -> @value.JsonataValue {
+  match value {
+    @value.JsonataValue::Sequence(arr) =>
+      @value.JsonataValue::Json(Json::array(arr.map(fn(v) { v.to_json() })))
+    @value.JsonataValue::Json(Json::Array(_)) => value
+    @value.JsonataValue::Json(v) => @value.JsonataValue::Json(Json::array([v]))
+    @value.JsonataValue::Undefined => @value.JsonataValue::Json(Json::array([]))
+    _ => @value.JsonataValue::Json(Json::array([]))
+  }
 }
 
 ///|
@@ -658,15 +695,9 @@ fn eval_step_frame_single(
       access_slice_frame(frame, start, end, results, grouped~)
     @ast.StepKind::Filter(_) => ()
     @ast.StepKind::Map(_) => ()
-    @ast.StepKind::Arrayify => {
-      let arr : Array[Json] = []
-      for item in frame.value.to_array() {
-        arr.push(json_for_constructor(item))
-      }
-      results.push(
-        path_frame(@value.JsonataValue::Json(Json::array(arr)), frame.ancestors),
-      )
-    }
+    @ast.StepKind::Arrayify =>
+      // 作为 no-op 标记，实际数组包裹由 eval_path 在末尾处理
+      results.push(frame)
     @ast.StepKind::GroupAggregate(_) => ()
     @ast.StepKind::Parent =>
       for out in parent_frames([frame]) {
@@ -731,6 +762,20 @@ fn build_merged_group(merged : Map[String, Array[Json]]) -> Map[String, Json] {
 fn json_for_merged_values(values : Array[Json]) -> Json {
   if values.length() == 1 || all_string_values_equal(values) {
     values[0]
+  } else if all_are_json_arrays(values) {
+    // 所有值都是 Json::Array，展平为单个数组
+    // 例如 [[1], [2]] → [1, 2]
+    let flat : Array[Json] = []
+    for v in values {
+      match v {
+        Json::Array(arr) =>
+          for item in arr {
+            flat.push(item)
+          }
+        _ => flat.push(v)
+      }
+    }
+    Json::array(flat)
   } else {
     Json::array(values)
   }
@@ -748,6 +793,17 @@ fn all_string_values_equal(values : Array[Json]) -> Bool {
   for i in 1..<values.length() {
     match values[i] {
       Json::String(s) if s == first => ()
+      _ => return false
+    }
+  }
+  true
+}
+
+///|
+fn all_are_json_arrays(values : Array[Json]) -> Bool {
+  for v in values {
+    match v {
+      Json::Array(_) => ()
       _ => return false
     }
   }
@@ -1416,13 +1472,10 @@ fn normalize_index(index : Int, length : Int) -> Int {
 }
 
 ///|
-/// 空数组选择器 `[]`：强制将当前结果包装为 JSON array。
+/// 空数组选择器 `[]`：在路径求值中作为 no-op 标记，阻止最终值的单例提升。
+/// 实际数组包裹由 `eval_path` 在路径末尾根据 `has_arrayify` 标志完成。
 fn access_arrayify(input : @value.JsonataValue) -> @value.JsonataValue {
-  let arr : Array[Json] = []
-  for item in input.to_array() {
-    arr.push(json_for_constructor(item))
-  }
-  @value.JsonataValue::Json(Json::array(arr))
+  input
 }
 
 ///|
@@ -1520,29 +1573,66 @@ fn access_map_frames(
 }
 
 ///|
-/// 分组聚合 `{...}`（无前置 `.`）：对输入中每项求值 Group，再将所有结果
-/// 的键值对合并为单个对象。重复键的值收集为数组。
+/// 分组聚合 `{...}`（无前置 `.`）：对输入中每项求值 key-expression，
+/// 按 key 分组合并输入项，再对每组求值 value-expression（匹配 JSONata-js
+/// `evaluateGroupExpression` 语义）。
 fn access_group_aggregate(
   input : @value.JsonataValue,
   group_ast : @ast.Ast,
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
   let items = input.to_array()
-  let merged : Map[String, Array[Json]] = {}
+  let pairs : Array[(@ast.Ast, @ast.Ast)] = match group_ast {
+    @ast.Ast::Group(p) => p
+    _ => return @value.JsonataValue::Json(Json::object({}))
+  }
+  if items.length() == 0 {
+    return @value.JsonataValue::Json(Json::object({}))
+  }
+  // 第 1 阶段：按 key 分组，每组的输入项收集为原始数组
+  let groups : Map[String, Array[@value.JsonataValue]] = {}
   for item in items {
-    let r = ctx.with_context(current=item, parent=input, fn() -> @value.JsonataValue raise @error.JsonataError {
-      ctx.with_depth(() => eval(group_ast, ctx))
-    })
-    match r {
-      @value.JsonataValue::Json(Json::Object(map)) =>
-        for name, val in map {
-          match merged.get(name) {
-            Some(values) => values.push(val)
-            None => merged.set(name, [val])
-          }
-        }
-      @value.JsonataValue::Undefined => continue
-      _ => ()
+    // 对每组 key/value pair 求值 key
+    for kv in pairs {
+      let (key_ast, _val_ast) = kv
+      let key_val = ctx.with_context(current=item, parent=input, fn() -> @value.JsonataValue raise @error.JsonataError {
+        ctx.with_depth(() => eval(key_ast, ctx))
+      })
+      let key_str = match key_val {
+        @value.JsonataValue::Json(Json::String(s)) => s
+        _ => to_str(key_val)
+      }
+      match groups.get(key_str) {
+        Some(arr) => arr.push(item)
+        None => groups.set(key_str, [item])
+      }
+    }
+  }
+  // 第 2 阶段：对每组求值 value-expression，合并结果
+  let merged : Map[String, Array[Json]] = {}
+  for key_str, group_items in groups {
+    let group_input = @value.JsonataValue::sequence(group_items)
+    for kv in pairs {
+      let (key_ast, val_ast) = kv
+      // 验证 key 匹配当前组
+      let sample_key = ctx.with_context(current=group_items[0], parent=input, fn() -> @value.JsonataValue raise @error.JsonataError {
+        ctx.with_depth(() => eval(key_ast, ctx))
+      })
+      let actual_key = match sample_key {
+        @value.JsonataValue::Json(Json::String(s)) => s
+        _ => to_str(sample_key)
+      }
+      if actual_key != key_str {
+        continue
+      }
+      let val = ctx.with_context(current=group_input, parent=input, fn() -> @value.JsonataValue raise @error.JsonataError {
+        ctx.with_depth(() => eval(val_ast, ctx))
+      })
+      let json_val = json_for_constructor(val)
+      match merged.get(key_str) {
+        Some(values) => values.push(json_val)
+        None => merged.set(key_str, [json_val])
+      }
     }
   }
   // 将合并结果转为最终对象。
@@ -1565,13 +1655,7 @@ fn access_group_aggregate_frames(
       ctx.with_depth(() => eval(group_ast, ctx))
     })
     match r {
-      @value.JsonataValue::Json(Json::Object(map)) =>
-        for name, val in map {
-          match merged.get(name) {
-            Some(values) => values.push(val)
-            None => merged.set(name, [val])
-          }
-        }
+      @value.JsonataValue::Json(Json::Object(_)) => merge_into_group(r, merged)
       @value.JsonataValue::Undefined => continue
       _ => ()
     }
