@@ -201,13 +201,14 @@ fn Lexer::next_token(
   if is_digit(c) || (expect_operand && c == '-' && is_digit(self.peek_at(1))) {
     return self.lex_number(start)
   }
+  // λ → function 关键字（必须在 is_ident_start 前检查，因为 λ 是 Unicode 字母）
+  if c == '\u{03BB}' {
+    self.pos = self.pos + 1
+    return Token::new(kind=TokenKind::Ident("function"), pos=start)
+  }
   // 标识符（字母/下划线开头）
   if is_ident_start(c) {
     return self.lex_ident(start)
-  }
-  if c == 'λ' {
-    self.pos = self.pos + 1
-    return Token::new(kind=TokenKind::Ident("function"), pos=start)
   }
   // 变量 $name 或 $$ 或 $
   if c == '$' {
@@ -323,9 +324,26 @@ fn Lexer::lex_string(
         'b' => buf.write_char('\u{08}')
         'f' => buf.write_char('\u{0c}')
         'u' => {
-          // \uXXXX
+          // \uXXXX — 支持代理对组合
           let hex = self.lex_hex4()
-          buf.write_char(hex.to_char().unwrap_or('\u{FFFD}'))
+          // 高代理项 U+D800-U+DBFF：期望后续 \uXXXX 低代理项
+          if hex >= 0xD800 && hex <= 0xDBFF {
+            if self.peek() == '\\' && self.peek_at(1) == 'u' {
+              ignore(self.advance()) // \
+              ignore(self.advance()) // u
+              let lo = self.lex_hex4()
+              if lo >= 0xDC00 && lo <= 0xDFFF {
+                let cp = 0x10000 + ((hex - 0xD800) << 10) + (lo - 0xDC00)
+                buf.write_char(cp.to_char().unwrap_or('\u{FFFD}'))
+              } else {
+                buf.write_char(hex.to_char().unwrap_or('\u{FFFD}'))
+              }
+            } else {
+              buf.write_char(hex.to_char().unwrap_or('\u{FFFD}'))
+            }
+          } else {
+            buf.write_char(hex.to_char().unwrap_or('\u{FFFD}'))
+          }
         }
         _ =>
           raise @error.syntax_error(
@@ -590,8 +608,58 @@ fn is_digit(c : UInt16) -> Bool {
 }
 
 ///|
+/// Unicode 字符是否是字母（含 CJK 等非 ASCII 书写系统的文字）。
+fn is_unicode_letter(c : UInt16) -> Bool {
+  // Latin-1 Supplement letter ranges (À-Ö, Ø-ö, ø-ÿ)
+  (c >= '\u{00C0}' && c <= '\u{00D6}') ||
+  (c >= '\u{00D8}' && c <= '\u{00F6}') ||
+  (c >= '\u{00F8}' && c <= '\u{00FF}') ||
+  // Latin Extended-A, Latin Extended-B, IPA Extensions
+  (c >= '\u{0100}' && c <= '\u{02AF}') ||
+  // Spacing Modifier Letters
+  (c >= '\u{02B0}' && c <= '\u{02FF}') ||
+  // Combining Diacritical Marks
+  (c >= '\u{0300}' && c <= '\u{036F}') ||
+  // Greek and Coptic
+  (c >= '\u{0370}' && c <= '\u{03FF}') ||
+  // Cyrillic
+  (c >= '\u{0400}' && c <= '\u{04FF}') ||
+  // Cyrillic Supplement
+  (c >= '\u{0500}' && c <= '\u{052F}') ||
+  // Armenian, Hebrew, Arabic, Syriac, Thaana, NKo
+  (c >= '\u{0530}' && c <= '\u{07BF}') ||
+  // Devanagari, Bengali, Gurmukhi, etc.
+  (c >= '\u{0900}' && c <= '\u{109F}') ||
+  // Georgian, Hangul Jamo
+  (c >= '\u{10A0}' && c <= '\u{11FF}') ||
+  // Ethiopic
+  (c >= '\u{1200}' && c <= '\u{137F}') ||
+  // Unified Canadian Aboriginal Syllabics
+  (c >= '\u{1400}' && c <= '\u{167F}') ||
+  // Ogham, Runic, Tagalog, etc.
+  (c >= '\u{1680}' && c <= '\u{18AF}') ||
+  // Limbu, Tai Le, New Tai Lue, etc.
+  (c >= '\u{1900}' && c <= '\u{197F}') ||
+  // Khmer
+  (c >= '\u{1780}' && c <= '\u{17FF}') ||
+  // CJK Radicals Supplement, Kangxi Radicals
+  (c >= '\u{2E80}' && c <= '\u{2FDF}') ||
+  // CJK Unified Ideographs Extension A, CJK Unified Ideographs
+  (c >= '\u{3400}' && c <= '\u{9FFF}') ||
+  // Yi, Lisu
+  (c >= '\u{A000}' && c <= '\u{A4CF}') ||
+  // Hangul Syllables
+  (c >= '\u{AC00}' && c <= '\u{D7AF}') ||
+  // CJK Compatibility Ideographs
+  (c >= '\u{F900}' && c <= '\u{FAFF}')
+}
+
+///|
 fn is_ident_start(c : UInt16) -> Bool {
-  (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'
+  (c >= 'a' && c <= 'z') ||
+  (c >= 'A' && c <= 'Z') ||
+  c == '_' ||
+  is_unicode_letter(c)
 }
 
 ///|

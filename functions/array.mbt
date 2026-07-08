@@ -111,12 +111,12 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
   ) -> @value.JsonataValue raise @error.JsonataError {
     let items = args[0].to_array()
     if items.length() <= 1 {
-      // $sort always returns a sequence (even for single-element arrays)
-      return if items.length() == 0 {
-        @value.JsonataValue::Undefined
-      } else {
-        @value.JsonataValue::Sequence(items)
+      // $sort always returns an array (even for single-element inputs)
+      let arr : Array[Json] = []
+      for item in items {
+        arr.push(item.to_json())
       }
+      return @value.JsonataValue::Json(Json::array(arr))
     }
     if args.length() > 1 {
       // Comparator: function($a, $b) -> boolean
@@ -202,15 +202,26 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
   register(ctx, "distinct", arity=1, invoke=fn(args, _ctx) {
     let items = args[0].to_array()
     let seen : Array[String] = []
-    let results : Array[@value.JsonataValue] = []
+    let json_results : Array[Json] = []
+    let value_results : Array[@value.JsonataValue] = []
     for item in items {
-      let key = item.to_json().stringify()
+      let json = item.to_json()
+      let key = json.stringify()
       if !seen.contains(key) {
         seen.push(key)
-        results.push(item)
+        json_results.push(json)
+        value_results.push(item)
       }
     }
-    @value.JsonataValue::sequence(results)
+    if value_results.length() == 0 {
+      return @value.JsonataValue::Undefined
+    }
+    // Array input → always return array; non-array input → sequence (lifts singleton)
+    match args[0] {
+      @value.JsonataValue::Json(Json::Array(_)) =>
+        @value.JsonataValue::Json(Json::array(json_results))
+      _ => @value.JsonataValue::sequence(value_results)
+    }
   })
   // $single — 返回序列中唯一元素，0 或 >1 个时报错
   register(ctx, "single", arity=1, invoke=fn(

@@ -239,14 +239,21 @@ fn radix_digit(c : Char) -> Int {
 ///|
 fn register_higher_order_functions(ctx : @value.EvalContext) -> Unit {
   // $eval
-  register(ctx, "eval", arity=1, invoke=fn(
+  register(ctx, "eval", arity=0, invoke=fn(
     args : Array[@value.JsonataValue],
     ctx : @value.EvalContext,
   ) -> @value.JsonataValue raise @error.JsonataError {
     let expr_str = value_to_str(args[0])
     let tokens = @lexer.lex(expr_str)
     let ast = @parser.parse(tokens)
-    @evaluator.eval(ast, ctx)
+    // 第二参数作为求值上下文的数据根；无第二参数时使用当前上下文
+    if args.length() > 1 && !args[1].is_undefined() {
+      let eval_ctx = @value.EvalContext::new(args[1])
+      eval_ctx.inherit_missing_bindings_from(ctx)
+      @evaluator.eval(ast, eval_ctx)
+    } else {
+      @evaluator.eval(ast, ctx)
+    }
   })
   // $exists
   register(ctx, "exists", arity=1, invoke=fn(args, _ctx) {

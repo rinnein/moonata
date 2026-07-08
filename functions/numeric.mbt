@@ -2,29 +2,22 @@
 fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
   // $sum
   register(ctx, "sum", arity=1, invoke=fn(args, _ctx) {
-    match args[0] {
-      @value.JsonataValue::Json(Json::Array(arr)) => {
-        let mut total = 0.0
-        for v in arr {
-          match v {
-            Json::Number(n, ..) => total += n
-            _ => continue
-          }
+    let items = args[0].to_array()
+    let mut total = 0.0
+    let mut found = false
+    for item in items {
+      match item {
+        @value.JsonataValue::Json(Json::Number(n, ..)) => {
+          total += n
+          found = true
         }
-        @value.JsonataValue::Json(Json::number(total))
+        _ => continue
       }
-      @value.JsonataValue::Sequence(arr) => {
-        let mut total = 0.0
-        for v in arr {
-          match v {
-            @value.JsonataValue::Json(Json::Number(n, ..)) => total += n
-            _ => continue
-          }
-        }
-        @value.JsonataValue::Json(Json::number(total))
-      }
-      @value.JsonataValue::Undefined => @value.JsonataValue::Undefined
-      _ => @value.JsonataValue::Undefined
+    }
+    if found {
+      @value.JsonataValue::Json(Json::number(total))
+    } else {
+      @value.JsonataValue::Undefined
     }
   })
   // $average

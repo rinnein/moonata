@@ -128,10 +128,10 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-07，URL 百分号编码/解码函数实现，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-08，快照同步验证，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1193 fail 58 skip 431
+eligible 1251 pass 1202 fail 49 skip 431
 top_failures
 function-tomillis 10
 joins 10
@@ -140,9 +140,9 @@ parent-operator 6
 flattening 4
 function-applications 2
 object-constructor 2
-transform 2
 boolean-expresssions 1
-function-distinct 1
+lambdas 1
+performance 1
 skip_reasons
 no_result 395
 non-string-expr 23

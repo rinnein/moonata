@@ -45,6 +45,10 @@ fn register_object_functions(ctx : @value.EvalContext) -> Unit {
             _ => continue
           }
         }
+      @value.JsonataValue::Json(Json::Object(map)) =>
+        for k, v in map {
+          result[k] = v
+        }
       @value.JsonataValue::Sequence(arr) =>
         for item in arr {
           match item {
@@ -84,6 +88,34 @@ fn register_object_functions(ctx : @value.EvalContext) -> Unit {
           Some(v) => @value.JsonataValue::Json(v)
           None => @value.JsonataValue::Undefined
         }
+      @value.JsonataValue::Sequence(arr) => {
+        let results : Array[@value.JsonataValue] = []
+        for item in arr {
+          match item {
+            @value.JsonataValue::Json(Json::Object(map)) =>
+              match map.get(key) {
+                Some(v) => results.push(@value.JsonataValue::Json(v))
+                None => ()
+              }
+            _ => ()
+          }
+        }
+        @value.JsonataValue::sequence(results)
+      }
+      @value.JsonataValue::Json(Json::Array(arr)) => {
+        let results : Array[@value.JsonataValue] = []
+        for item in arr {
+          match item {
+            Json::Object(map) =>
+              match map.get(key) {
+                Some(v) => results.push(@value.JsonataValue::Json(v))
+                None => ()
+              }
+            _ => ()
+          }
+        }
+        @value.JsonataValue::sequence(results)
+      }
       _ => @value.JsonataValue::Undefined
     }
   })

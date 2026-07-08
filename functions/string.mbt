@@ -33,7 +33,7 @@ fn register_string_functions(ctx : @value.EvalContext) -> Unit {
     match args[0] {
       @value.JsonataValue::Json(Json::String(s)) =>
         @value.JsonataValue::Json(
-          Json::number(s.to_array().length().to_double()),
+          Json::number(unicode_char_count(s).to_double()),
         )
       @value.JsonataValue::Json(Json::Array(arr)) =>
         @value.JsonataValue::Json(Json::number(arr.length().to_double()))
@@ -218,4 +218,27 @@ fn value_to_int(v : @value.JsonataValue) -> Int {
 ///|
 fn value_to_json_str(v : @value.JsonataValue) -> String {
   value_to_str(v)
+}
+
+///|
+/// 统计字符串的 Unicode 码点数量（正确处理代理对）。
+fn unicode_char_count(s : String) -> Int {
+  let chars = s.to_array()
+  let mut count = 0
+  let mut i = 0
+  while i < chars.length() {
+    let c = chars[i].to_int()
+    // 高代理项（U+D800-U+DBFF）与低代理项（U+DC00-U+DFFF）构成一个码点
+    if c >= 0xD800 && c <= 0xDBFF && i + 1 < chars.length() {
+      let next = chars[i + 1].to_int()
+      if next >= 0xDC00 && next <= 0xDFFF {
+        i += 2
+        count += 1
+        continue
+      }
+    }
+    i += 1
+    count += 1
+  }
+  count
 }
