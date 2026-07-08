@@ -1,6 +1,6 @@
 # Moonata
 
-[![CI](https://github.com/moonbitlang/moonata/actions/workflows/ci.yml/badge.svg)](https://github.com/moonbitlang/moonata/actions/workflows/ci.yml)
+[![CI](https://github.com/rinnein/moonata/actions/workflows/ci.yml/badge.svg)](https://github.com/rinnein/moonata/actions/workflows/ci.yml)
 
 Moonata 是 [JSONata](https://jsonata.org/) 的 MoonBit 实现。JSONata 是一门面向 JSON 数据的查询与转换语言。
 
