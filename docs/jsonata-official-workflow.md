@@ -128,7 +128,7 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-08，lambdas 递归可见性修复，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-08，谓词过滤后索引逐元素语义修复，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
 eligible 1251 pass 1210 fail 41 skip 431
@@ -139,14 +139,22 @@ transforms 10
 parent-operator 6
 function-applications 2
 performance 1
-predicates 1
 sorting 1
+transform 1
 skip_reasons
 no_result 395
 non-string-expr 23
 timelimit 7
 bindings 6
 ```
+
+本轮修复（谓词过滤后 `[0]` 索引逐元素语义：Name→Filter→Index 路径分组，保留 per-element 数组结构）：
+- 提交：predicates 1→2 pass（全绿），整体 pass 1210→1210，fail 41→41，通过率 96.7%
+- 门禁：`moon check` 0e0w，`moon test` 187/187 passed，`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Evaluator: `eval_path_from` 新增 Name→Filter→Index 分组检测，使用 `access_field_grouped` 保留数组结构，`access_filter_grouped` 逐元素过滤，后续 Index 步通过 `access_grouped` 逐元素索引
+  - Evaluator: `access_filter_grouped` 新函数，对 Sequence 中每个元素独立应用 filter，保留数组结构
+  - Tests: 增加官方 predicates case003 等价回归断言（`Product[$filter][0].Price` 返回每个 Order 的逐元素结果）
 
 本轮修复（lambdas 递归函数可见性：用户定义 lambda 缺少参数时不再部分应用，改为传入 undefined）：
 - 提交：lambdas 11→12 pass（全绿），整体 pass 1209→1210 (+1)，fail 42→41 (-1)，通过率 96.6%→96.7%

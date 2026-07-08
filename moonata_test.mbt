@@ -1047,3 +1047,18 @@ test "官方套件：object-constructor 分组聚合 per-group 求值" {
     ),
   )
 }
+
+// ============ predicates 谓词过滤后索引 ============
+
+///|
+test "官方套件：谓词过滤后 [0] 保持逐元素语义" {
+  let d = data(
+    "{\"Account\":{\"Order\":[{\"Product\":[{\"Product Name\":\"Bowler Hat\",\"Description\":{\"Colour\":\"Purple\"},\"Price\":34.45},{\"Product Name\":\"Trilby hat\",\"Description\":{\"Colour\":\"Orange\"},\"Price\":21.67}]},{\"Product\":[{\"Product Name\":\"Bowler Hat\",\"Description\":{\"Colour\":\"Purple\"},\"Price\":34.45},{\"Product Name\":\"Cloak\",\"Description\":{\"Colour\":\"Black\"},\"Price\":107.99}]}]}}",
+  )
+  // Product[$filter][0].Price 应返回每个 Order 中过滤后的第一个 Product 的 Price
+  assert_eval(
+    "Account.Order.Product[$lowercase(Description.Colour) = \"purple\"][0].Price",
+    d,
+    data("[34.45,34.45]"),
+  )
+}

@@ -512,12 +512,19 @@ fn eval_path_from(
             // Only when the Name step was processed via access_field_grouped
             // (i.e., it had an Index/Slice step following).
             if name_was_grouped {
+              let mut should_clear = true
               match step.kind {
                 @ast.StepKind::Index(_) | @ast.StepKind::Slice(_, _) =>
                   current = access_grouped(current, step, ctx)
+                @ast.StepKind::Filter(expr) => {
+                  current = access_filter_grouped(current, expr, ctx)
+                  should_clear = false
+                }
                 _ => current = eval_step(step, current, ctx)
               }
-              name_was_grouped = false
+              if should_clear {
+                name_was_grouped = false
+              }
             } else {
               match step.kind {
                 @ast.StepKind::Name(name) =>
@@ -528,6 +535,23 @@ fn eval_path_from(
                         // not the flat result.  Only skip grouping for the very
                         // first step on an Array/Sequence root (e.g. phone[0]
                         // should index the overall flat sequence).
+                        if is_first_step {
+                          match current {
+                            @value.JsonataValue::Sequence(_)
+                            | @value.JsonataValue::Json(Json::Array(_)) =>
+                              current = eval_step(step, current, ctx)
+                            _ => {
+                              current = access_field_grouped(current, name)
+                              name_was_grouped = true
+                            }
+                          }
+                        } else {
+                          current = access_field_grouped(current, name)
+                          name_was_grouped = true
+                        }
+                      @ast.StepKind::Filter(_) =>
+                        // Group Name→Filter: preserve array structure so that
+                        // subsequent Index/Slice steps apply per-element.
                         if is_first_step {
                           match current {
                             @value.JsonataValue::Sequence(_)
@@ -1388,6 +1412,26 @@ fn access_filter(
     0 => @value.JsonataValue::Undefined
     _ => @value.JsonataValue::Sequence(results)
   }
+}
+
+///|
+/// 分组感知的谓词过滤：对 Sequence 中每个元素（预期为数组）独立应用 filter，
+/// 保留数组结构以便后续 Index/Slice 步逐元素操作。
+fn access_filter_grouped(
+  input : @value.JsonataValue,
+  expr : @ast.Ast,
+  ctx : @value.EvalContext,
+) -> @value.JsonataValue raise @error.JsonataError {
+  let items = input.to_array()
+  let results : Array[@value.JsonataValue] = []
+  for item in items {
+    let r = access_filter(item, expr, ctx)
+    match r {
+      @value.JsonataValue::Undefined => continue
+      _ => results.push(r)
+    }
+  }
+  @value.JsonataValue::sequence(results)
 }
 
 ///|

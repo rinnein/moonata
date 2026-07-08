@@ -93,10 +93,10 @@ CI 在 `master` 分支推送、PR 以及手动触发时运行。
 
 ## 兼容性状态
 
-固定快照：2026-07-08，lambdas 递归可见性修复阶段。
+固定快照：2026-07-08，谓词过滤后索引逐元素语义修复阶段。
 
 ```text
-本地测试：moon test 185/185
+本地测试：moon test 187/187
 官方可比对审计：eligible 1251, pass 1210, fail 41, skip 431
 通过率：96.7%
 ```
@@ -110,8 +110,8 @@ transforms 10
 parent-operator 6
 function-applications 2
 performance 1
-predicates 1
 sorting 1
+transform 1
 ```
 
 官方测试集审计流程与跳过策略记录在 `docs/jsonata-official-workflow.md`。
