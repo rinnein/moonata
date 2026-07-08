@@ -128,17 +128,16 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-08，快照同步验证，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-08，lambdas 递归可见性修复，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1209 fail 42 skip 431
+eligible 1251 pass 1210 fail 41 skip 431
 top_failures
 function-tomillis 10
 joins 10
 transforms 10
 parent-operator 6
 function-applications 2
-lambdas 1
 performance 1
 predicates 1
 sorting 1
@@ -148,6 +147,13 @@ non-string-expr 23
 timelimit 7
 bindings 6
 ```
+
+本轮修复（lambdas 递归函数可见性：用户定义 lambda 缺少参数时不再部分应用，改为传入 undefined）：
+- 提交：lambdas 11→12 pass（全绿），整体 pass 1209→1210 (+1)，fail 42→41 (-1)，通过率 96.6%→96.7%
+- 门禁：`moon check` 0e0w，`moon test` 185/185 passed，`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Evaluator: `should_partial_on_missing` 对 signature 为 None 的用户自定义 lambda 返回 false，不再自动部分应用，改为传入 undefined 参数，使递归 lambda 能正确调用自身
+  - Tests: 增加官方 lambdas case010 等价回归断言（`$range` 递归调用）
 
 本轮修复（`[]` 空数组选择器语义对齐 + 分组聚合 per-group 求值 + 合并值展平）：
 - 提交：flattening 4→0 pass（全绿），object-constructor 2→0 pass（全绿），boolean-expresssions 1→0 pass（全绿），整体 pass 1202→1209 (+7)，fail 49→42 (-7)，通过率 96.0%→96.6%

@@ -93,12 +93,12 @@ CI 在 `master` 分支推送、PR 以及手动触发时运行。
 
 ## 兼容性状态
 
-固定快照：2026-07-08，`[]` 空数组选择器语义对齐 + 分组聚合 per-group 求值修复阶段。
+固定快照：2026-07-08，lambdas 递归可见性修复阶段。
 
 ```text
-本地测试：moon test 183/183
-官方可比对审计：eligible 1251, pass 1209, fail 42, skip 431
-通过率：96.6%
+本地测试：moon test 185/185
+官方可比对审计：eligible 1251, pass 1210, fail 41, skip 431
+通过率：96.7%
 ```
 
 当前剩余失败最多的官方测试分组：
@@ -109,7 +109,6 @@ joins 10
 transforms 10
 parent-operator 6
 function-applications 2
-lambdas 1
 performance 1
 predicates 1
 sorting 1

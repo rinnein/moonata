@@ -794,7 +794,7 @@ test "官方套件：块表达式" {
 
 ///|
 test "官方套件：部分应用" {
-  let result = evaluate("(function($a, $b) { $a + $b })(5)(3)", Json::null())
+  let result = evaluate("(function($a, $b) { $a + $b })(5, ?)(3)", Json::null())
   assert_true(result == Json::number(8.0))
 }
 
@@ -994,23 +994,29 @@ test "官方套件：函数链部分应用参数顺序" {
   )
 }
 
+// ============ lambdas 递归可见性 ============
+
+///|
+test "官方套件：lambdas 递归 lambda 可见性" {
+  // $range 递归调用：省略步长参数时传入 undefined，$step?$step:1 返回 1
+  assert_eval(
+    "(  $range := function($start, $end, $step) { (    $step:=($step?$step:1);    $start+$step > $end ? $start : $append($start, $range($start+$step, $end, $step))   )};  $range(0,15))        ",
+    Json::null(),
+    data("[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]"),
+  )
+}
+
 // ============ flattening `[]` 语义 ============
 
 ///|
 test "官方套件：flattening [] 保持数组" {
-  let d = data("{\"Phone\":[{\"type\":\"home\",\"number\":\"0203 544 1234\"},{\"type\":\"office\",\"number\":\"01962 001234\"},{\"type\":\"office\",\"number\":\"01962 001235\"},{\"type\":\"mobile\",\"number\":\"077 7700 1234\"}]}")
+  let d = data(
+    "{\"Phone\":[{\"type\":\"home\",\"number\":\"0203 544 1234\"},{\"type\":\"office\",\"number\":\"01962 001234\"},{\"type\":\"office\",\"number\":\"01962 001235\"},{\"type\":\"mobile\",\"number\":\"077 7700 1234\"}]}",
+  )
   // Phone[type="mobile"][].number — [] 后 .number 应保持数组
-  assert_eval(
-    "Phone[type=\"mobile\"][].number",
-    d,
-    data("[\"077 7700 1234\"]"),
-  )
+  assert_eval("Phone[type=\"mobile\"][].number", d, data("[\"077 7700 1234\"]"))
   // Phone[][type="mobile"].number — [] 前 filter 再 .number 应保持数组
-  assert_eval(
-    "Phone[][type=\"mobile\"].number",
-    d,
-    data("[\"077 7700 1234\"]"),
-  )
+  assert_eval("Phone[][type=\"mobile\"].number", d, data("[\"077 7700 1234\"]"))
   // $[][type='command'] — 根路径 [] 后 filter 保持数组
   assert_eval(
     "$[][type=\"command\"]",
@@ -1021,17 +1027,23 @@ test "官方套件：flattening [] 保持数组" {
   assert_eval(
     "Phone{type: number[]}",
     d,
-    data("{\"home\":[\"0203 544 1234\"],\"office\":[\"01962 001234\",\"01962 001235\"],\"mobile\":[\"077 7700 1234\"]}"),
+    data(
+      "{\"home\":[\"0203 544 1234\"],\"office\":[\"01962 001234\",\"01962 001235\"],\"mobile\":[\"077 7700 1234\"]}",
+    ),
   )
 }
 
 ///|
 test "官方套件：object-constructor 分组聚合 per-group 求值" {
-  let d = data("{\"Phone\":[{\"type\":\"home\",\"number\":\"0203 544 1234\"},{\"type\":\"office\",\"number\":\"01962 001234\"},{\"type\":\"office\",\"number\":\"01962 001235\"},{\"type\":\"mobile\",\"number\":\"077 7700 1234\"}]}")
+  let d = data(
+    "{\"Phone\":[{\"type\":\"home\",\"number\":\"0203 544 1234\"},{\"type\":\"office\",\"number\":\"01962 001234\"},{\"type\":\"office\",\"number\":\"01962 001235\"},{\"type\":\"mobile\",\"number\":\"077 7700 1234\"}]}",
+  )
   // $join 应在每组上求值，而不是 per-item
   assert_eval(
     "Phone{type: $join(number, \", \"), \"phone\":number}",
     d,
-    data("{\"home\":\"0203 544 1234\",\"mobile\":\"077 7700 1234\",\"office\":\"01962 001234, 01962 001235\",\"phone\":[\"0203 544 1234\",\"01962 001234\",\"01962 001235\",\"077 7700 1234\"]}"),
+    data(
+      "{\"home\":\"0203 544 1234\",\"mobile\":\"077 7700 1234\",\"office\":\"01962 001234, 01962 001235\",\"phone\":[\"0203 544 1234\",\"01962 001234\",\"01962 001235\",\"077 7700 1234\"]}",
+    ),
   )
 }

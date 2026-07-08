@@ -307,8 +307,9 @@ test "P9.2：& 字符串拼接仍正常" {
 ///|
 test "P9.2：部分应用" {
   // function($a, $b) { $a + $b } 部分应用为 function($b) { 5 + $b }
+  // 使用 ? 占位符进行显式部分应用
   let result = eval_to_json(
-    "(function($a, $b) { $a + $b })(5)(3)",
+    "(function($a, $b) { $a + $b })(5, ?)(3)",
     Json::null(),
   )
   assert_true(result == Json::number(8.0))

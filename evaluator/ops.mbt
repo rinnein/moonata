@@ -508,7 +508,7 @@ fn has_placeholder(args : Array[@ast.Ast]) -> Bool {
 fn should_partial_on_missing(f : @value.JsonataFunc) -> Bool {
   match f.signature {
     Some(sig) => !sig.contains(":")
-    None => true
+    None => false
   }
 }
 
