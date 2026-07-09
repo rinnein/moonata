@@ -3,6 +3,7 @@
 priv struct PathFrame {
   value : @value.JsonataValue
   ancestors : Array[@value.JsonataValue]
+  bindings : Map[String, @value.JsonataValue]
 }
 
 ///|
@@ -10,7 +11,72 @@ fn path_frame(
   value : @value.JsonataValue,
   ancestors : Array[@value.JsonataValue],
 ) -> PathFrame {
-  { value, ancestors }
+  { value, ancestors, bindings: {} }
+}
+
+///|
+fn path_frame_with_bindings(
+  value : @value.JsonataValue,
+  ancestors : Array[@value.JsonataValue],
+  bindings : Map[String, @value.JsonataValue],
+) -> PathFrame {
+  { value, ancestors, bindings: copy_frame_bindings(bindings) }
+}
+
+///|
+fn copy_frame_bindings(
+  bindings : Map[String, @value.JsonataValue],
+) -> Map[String, @value.JsonataValue] {
+  let out : Map[String, @value.JsonataValue] = {}
+  for name, value in bindings {
+    out[name] = value
+  }
+  out
+}
+
+///|
+fn bind_frame(
+  frame : PathFrame,
+  name : String,
+  value : @value.JsonataValue,
+) -> PathFrame {
+  let bindings = copy_frame_bindings(frame.bindings)
+  bindings[name] = value
+  path_frame_with_bindings(frame.value, frame.ancestors, bindings)
+}
+
+///|
+fn bind_frame_index(frame : PathFrame, name : String, index : Int) -> PathFrame {
+  bind_frame(
+    frame,
+    name,
+    @value.JsonataValue::Json(Json::number(index.to_double())),
+  )
+}
+
+///|
+fn[T] with_frame_bindings(
+  ctx : @value.EvalContext,
+  bindings : Map[String, @value.JsonataValue],
+  f : () -> T raise @error.JsonataError,
+) -> T raise @error.JsonataError {
+  if bindings.length() == 0 {
+    return f()
+  }
+  let saved = ctx.bindings_snapshot()
+  for name, value in bindings {
+    ctx.bind(name, value)
+  }
+  try {
+    let r = f()
+    ctx.restore_bindings(saved)
+    r
+  } catch {
+    e => {
+      ctx.restore_bindings(saved)
+      raise e
+    }
+  }
 }
 
 ///|
@@ -151,6 +217,38 @@ fn steps_contain_parent(steps : Array[@ast.Step]) -> Bool {
 }
 
 ///|
+fn ast_contains_tuple_binding(ast : @ast.Ast) -> Bool {
+  match ast {
+    @ast.Ast::Path(steps) => steps_contain_tuple_binding(steps)
+    @ast.Ast::Sort(expr~, ..) => ast_contains_tuple_binding(expr)
+    _ => false
+  }
+}
+
+///|
+fn steps_contain_tuple_binding(steps : Array[@ast.Step]) -> Bool {
+  let mut found = false
+  for step in steps {
+    if step.pos_var is Some(_) || step.focus is Some(_) || step.tuple {
+      found = true
+      break
+    }
+    match step.kind {
+      @ast.StepKind::Eval(expr)
+      | @ast.StepKind::Filter(expr)
+      | @ast.StepKind::Map(expr)
+      | @ast.StepKind::GroupAggregate(expr) =>
+        if ast_contains_tuple_binding(expr) {
+          found = true
+          break
+        }
+      _ => ()
+    }
+  }
+  found
+}
+
+///|
 /// 求值器入口：AST → JsonataValue。
 pub fn eval(
   ast : @ast.Ast,
@@ -240,7 +338,8 @@ fn eval_path(
     return input
   }
   let has_arrayify = steps_has_arrayify(steps)
-  let result = if steps_contain_parent(steps) {
+  let result = if steps_contain_parent(steps) ||
+    steps_contain_tuple_binding(steps) {
     let frames = eval_path_frames(
       [path_frame(input, ctx.ancestors())],
       steps,
@@ -319,7 +418,9 @@ fn eval_path_frames(
       Some(pos_name) => {
         name_was_grouped = false
         frames = eval_step_frames(step, frames, ctx, grouped=false)
-        ctx.bind("__pos__", @value.JsonataValue::Json(Json::string(pos_name)))
+        for j, frame in frames {
+          frames[j] = bind_frame_index(frame, pos_name, j)
+        }
         i = i + 1
       }
       None =>
@@ -357,7 +458,13 @@ fn eval_path_frames(
                 match r {
                   @value.JsonataValue::Undefined => continue
                   _ =>
-                    for out in value_to_frames(r, frame.value, frame.ancestors) {
+                    for
+                      out in value_to_frames_with_bindings(
+                        r,
+                        frame.value,
+                        frame.ancestors,
+                        frame.bindings,
+                      ) {
                       results.push(out)
                     }
                 }
@@ -375,6 +482,10 @@ fn eval_path_frames(
               name_was_grouped = false
             } else {
               match step.kind {
+                @ast.StepKind::Index(i) =>
+                  frames = index_frame_sequence(frames, i)
+                @ast.StepKind::Slice(start, end) =>
+                  frames = slice_frame_sequence(frames, start, end)
                 @ast.StepKind::Name(_) =>
                   if i + 1 < stop_at {
                     match steps[i + 1].kind {
@@ -584,6 +695,36 @@ fn eval_path_from(
 }
 
 ///|
+fn index_frame_sequence(
+  frames : Array[PathFrame],
+  index : Int,
+) -> Array[PathFrame] {
+  let results : Array[PathFrame] = []
+  let len = frames.length()
+  let idx = if index < 0 { len + index } else { index }
+  if idx >= 0 && idx < len {
+    results.push(frames[idx])
+  }
+  results
+}
+
+///|
+fn slice_frame_sequence(
+  frames : Array[PathFrame],
+  start : Int?,
+  end : Int?,
+) -> Array[PathFrame] {
+  let results : Array[PathFrame] = []
+  let len = frames.length()
+  let s = start.unwrap_or(0)
+  let e = end.unwrap_or(len)
+  for i in s..<e.max(0).min(len) {
+    results.push(frames[i])
+  }
+  results
+}
+
+///|
 fn frames_to_value(frames : Array[PathFrame]) -> @value.JsonataValue {
   let values : Array[@value.JsonataValue] = []
   for frame in frames {
@@ -598,21 +739,40 @@ fn value_to_frames(
   parent : @value.JsonataValue,
   ancestors : Array[@value.JsonataValue],
 ) -> Array[PathFrame] {
+  value_to_frames_with_bindings(value, parent, ancestors, {})
+}
+
+///|
+fn value_to_frames_with_bindings(
+  value : @value.JsonataValue,
+  parent : @value.JsonataValue,
+  ancestors : Array[@value.JsonataValue],
+  bindings : Map[String, @value.JsonataValue],
+) -> Array[PathFrame] {
   let frames : Array[PathFrame] = []
   let lineage = prepend_ancestor(parent, ancestors)
   match value {
     @value.JsonataValue::Undefined => ()
     @value.JsonataValue::Sequence(arr) =>
       for item in arr {
-        for frame in value_to_frames(item, parent, ancestors) {
+        for
+          frame in value_to_frames_with_bindings(
+            item, parent, ancestors, bindings,
+          ) {
           frames.push(frame)
         }
       }
     @value.JsonataValue::Json(Json::Array(arr)) =>
       for item in arr {
-        frames.push(path_frame(@value.JsonataValue::Json(item), lineage))
+        frames.push(
+          path_frame_with_bindings(
+            @value.JsonataValue::Json(item),
+            lineage,
+            bindings,
+          ),
+        )
       }
-    _ => frames.push(path_frame(value, lineage))
+    _ => frames.push(path_frame_with_bindings(value, lineage, bindings))
   }
   frames
 }
@@ -623,7 +783,11 @@ fn parent_frames(frames : Array[PathFrame]) -> Array[PathFrame] {
   for frame in frames {
     if frame.ancestors.length() > 0 {
       results.push(
-        path_frame(frame.ancestors[0], tail_ancestors(frame.ancestors)),
+        path_frame_with_bindings(
+          frame.ancestors[0],
+          tail_ancestors(frame.ancestors),
+          frame.bindings,
+        ),
       )
     }
   }
@@ -669,11 +833,28 @@ fn eval_step_frames(
     }
     _ => ()
   }
+  match step.kind {
+    @ast.StepKind::Eval(@ast.Ast::Sort(expr~, terms~)) if ast_contains_tuple_binding(
+        expr,
+      ) => {
+      for out in eval_sort_frames(expr, terms, ctx) {
+        results.push(out)
+      }
+      return results
+    }
+    _ => ()
+  }
   for frame in frames {
     match step.stage {
       @ast.StepStage::Recursive => {
         let r = eval_step_recursive(step, frame.value, ctx)
-        for out in value_to_frames(r, frame.value, frame.ancestors) {
+        for
+          out in value_to_frames_with_bindings(
+            r,
+            frame.value,
+            frame.ancestors,
+            frame.bindings,
+          ) {
           results.push(out)
         }
       }
@@ -695,16 +876,18 @@ fn eval_step_frame_single(
   match step.kind {
     @ast.StepKind::Eval(expr) => {
       let r = ctx.with_lineage(current=frame.value, ancestors=frame.ancestors, fn() -> @value.JsonataValue raise @error.JsonataError {
-        eval(expr, ctx)
+        with_frame_bindings(ctx, frame.bindings, fn() -> @value.JsonataValue raise @error.JsonataError {
+          eval(expr, ctx)
+        })
       })
-      let lineage = prepend_ancestor(frame.value, frame.ancestors)
-      match r {
-        @value.JsonataValue::Undefined => ()
-        @value.JsonataValue::Sequence(arr) =>
-          for item in arr {
-            results.push(path_frame(item, lineage))
-          }
-        _ => results.push(path_frame(r, lineage))
+      for
+        out in value_to_frames_with_bindings(
+          r,
+          frame.value,
+          frame.ancestors,
+          frame.bindings,
+        ) {
+        results.push(out)
       }
     }
     @ast.StepKind::Name(name) =>
@@ -1027,14 +1210,22 @@ fn access_field_frames(
     @value.JsonataValue::Json(Json::Array(arr)) =>
       for v in arr {
         access_field_frames(
-          path_frame(@value.JsonataValue::Json(v), frame.ancestors),
+          path_frame_with_bindings(
+            @value.JsonataValue::Json(v),
+            frame.ancestors,
+            frame.bindings,
+          ),
           name,
           results,
         )
       }
     @value.JsonataValue::Sequence(arr) =>
       for item in arr {
-        access_field_frames(path_frame(item, frame.ancestors), name, results)
+        access_field_frames(
+          path_frame_with_bindings(item, frame.ancestors, frame.bindings),
+          name,
+          results,
+        )
       }
     _ => ()
   }
@@ -1056,7 +1247,11 @@ fn access_field_grouped_frames(
     @value.JsonataValue::Json(Json::Array(arr)) =>
       for v in arr {
         access_field_grouped_frames(
-          path_frame(@value.JsonataValue::Json(v), frame.ancestors),
+          path_frame_with_bindings(
+            @value.JsonataValue::Json(v),
+            frame.ancestors,
+            frame.bindings,
+          ),
           name,
           results,
         )
@@ -1064,7 +1259,7 @@ fn access_field_grouped_frames(
     @value.JsonataValue::Sequence(arr) =>
       for item in arr {
         access_field_grouped_frames(
-          path_frame(item, frame.ancestors),
+          path_frame_with_bindings(item, frame.ancestors, frame.bindings),
           name,
           results,
         )
@@ -1084,9 +1279,22 @@ fn push_child_json_frames(
   match json {
     Json::Array(arr) if flatten_array =>
       for item in arr {
-        results.push(path_frame(@value.JsonataValue::Json(item), lineage))
+        results.push(
+          path_frame_with_bindings(
+            @value.JsonataValue::Json(item),
+            lineage,
+            parent_frame.bindings,
+          ),
+        )
       }
-    _ => results.push(path_frame(@value.JsonataValue::Json(json), lineage))
+    _ =>
+      results.push(
+        path_frame_with_bindings(
+          @value.JsonataValue::Json(json),
+          lineage,
+          parent_frame.bindings,
+        ),
+      )
   }
 }
 
@@ -1198,18 +1406,40 @@ fn access_wildcard_frames(
         match v {
           Json::Array(arr) =>
             for item in arr {
-              results.push(path_frame(@value.JsonataValue::Json(item), lineage))
+              results.push(
+                path_frame_with_bindings(
+                  @value.JsonataValue::Json(item),
+                  lineage,
+                  frame.bindings,
+                ),
+              )
             }
-          _ => results.push(path_frame(@value.JsonataValue::Json(v), lineage))
+          _ =>
+            results.push(
+              path_frame_with_bindings(
+                @value.JsonataValue::Json(v),
+                lineage,
+                frame.bindings,
+              ),
+            )
         }
       }
     @value.JsonataValue::Json(Json::Array(arr)) =>
       for v in arr {
-        results.push(path_frame(@value.JsonataValue::Json(v), frame.ancestors))
+        results.push(
+          path_frame_with_bindings(
+            @value.JsonataValue::Json(v),
+            frame.ancestors,
+            frame.bindings,
+          ),
+        )
       }
     @value.JsonataValue::Sequence(arr) =>
       for item in arr {
-        access_wildcard_frames(path_frame(item, frame.ancestors), results)
+        access_wildcard_frames(
+          path_frame_with_bindings(item, frame.ancestors, frame.bindings),
+          results,
+        )
       }
     _ => ()
   }
@@ -1260,14 +1490,22 @@ fn access_index_frame(
         } else {
           prepend_ancestor(frame.value, frame.ancestors)
         }
-        results.push(path_frame(@value.JsonataValue::Json(arr[idx]), ancestors))
+        results.push(
+          path_frame_with_bindings(
+            @value.JsonataValue::Json(arr[idx]),
+            ancestors,
+            frame.bindings,
+          ),
+        )
       }
     }
     @value.JsonataValue::Sequence(arr) => {
       let len = arr.length()
       let idx = if i < 0 { len + i } else { i }
       if idx >= 0 && idx < len {
-        results.push(path_frame(arr[idx], frame.ancestors))
+        results.push(
+          path_frame_with_bindings(arr[idx], frame.ancestors, frame.bindings),
+        )
       }
     }
     @value.JsonataValue::Undefined => ()
@@ -1326,7 +1564,13 @@ fn access_slice_frame(
         prepend_ancestor(frame.value, frame.ancestors)
       }
       for i in s..<e.max(0).min(len) {
-        results.push(path_frame(@value.JsonataValue::Json(arr[i]), ancestors))
+        results.push(
+          path_frame_with_bindings(
+            @value.JsonataValue::Json(arr[i]),
+            ancestors,
+            frame.bindings,
+          ),
+        )
       }
     }
     @value.JsonataValue::Sequence(arr) => {
@@ -1334,7 +1578,9 @@ fn access_slice_frame(
       let s = start.unwrap_or(0)
       let e = end.unwrap_or(len)
       for i in s..<e.max(0).min(len) {
-        results.push(path_frame(arr[i], frame.ancestors))
+        results.push(
+          path_frame_with_bindings(arr[i], frame.ancestors, frame.bindings),
+        )
       }
     }
     _ => ()
@@ -1447,13 +1693,18 @@ fn access_filter_frames(
   }
   for i, frame in frames {
     let r = ctx.with_lineage(current=frame.value, ancestors=frame.ancestors, fn() -> @value.JsonataValue raise @error.JsonataError {
-      ctx.bind("#", @value.JsonataValue::Json(Json::number(i.to_double())))
-      match pos_var {
-        Some(name) =>
-          ctx.bind(name, @value.JsonataValue::Json(Json::number(i.to_double())))
-        None => ()
-      }
-      ctx.with_depth(() => eval(expr, ctx))
+      with_frame_bindings(ctx, frame.bindings, fn() -> @value.JsonataValue raise @error.JsonataError {
+        ctx.bind("#", @value.JsonataValue::Json(Json::number(i.to_double())))
+        match pos_var {
+          Some(name) =>
+            ctx.bind(
+              name,
+              @value.JsonataValue::Json(Json::number(i.to_double())),
+            )
+          None => ()
+        }
+        ctx.with_depth(() => eval(expr, ctx))
+      })
     })
     match r {
       @value.JsonataValue::Json(Json::True) => results.push(frame)
@@ -1586,32 +1837,52 @@ fn access_map_frames(
   }
   for i, frame in frames {
     let r = ctx.with_lineage(current=frame.value, ancestors=frame.ancestors, fn() -> @value.JsonataValue raise @error.JsonataError {
-      match pos_var {
-        Some(name) =>
-          ctx.bind(name, @value.JsonataValue::Json(Json::number(i.to_double())))
-        None => ()
-      }
-      ctx.with_depth(() => eval(expr, ctx))
+      with_frame_bindings(ctx, frame.bindings, fn() -> @value.JsonataValue raise @error.JsonataError {
+        match pos_var {
+          Some(name) =>
+            ctx.bind(
+              name,
+              @value.JsonataValue::Json(Json::number(i.to_double())),
+            )
+          None => ()
+        }
+        ctx.with_depth(() => eval(expr, ctx))
+      })
     })
     match r {
       @value.JsonataValue::Undefined => continue
       @value.JsonataValue::Sequence(arr) =>
         for v in arr {
-          for out in value_to_frames(v, frame.value, frame.ancestors) {
+          for
+            out in value_to_frames_with_bindings(
+              v,
+              frame.value,
+              frame.ancestors,
+              frame.bindings,
+            ) {
             results.push(out)
           }
         }
       @value.JsonataValue::Json(Json::Array(arr)) =>
         if top_is_construct {
-          results.push(path_frame(r, frame.ancestors))
+          results.push(
+            path_frame_with_bindings(r, frame.ancestors, frame.bindings),
+          )
         } else {
           for v in arr {
             results.push(
-              path_frame(@value.JsonataValue::Json(v), frame.ancestors),
+              path_frame_with_bindings(
+                @value.JsonataValue::Json(v),
+                frame.ancestors,
+                frame.bindings,
+              ),
             )
           }
         }
-      _ => results.push(path_frame(r, frame.ancestors))
+      _ =>
+        results.push(
+          path_frame_with_bindings(r, frame.ancestors, frame.bindings),
+        )
     }
   }
 }
@@ -1696,7 +1967,9 @@ fn access_group_aggregate_frames(
   let merged : Map[String, Array[Json]] = {}
   for frame in frames {
     let r = ctx.with_lineage(current=frame.value, ancestors=frame.ancestors, fn() -> @value.JsonataValue raise @error.JsonataError {
-      ctx.with_depth(() => eval(group_ast, ctx))
+      with_frame_bindings(ctx, frame.bindings, fn() -> @value.JsonataValue raise @error.JsonataError {
+        ctx.with_depth(() => eval(group_ast, ctx))
+      })
     })
     match r {
       @value.JsonataValue::Json(Json::Object(_)) => merge_into_group(r, merged)

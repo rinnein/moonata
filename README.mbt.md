@@ -93,24 +93,23 @@ CI 在 `master` 分支推送、PR 以及手动触发时运行。
 
 ## 兼容性状态
 
-固定快照：2026-07-08，谓词过滤后索引逐元素语义修复阶段。
+固定快照：2026-07-09，tuple stream 位置绑定传播修复阶段。
 
 ```text
-本地测试：moon test 187/187
-官方可比对审计：eligible 1251, pass 1210, fail 41, skip 431
-通过率：96.7%
+本地测试：moon test 189/189
+官方可比对审计：eligible 1251, pass 1214, fail 37, skip 431
+通过率：97.0%
 ```
 
 当前剩余失败最多的官方测试分组：
 
 ```text
 function-tomillis 10
-joins 10
 transforms 10
+joins 7
 parent-operator 6
 function-applications 2
 performance 1
-sorting 1
 transform 1
 ```
 

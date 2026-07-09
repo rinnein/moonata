@@ -1031,7 +1031,7 @@ fn eval_sort(
   terms : Array[@ast.SortTerm],
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
-  if sort_terms_contain_parent(terms) {
+  if sort_terms_contain_parent(terms) || ast_contains_tuple_binding(expr_ast) {
     return eval_sort_with_lineage(expr_ast, terms, ctx)
   }
   let input = eval(expr_ast, ctx)
@@ -1087,6 +1087,15 @@ fn eval_sort_with_lineage(
   terms : Array[@ast.SortTerm],
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
+  frames_to_value(eval_sort_frames(expr_ast, terms, ctx))
+}
+
+///|
+fn eval_sort_frames(
+  expr_ast : @ast.Ast,
+  terms : Array[@ast.SortTerm],
+  ctx : @value.EvalContext,
+) -> Array[PathFrame] raise @error.JsonataError {
   let frames = match expr_ast {
     @ast.Ast::Path(steps) =>
       eval_path_frames(
@@ -1106,7 +1115,7 @@ fn eval_sort_with_lineage(
     }
   }
   if frames.length() <= 1 {
-    return frames_to_value(frames)
+    return frames
   }
   let keyed : Array[(Array[@value.JsonataValue], Int, PathFrame)] = []
   for i, frame in frames {
@@ -1116,7 +1125,9 @@ fn eval_sort_with_lineage(
         current=frame.value,
         ancestors=frame.ancestors,
         fn() -> @value.JsonataValue raise @error.JsonataError {
-          eval(term.expr, ctx)
+          with_frame_bindings(ctx, frame.bindings, fn() -> @value.JsonataValue raise @error.JsonataError {
+            eval(term.expr, ctx)
+          })
         },
       )
       keys.push(key)
@@ -1138,7 +1149,7 @@ fn eval_sort_with_lineage(
     let (_, _, frame) = kv
     sorted.push(frame)
   }
-  frames_to_value(sorted)
+  sorted
 }
 
 ///|

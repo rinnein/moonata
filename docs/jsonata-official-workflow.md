@@ -128,18 +128,17 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-08，谓词过滤后索引逐元素语义修复，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-09，tuple stream 位置绑定传播修复，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1210 fail 41 skip 431
+eligible 1251 pass 1214 fail 37 skip 431
 top_failures
 function-tomillis 10
-joins 10
 transforms 10
+joins 7
 parent-operator 6
 function-applications 2
 performance 1
-sorting 1
 transform 1
 skip_reasons
 no_result 395
@@ -147,6 +146,15 @@ non-string-expr 23
 timelimit 7
 bindings 6
 ```
+
+本轮修复（tuple stream 位置绑定随路径展平、过滤与排序传播）：
+- 提交：sorting 17→18 pass（全绿），joins 18→21 pass，整体 pass 1210→1214 (+4)，fail 41→37 (-4)，通过率 96.7%→97.0%
+- 门禁：`moon check` 0e0w，`moon test` 189/189 passed，`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Evaluator: `PathFrame` 增加路径级变量绑定表，`#$var` 不再通过全局 `__pos__` 在后续扁平序列中重编号
+  - Evaluator: 含 tuple binding 的路径与排序输入切换到 frame 求值，排序后继续保留 `$o`/`$pos` 等来源绑定
+  - Evaluator: frame 模式下补齐序列级 Index/Slice，避免 `$#$pos[$pos<3][1]` 被错误解释为逐 frame 索引
+  - Tests: 增加官方 sorting case020 与 joins/index 位置绑定等价回归断言
 
 本轮修复（谓词过滤后 `[0]` 索引逐元素语义：Name→Filter→Index 路径分组，保留 per-element 数组结构）：
 - 提交：predicates 1→2 pass（全绿），整体 pass 1210→1210，fail 41→41，通过率 96.7%

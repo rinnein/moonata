@@ -1062,3 +1062,26 @@ test "官方套件：谓词过滤后 [0] 保持逐元素语义" {
     data("[34.45,34.45]"),
   )
 }
+
+///|
+test "官方套件：tuple stream 位置绑定随过滤和排序传播" {
+  let nums = data("[3,1,4,1,5,9]")
+  assert_eval("$#$pos[$pos<3]", nums, data("[3,1,4]"))
+  assert_eval("$#$pos[$pos<3]^($)", nums, data("[1,3,4]"))
+  assert_eval("$#$pos[$pos<3]^(>$)", nums, data("[4,3,1]"))
+  assert_eval("$#$pos[$pos<3]^($)[-1]", nums, Json::number(4.0))
+}
+
+///|
+test "官方套件：tuple stream 位置绑定随路径展平和排序传播" {
+  let d = data(
+    "{\"Account\":{\"Order\":[{\"OrderID\":\"order103\",\"Product\":[{\"Product Name\":\"Bowler Hat\",\"ProductID\":858383},{\"Product Name\":\"Trilby hat\",\"ProductID\":858236}]},{\"OrderID\":\"order104\",\"Product\":[{\"Product Name\":\"Bowler Hat\",\"ProductID\":858383},{\"Product Name\":\"Cloak\",\"ProductID\":345664}]}]}}",
+  )
+  assert_eval(
+    "Account.Order#$o.Product^(ProductID).{ 'Product': `Product Name`, 'Order Index': $o }",
+    d,
+    data(
+      "[{\"Order Index\":1,\"Product\":\"Cloak\"},{\"Order Index\":0,\"Product\":\"Trilby hat\"},{\"Order Index\":0,\"Product\":\"Bowler Hat\"},{\"Order Index\":1,\"Product\":\"Bowler Hat\"}]",
+    ),
+  )
+}
