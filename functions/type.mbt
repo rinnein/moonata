@@ -333,8 +333,10 @@ fn register_special_functions(ctx : @value.EvalContext) -> Unit {
       @value.JsonataValue::Undefined => @value.JsonataValue::Undefined
       _ => {
         let s = value_to_str(args[0])
+        // Use context timestamp for default date components (today's date)
+        let now_millis = @env.now().to_double()
         let millis = if args.length() > 1 {
-          parse_date_picture(s, value_to_str(args[1]))
+          parse_date_picture_with_now(s, value_to_str(args[1]), now_millis)
         } else {
           parse_iso_millis(s)
         }
@@ -637,13 +639,14 @@ struct DateComponents {
 } derive(Debug)
 
 ///|
-fn parse_date_picture(
+fn parse_date_picture_with_now(
   s : String,
   picture : String,
+  now_millis : Double,
 ) -> Double raise @error.JsonataError {
   let segments = split_picture(picture)
   let comps = extract_date_components(s, segments)
-  build_date_from_components(comps, picture)
+  build_date_from_components_with_now(comps, picture, now_millis)
 }
 
 ///|
@@ -809,19 +812,30 @@ fn marker_char_width(marker : String) -> Int? {
   }
   match c0 {
     'Y' => {
-      // Y0001 -> 4, Y00 -> 2, Y0000 -> 4, Y,*-4 -> variable, Y -> variable, Y1 -> variable
-      // YI/Yi -> roman numeral, Yw -> word year
-      let has_comma = marker.contains(",")
+      // Y0001 -> 4, Y00 -> 2, Y0000 -> 4
+      // Y1 -> variable ([0-9]+), Y -> variable
+      // Y,*-4 -> fixed 4 (width modifier max), YI/Yi -> roman, Yw -> word
       let has_I = marker.contains("I")
       let has_i = marker.contains("i")
       let has_w = marker.contains("w")
-      if has_comma || has_I || has_i || has_w {
-        None
-      } else if marker == "Y" || marker == "Y1" {
+      if has_I || has_i || has_w {
         None
       } else {
-        // Count digit placeholders: Y0001 has 4 digits (0,0,0,1)
-        Some(marker_placeholder_count(marker))
+        match parse_marker_width_mod(marker) {
+          Some(w) => Some(w)
+          None =>
+            // No width modifier: mandatory digits > 1 => fixed, else variable
+            if marker == "Y" {
+              None
+            } else {
+              let count = marker_placeholder_count(marker)
+              if count > 1 {
+                Some(count)
+              } else {
+                None
+              }
+            }
+        }
       }
     }
     'M' =>
@@ -831,43 +845,92 @@ fn marker_char_width(marker : String) -> Int? {
         marker.contains("A") ||
         marker.contains("a") {
         None // Roman numeral or abbreviated
-        // M01 -> 2, M#1 -> variable, M -> variable
-      } else if marker.contains("#") || marker == "M" {
-        None
       } else {
-        Some(marker_placeholder_count(marker))
+        match parse_marker_width_mod(marker) {
+          Some(w) => Some(w)
+          None =>
+            // M01 -> 2, M#1 -> variable, M -> variable, M1 -> variable
+            if marker.contains("#") || marker == "M" {
+              None
+            } else {
+              let count = marker_placeholder_count(marker)
+              if count > 1 {
+                Some(count)
+              } else {
+                None
+              }
+            }
+        }
       }
     'D' => {
       let has_o = marker.contains("o")
       let has_Ww = marker.contains("Ww")
-      let starts_Dw = marker.has_prefix("Dw")
+      let starts_Dw = marker.has_prefix("Dw") || marker.has_prefix("DW")
       let has_a = marker.contains("a")
       let has_A = marker.contains("A")
       if has_o || has_Ww || starts_Dw || has_a || has_A {
         None // Ordinal, word, or abbreviated
-      } else if marker.contains("#") || marker == "D" {
-        None
       } else {
-        Some(marker_placeholder_count(marker))
+        match parse_marker_width_mod(marker) {
+          Some(w) => Some(w)
+          None =>
+            if marker.contains("#") || marker == "D" {
+              None
+            } else {
+              let count = marker_placeholder_count(marker)
+              if count > 1 {
+                Some(count)
+              } else {
+                None
+              }
+            }
+        }
       }
     }
     'H' | 'h' =>
-      if marker == "H" || marker == "h" || marker.contains("#") {
-        None
-      } else {
-        Some(marker_placeholder_count(marker))
+      match parse_marker_width_mod(marker) {
+        Some(w) => Some(w)
+        None =>
+          if marker == "H" || marker == "h" || marker.contains("#") {
+            None
+          } else {
+            let count = marker_placeholder_count(marker)
+            if count > 1 {
+              Some(count)
+            } else {
+              None
+            }
+          }
       }
     'm' =>
-      if marker == "m" || marker.contains("#") {
-        None
-      } else {
-        Some(marker_placeholder_count(marker))
+      match parse_marker_width_mod(marker) {
+        Some(w) => Some(w)
+        None =>
+          if marker == "m" || marker.contains("#") {
+            None
+          } else {
+            let count = marker_placeholder_count(marker)
+            if count > 1 {
+              Some(count)
+            } else {
+              None
+            }
+          }
       }
     's' =>
-      if marker == "s" || marker.contains("#") {
-        None
-      } else {
-        Some(marker_placeholder_count(marker))
+      match parse_marker_width_mod(marker) {
+        Some(w) => Some(w)
+        None =>
+          if marker == "s" || marker.contains("#") {
+            None
+          } else {
+            let count = marker_placeholder_count(marker)
+            if count > 1 {
+              Some(count)
+            } else {
+              None
+            }
+          }
       }
     'f' =>
       // f001 -> 3, f -> variable, f1 -> variable
@@ -882,13 +945,46 @@ fn marker_char_width(marker : String) -> Int? {
       } else if marker == "d" {
         None
       } else {
-        Some(marker_placeholder_count(marker))
+        let count = marker_placeholder_count(marker)
+        if count > 1 {
+          Some(count)
+        } else {
+          None
+        }
       }
     'F' => None // Named or numeric weekday
     'Z' | 'z' => None // Variable timezone
     'P' => None // AM/PM
     'X' | 'x' | 'W' | 'w' => None
     _ => None
+  }
+}
+
+///|
+/// Parse the width modifier (the part after the comma) of a marker.
+/// Per XPath/XQuery fn:format-integer §9.8.4.2, the modifier is `min` or
+/// `min-max`, where each may be `*` (unbounded). For Y, the `max` value
+/// pins the mandatory digit count and thus the parse width.
+/// Returns Some(width) only when a fixed width can be derived; None otherwise.
+fn parse_marker_width_mod(marker : String) -> Int? {
+  let comma = match marker.find(",") {
+    Some(idx) => idx
+    None => return None
+  }
+  let width_mod = marker[comma + 1:].to_owned()
+  let dash = match width_mod.find("-") {
+    Some(idx) => idx
+    None =>
+      // single value = min only
+      return None
+  }
+  let max_str = width_mod[dash + 1:].trim().to_owned()
+  if max_str == "*" || max_str.length() == 0 {
+    return None
+  }
+  match parse_int_opt(max_str) {
+    Some(n) => Some(n)
+    None => None
   }
 }
 
@@ -978,6 +1074,9 @@ fn extract_marker_value(
       } else if marker.contains("i") {
         // Roman numeral month
         comps.month = Some(parse_roman_numeral(value))
+      } else if marker.contains("A") || marker.contains("a") {
+        // Letter-based month (A=1, B=2, ..., AA=27, etc.)
+        comps.month = Some(letters_to_decimal(value))
       } else {
         comps.month = parse_int_opt(value)
         if comps.month is None {
@@ -989,14 +1088,17 @@ fn extract_marker_value(
         // Word-ordinal day like "Twelfth", "Twenty-first"
         let d = parse_word_ordinal(value)
         comps.day = Some(d)
-      } else if marker.has_prefix("Dw") {
-        // Word day like "twenty-seven", "twenty-seventh"
+      } else if marker.has_prefix("Dw") || marker.has_prefix("DW") {
+        // Word day like "twenty-seven", "twenty-seventh" (case-insensitive)
         let d = parse_word_number(value)
         comps.day = Some(d)
       } else if marker.contains("o") {
         // Numeric ordinal day like "27th"
         let d = parse_ordinal_day(value)
         comps.day = Some(d)
+      } else if marker.contains("A") || marker.contains("a") {
+        // Letter-based day (A=1, B=2, ..., AA=27, etc.)
+        comps.day = Some(letters_to_decimal(value))
       } else {
         comps.day = parse_int_opt(value)
         if comps.day is None {
@@ -1100,6 +1202,25 @@ fn parse_int_opt(s : String) -> Int? {
   } else {
     Some(val)
   }
+}
+
+///|
+/// Parse spreadsheet-style letters to decimal (A=1, B=2, ..., Z=26, AA=27, etc.)
+/// Case-insensitive: "ae" -> 31, "w" -> 23, "A" -> 1
+fn letters_to_decimal(s : String) -> Int {
+  let mut value = 0
+  for _, c0 in s {
+    // Normalize to uppercase
+    let c = if c0 >= 'a' && c0 <= 'z' {
+      Int::unsafe_to_char(c0.to_int() - 32)
+    } else {
+      c0
+    }
+    if c >= 'A' && c <= 'Z' {
+      value = value * 26 + (c.to_int() - 'A'.to_int() + 1)
+    }
+  }
+  value
 }
 
 ///|
@@ -1389,14 +1510,30 @@ fn strip_ordinal_suffix(w : String) -> String {
     if suffix == "st" || suffix == "nd" || suffix == "rd" || suffix == "th" {
       let base = w[:len - 2].to_owned()
       let result = ordinal_base_to_cardinal(base)
-      // Only accept the stripped version if it's different from input
-      // (this prevents false positives like "thousand" -> "thousa")
-      if result != base {
+      // Accept if result is a valid cardinal (in singles/tens/multipliers)
+      // This handles both transformed forms ("fir" -> "one") and
+      // already-cardinal forms ("seven" -> "seven")
+      if is_valid_word_number_component(result) {
         return result
       }
     }
   }
   w
+}
+
+///|
+/// Check if a word is a valid number component (singles, tens, or multiplier)
+fn is_valid_word_number_component(word : String) -> Bool {
+  let singles = [
+    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+    "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen",
+    "eighteen", "nineteen",
+  ]
+  let tens = [
+    "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety",
+  ]
+  let multipliers = ["hundred", "thousand"]
+  singles.contains(word) || tens.contains(word) || multipliers.contains(word)
 }
 
 ///|
@@ -1465,77 +1602,188 @@ fn is_whitespace(c : Char) -> Bool {
 }
 
 ///|
-/// Build millis from extracted components
-fn build_date_from_components(
+/// Build millis from extracted components with "now" reference for unspecified parts.
+/// Per JSONata spec §9.8.4.4:
+/// - Unspecified parts to the LEFT of specified parts default to "now" (current timestamp)
+/// - Unspecified parts to the RIGHT of specified parts default to 1 (month/day) or 0 (time)
+fn build_date_from_components_with_now(
   comps : DateComponents,
   _picture : String,
+  now_millis : Double,
 ) -> Double raise @error.JsonataError {
-  let mut year = 1970
-  let mut month = 1
-  let mut day = 1
-  let mut hour = 0
-  let mut minute = 0
-  let mut second = 0
-  let mut millis = 0
-  let mut offset = 0
+  // Get current date/time components from now_millis if needed
+  let now_dt = if now_millis > 0.0 {
+    datetime_from_millis(now_millis, 0)
+  } else {
+    // Use epoch as fallback
+    datetime_from_millis(0.0, 0)
+  }
 
-  // Apply extracted components
-  match comps.year {
-    Some(y) => year = y
-    _ => ()
-  }
-  match comps.month {
-    Some(m) => month = m
-    _ => ()
-  }
-  match comps.day {
-    Some(d) => day = d
-    _ => ()
-  }
-  match comps.hour24 {
-    Some(h) => hour = h
-    _ => ()
-  }
-  match comps.hour12 {
-    Some(h) => {
-      hour = if h == 12 { 0 } else { h }
-      match comps.am_pm {
-        Some(pm) => if pm { hour = hour + 12 }
-        _ => ()
+  // Determine the "most significant specified" and "least significant specified"
+  // Order: Y M D H m s f (date: Y M D, time: H m s f)
+  // For date: year > month > day
+  // For time: hour > minute > second > fraction
+
+  // Check what's specified
+  let has_date = comps.year is Some(_) ||
+    comps.month is Some(_) ||
+    comps.day is Some(_) ||
+    comps.day_of_year is Some(_)
+  let has_time = comps.hour24 is Some(_) ||
+    comps.hour12 is Some(_) ||
+    comps.minute is Some(_) ||
+    comps.second is Some(_) ||
+    comps.millis is Some(_)
+
+  // Apply defaults per JSONata rules:
+  // - Before first specified: use now
+  // - After last specified: use 1 for date (month/day), 0 for time
+
+  // Year
+  let year = match comps.year {
+    Some(y) => y
+    None =>
+      if has_date {
+        // Some date component specified but not year: default to now
+        now_dt.year()
+      } else {
+        // No date specified: use now
+        now_dt.year()
       }
-    }
-    _ => ()
   }
-  match comps.minute {
-    Some(m) => minute = m
-    _ => ()
-  }
-  match comps.second {
-    Some(s) => second = s
-    _ => ()
-  }
-  match comps.millis {
-    Some(ms) => millis = ms
-    _ => ()
-  }
-  match comps.offset {
-    Some(o) => offset = o
-    _ => ()
-  }
-  // If day_of_year is specified, convert to month/day
+
+  // Handle day_of_year first if present (it overrides month/day)
   match comps.day_of_year {
     Some(doy) => {
       let (m, d) = day_of_year_to_month_day(year, doy)
-      month = m
-      day = d
+      return millis_from_date_time(
+        year,
+        m,
+        d,
+        resolve_hour(comps, has_time, now_dt),
+        resolve_minute(comps, has_time),
+        resolve_second(comps, has_time),
+        resolve_millis(comps),
+        resolve_offset(comps),
+      )
     }
-    _ => ()
+    None => ()
   }
-  // If weekday is specified but not day/month, we need a reference point
-  // This is complex and typically requires additional context
-  // For now, if we have year, month, weekday but no day, use the date that matches
 
-  millis_from_date_time(year, month, day, hour, minute, second, millis, offset)
+  // Month
+  let month = match comps.month {
+    Some(m) => m
+    None =>
+      if comps.day is Some(_) {
+        // Day specified but not month: default to now's month
+        now_dt.month()
+      } else if has_date {
+        // Year specified but not month/day: default month to 1
+        1
+      } else {
+        // No date specified
+        now_dt.month()
+      }
+  }
+
+  // Day
+  let day = match comps.day {
+    Some(d) => d
+    None =>
+      if has_date {
+        // Year or month specified but not day: default to 1
+        1
+      } else {
+        // No date specified
+        now_dt.day()
+      }
+  }
+
+  millis_from_date_time(
+    year,
+    month,
+    day,
+    resolve_hour(comps, has_time, now_dt),
+    resolve_minute(comps, has_time),
+    resolve_second(comps, has_time),
+    resolve_millis(comps),
+    resolve_offset(comps),
+  )
+}
+
+///|
+fn resolve_hour(
+  comps : DateComponents,
+  has_time : Bool,
+  now_dt : @time.ZonedDateTime,
+) -> Int {
+  match comps.hour24 {
+    Some(h) => h
+    None =>
+      match comps.hour12 {
+        Some(h12) => {
+          let h24 = if h12 == 12 { 0 } else { h12 }
+          match comps.am_pm {
+            Some(pm) => if pm { h24 + 12 } else { h24 }
+            None => h24
+          }
+        }
+        None =>
+          if has_time &&
+            (
+              comps.minute is Some(_) ||
+              comps.second is Some(_) ||
+              comps.millis is Some(_)
+            ) {
+            now_dt.hour()
+          } else if has_time {
+            now_dt.hour()
+          } else {
+            0
+          }
+      }
+  }
+}
+
+///|
+fn resolve_minute(comps : DateComponents, has_time : Bool) -> Int {
+  match comps.minute {
+    Some(m) => m
+    None =>
+      if comps.second is Some(_) || comps.millis is Some(_) {
+        // Not reachable for has_time since minute would be after specified second
+        // but keep for completeness
+        0
+      } else if has_time {
+        0
+      } else {
+        0
+      }
+  }
+}
+
+///|
+fn resolve_second(comps : DateComponents, has_time : Bool) -> Int {
+  match comps.second {
+    Some(s) => s
+    None => if comps.millis is Some(_) { 0 } else if has_time { 0 } else { 0 }
+  }
+}
+
+///|
+fn resolve_millis(comps : DateComponents) -> Int {
+  match comps.millis {
+    Some(ms) => ms
+    None => 0
+  }
+}
+
+///|
+fn resolve_offset(comps : DateComponents) -> Int {
+  match comps.offset {
+    Some(o) => o
+    None => 0
+  }
 }
 
 ///|

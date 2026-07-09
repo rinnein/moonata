@@ -93,22 +93,22 @@ CI 在 `master` 分支推送、PR 以及手动触发时运行。
 
 ## 兼容性状态
 
-固定快照：2026-07-09，tuple stream 位置绑定传播修复阶段。
+固定快照：2026-07-09，$toMillis picture 解析增强阶段。
 
 ```text
-本地测试：moon test 189/189
-官方可比对审计：eligible 1251, pass 1214, fail 37, skip 431
-通过率：97.0%
+本地测试：moon test 190/190
+官方可比对审计：eligible 1251, pass 1223, fail 28, skip 431
+通过率：97.8%
 ```
 
 当前剩余失败最多的官方测试分组：
 
 ```text
-function-tomillis 10
 transforms 10
 joins 7
 parent-operator 6
 function-applications 2
+function-tomillis 1
 performance 1
 transform 1
 ```

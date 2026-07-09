@@ -604,6 +604,63 @@ test "P11：日期 picture 支持 ISO 周和紧凑解析" {
 }
 
 ///|
+test "P11：$toMillis 日期 picture 解析增强（官方回归）" {
+  // case011: [Y,*-4] width modifier
+  assert_true(
+    eval_fn("$toMillis(\"201802\", \"[Y,*-4][M01]\")", Json::null()) ==
+    Json::number(1517443200000.0),
+  )
+  // [D1] variable-width + [MNn] named month + [Y0001]
+  assert_true(
+    eval_fn(
+      "$toMillis(\"21 August 2017\", \"[D1] [MNn] [Y0001]\")",
+      Json::null(),
+    ) ==
+    Json::number(1503273600000.0),
+  )
+  // [YI]/[Yi] roman numeral year
+  assert_true(
+    eval_fn("$toMillis(\"27 03 MMXVIII\", \"[D1] [M01] [YI]\")", Json::null()) ==
+    Json::number(1522108800000.0),
+  )
+  assert_true(
+    eval_fn("$toMillis(\"27 iii MMXVIII\", \"[D1] [Mi] [YI]\")", Json::null()) ==
+    Json::number(1522108800000.0),
+  )
+  // [Da]/[MA] letter-based day/month
+  assert_true(
+    eval_fn("$toMillis(\"w C mmxviii\", \"[Da] [MA] [Yi]\")", Json::null()) ==
+    Json::number(1521763200000.0), // w=23, C=3, mmxviii=2018 -> 2018-03-23
+  )
+  assert_true(
+    eval_fn("$toMillis(\"ae C mmxviii\", \"[Da] [MA] [Yi]\")", Json::null()) ==
+    Json::number(1522454400000.0), // ae=31, C=3 -> 2018-03-31
+  )
+  // [Dw]/[DW] word day + [Yw] word year
+  assert_true(
+    eval_fn(
+      "$toMillis(\"twenty-seventh April 2008\", \"[Dw] [MNn] [Y0001]\")",
+      Json::null(),
+    ) ==
+    Json::number(1209254400000.0),
+  )
+  assert_true(
+    eval_fn(
+      "$toMillis(\"TWENTY-SECOND August two thousand and seventeen\", \"[DW] [MNn] [Yw]\")",
+      Json::null(),
+    ) ==
+    Json::number(1503360000000.0),
+  )
+  assert_true(
+    eval_fn(
+      "$toMillis(\"Twentieth of August, two thousand and seventeen\", \"[DW] of [MNn], [Yw]\")",
+      Json::null(),
+    ) ==
+    Json::number(1503187200000.0),
+  )
+}
+
+///|
 test "P11：整数 picture 支持英文序数大数与字母序号" {
   assert_true(
     eval_fn("$formatInteger(1000000000001, \"w\")", Json::null()) ==
