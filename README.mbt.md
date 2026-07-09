@@ -93,12 +93,12 @@ CI 在 `master` 分支推送、PR 以及手动触发时运行。
 
 ## 兼容性状态
 
-固定快照：2026-07-09，$toMillis picture 解析增强阶段。
+固定快照：2026-07-09，parser precedence + $toMillis picture 解析增强阶段。
 
 ```text
 本地测试：moon test 190/190
-官方可比对审计：eligible 1251, pass 1223, fail 28, skip 431
-通过率：97.8%
+官方可比对审计：eligible 1251, pass 1224, fail 27, skip 431
+通过率：97.9%
 ```
 
 当前剩余失败最多的官方测试分组：
@@ -108,7 +108,6 @@ transforms 10
 joins 7
 parent-operator 6
 function-applications 2
-function-tomillis 1
 performance 1
 transform 1
 ```

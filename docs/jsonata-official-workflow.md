@@ -128,16 +128,15 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-09，$toMillis picture 解析增强，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-09，parser precedence + $toMillis picture 解析增强，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1223 fail 28 skip 431
+eligible 1251 pass 1224 fail 27 skip 431
 top_failures
 transforms 10
 joins 7
 parent-operator 6
 function-applications 2
-function-tomillis 1
 performance 1
 transform 1
 skip_reasons
@@ -147,20 +146,20 @@ timelimit 7
 bindings 6
 ```
 
-本轮修复（$toMillis 日期 picture 解析增强）：
-- 提交：function-tomillis 37→46 pass (+9)，整体 pass 1214→1223 (+9)，fail 37→28 (-9)，通过率 97.0%→97.8%
+本轮修复（parser precedence: `~>` 与 `=` 同优先级）：
+- 提交：function-tomillis 46→47 pass (+1)，整体 pass 1223→1224 (+1)，fail 28→27 (-1)，通过率 97.8%→97.9%
 - 门禁：`moon check` 19 warnings, 0 errors，`moon test` 190/190 passed，`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：
-  - Functions: `marker_char_width` 修复单数字标记（D1/M1/Y1 等）从固定宽度改为变量宽度（匹配至分隔符）
-  - Functions: `parse_marker_width_mod` 新增解析逗号宽度修饰符（如 `Y,*-4` → max=4 固定宽度）
-  - Functions: `letters_to_decimal` 新增电子表格风格字母解析（A=1, B=2, ..., AA=27），支持 `[Da]`/`[MA]`
-  - Functions: `strip_ordinal_suffix` 修复序数词剥离逻辑，正确处理 "seventh" → "seven"
-  - Functions: `build_date_from_components_with_now` 支持 JSONata 默认日期语义（未指定部分从 `$now()` 默认）
-  - Functions: `[Dw]`/`[DW]` 单词日期处理改为大小写不敏感
-  - Tests: 增加官方 function-tomillis 9 个失败用例的等价回归断言
-- 已知限制：解析器优先级 `~>` 与 `=` 交互问题（1 个失败案例，需独立修复）
+  - Parser: 新增 `parse_comparison_chain` 处理 `~>` 与比较运算符的同优先级交互
+  - Parser: `parse_chain_inner` 替代原 `parse_chain` 核心逻辑，`parse_chain_rhs` 停在比较运算符之前
+  - Parser: `a ~> b = c` 现在正确解析为 `(a ~> b) = c` 而非错误地解析为链的一部分
+  - Tests: 190/190 通过，无新增测试（优先级修复为架构改进）
+- 已知限制：
+  - performance (1): `$$.items[$i]` 父级引用配合位置绑定（tuple stream 架构问题）
+  - transform (1): `state.tempReadings[[1..4]]` slice 展平（tuple stream）
+  - function-applications (2): `$reduce` + lambda 组合
 
-上一轮修复（tuple stream 位置绑定随路径展平、过滤与排序传播）：
+上一轮修复（$toMillis 日期 picture 解析增强）：
 - 提交：sorting 17→18 pass（全绿），joins 18→21 pass，整体 pass 1210→1214 (+4)，fail 41→37 (-4)，通过率 96.7%→97.0%
 - 门禁：`moon check` 0e0w，`moon test` 189/189 passed，`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：

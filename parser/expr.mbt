@@ -2,7 +2,7 @@
 /// 块表达式：表达式序列（用 `;` 分隔），返回最后一个。
 fn Parser::parse_block(self : Parser) -> @ast.Ast raise @error.JsonataError {
   let exprs : Array[@ast.Ast] = []
-  exprs.push(self.parse_chain())
+  exprs.push(self.parse_comparison_chain())
   while self.match_kind(@lexer.TokenKind::Semicolon) {
     if self.at_end() ||
       self.peek_kind() == @lexer.TokenKind::RParen ||
@@ -10,7 +10,7 @@ fn Parser::parse_block(self : Parser) -> @ast.Ast raise @error.JsonataError {
       self.peek_kind() == @lexer.TokenKind::RBrace {
       break
     }
-    exprs.push(self.parse_chain())
+    exprs.push(self.parse_comparison_chain())
   }
   if exprs.length() == 1 {
     exprs[0]
@@ -20,9 +20,37 @@ fn Parser::parse_block(self : Parser) -> @ast.Ast raise @error.JsonataError {
 }
 
 ///|
-/// 函数链 `~>`：最低优先级，左结合。
-/// `~>` 优先级低于 `[]`，因此 `a ~> b[]` 解析为 `(a ~> b)[]`。
-fn Parser::parse_chain(self : Parser) -> @ast.Ast raise @error.JsonataError {
+/// 比较与链混合层：处理 `=` `!=` `<` `<=` `>` `>=` `in` 与 `~>` 的交互。
+/// JSONata 中 `~>` 与 `=` 具有相同优先级（binding power 40），
+/// 因此 `a ~> b = c` 解析为 `(a ~> b) = c`。
+fn Parser::parse_comparison_chain(
+  self : Parser,
+) -> @ast.Ast raise @error.JsonataError {
+  // 先解析左侧（可能包含链）
+  let left = self.parse_chain_inner()
+  // 检查比较运算符
+  let op = match self.peek_kind() {
+    @lexer.TokenKind::Eq => "="
+    @lexer.TokenKind::NotEq => "!="
+    @lexer.TokenKind::Lt => "<"
+    @lexer.TokenKind::Lte => "<="
+    @lexer.TokenKind::Gt => ">"
+    @lexer.TokenKind::Gte => ">="
+    @lexer.TokenKind::Ident("in") => "in"
+    _ => return left
+  }
+  ignore(self.advance())
+  // 右侧是完整的比较链（允许嵌套比较）
+  let right = self.parse_comparison_chain()
+  @ast.Ast::Binary(op~, lhs=left, rhs=right)
+}
+
+///|
+/// 链内层：解析 `~>` 及其左侧操作数。
+/// 被 parse_comparison_chain 调用，不处理比较运算符。
+fn Parser::parse_chain_inner(
+  self : Parser,
+) -> @ast.Ast raise @error.JsonataError {
   let mut left = self.parse_bind()
   let mut trailing_arrayify = false
   while self.peek_kind() == @lexer.TokenKind::Arrow {
@@ -30,7 +58,8 @@ fn Parser::parse_chain(self : Parser) -> @ast.Ast raise @error.JsonataError {
     let raw_right = if self.peek_kind() == @lexer.TokenKind::Pipe {
       self.parse_transform()
     } else {
-      self.parse_bind()
+      // 右侧停在比较运算符之前（~> 与 = 同优先级）
+      self.parse_chain_rhs()
     }
     // ~> 优先级低于 []：将右侧末尾的 [] 分离出链阶段
     let (right, has_arrayify) = split_chain_stage_arrayify(raw_right)
@@ -54,6 +83,21 @@ fn Parser::parse_chain(self : Parser) -> @ast.Ast raise @error.JsonataError {
     left = append_chain_arrayify(left)
   }
   left
+}
+
+///|
+/// 兼容别名：parse_chain 指向 parse_comparison_chain
+fn Parser::parse_chain(self : Parser) -> @ast.Ast raise @error.JsonataError {
+  self.parse_comparison_chain()
+}
+
+///|
+/// 解析链式运算符右侧表达式，停在比较运算符之前。
+/// 对应 JSONata-js 中 ~> 与 = 同优先级（40）的语义。
+fn Parser::parse_chain_rhs(self : Parser) -> @ast.Ast raise @error.JsonataError {
+  // 跳过 parse_comparison，直接调用 parse_concat
+  // 这意味着链右侧不会消费 = != < <= > >= in 等比较运算符
+  self.parse_concat()
 }
 
 ///|
