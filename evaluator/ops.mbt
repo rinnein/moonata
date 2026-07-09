@@ -362,28 +362,52 @@ fn eval_construct(
   items : Array[@ast.Ast],
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
-  let results : Array[Json] = []
+  // First pass: check if any element is a non-JSON value (Func, Regex)
+  // If so, use Sequence to preserve them
+  let mut has_non_json = false
+  let evaluated : Array[@value.JsonataValue] = []
   for item in items {
     let v = eval(item, ctx)
     match v {
       @value.JsonataValue::Undefined => continue
+      @value.JsonataValue::Func(_) | @value.JsonataValue::Regex(_) => {
+        has_non_json = true
+        evaluated.push(v)
+      }
       @value.JsonataValue::Sequence(arr) =>
-        for item in arr {
-          match item {
+        for elem in arr {
+          match elem {
             @value.JsonataValue::Undefined => ()
-            _ => results.push(json_for_constructor(item))
+            @value.JsonataValue::Func(_) | @value.JsonataValue::Regex(_) => {
+              has_non_json = true
+              evaluated.push(elem)
+            }
+            _ => evaluated.push(elem)
           }
         }
       @value.JsonataValue::Json(Json::Array(arr)) =>
         if item is @ast.Ast::Construct(_) {
-          results.push(Json::array(arr))
+          // Nested explicit array constructor - preserve as single element
+          evaluated.push(@value.JsonataValue::Json(Json::array(arr)))
         } else {
+          // Flatten non-constructor arrays
           for value in arr {
-            results.push(value)
+            evaluated.push(@value.JsonataValue::Json(value))
           }
         }
-      _ => results.push(json_for_constructor(v))
+      _ => evaluated.push(v)
     }
+  }
+
+  // If any non-JSON values, return Sequence to preserve functions/regexes
+  if has_non_json {
+    return @value.JsonataValue::Sequence(evaluated)
+  }
+
+  // Otherwise, convert to JSON array
+  let results : Array[Json] = []
+  for elem in evaluated {
+    results.push(elem.to_json())
   }
   @value.JsonataValue::Json(Json::array(results))
 }

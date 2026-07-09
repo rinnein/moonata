@@ -736,3 +736,31 @@ test "P11：$encodeUrl $decodeUrl $encodeUrlComponent $decodeUrlComponent" {
   )
   assert_true(decoded_comp == Json::string("?x=test"))
 }
+
+///|
+test "P12：函数数组与 reduce 组合（官方回归）" {
+  // 检查数组类型
+  assert_true(
+    eval_fn(
+      "($square := function($x){$x*$x}; [$sum, $square].$type())",
+      Json::null(),
+    ) ==
+    @json.parse("[\"function\",\"function\"]"),
+  )
+  // case013: reduce + lambda 组合
+  assert_true(
+    eval_fn(
+      "($square := function($x){$x*$x}; $chain := λ($f, $g){λ($x){$g($f($x))}}; $instructions := [$sum, $square]; $sumsq := $instructions ~> $reduce($chain); [1..5] ~> $sumsq())",
+      Json::null(),
+    ) ==
+    Json::number(225.0),
+  )
+  // case014: chain 内部使用 ~>
+  assert_true(
+    eval_fn(
+      "($square := function($x){$x*$x}; $chain := λ($f, $g){ λ($x){ $x ~> $f ~> $g }}; $instructions := [$sum, $square, $string]; $sumsq := $instructions ~> $reduce($chain); [1..5] ~> $sumsq())",
+      Json::null(),
+    ) ==
+    Json::string("225"),
+  )
+}
