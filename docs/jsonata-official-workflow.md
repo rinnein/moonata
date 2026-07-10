@@ -129,15 +129,11 @@ skip_reasons
 ```
 
 
-当前固定快照（2026-07-11，focus 步父级链修正，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-10，map 后位置谓词重置与重复父级跳过修正，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1247 fail 4 skip 431
+eligible 1251 pass 1251 fail 0 skip 431
 top_failures
-joins 1
-parent-operator 1
-performance 1
-transform 1
 skip_reasons
 no_result 395
 non-string-expr 23
@@ -145,7 +141,26 @@ timelimit 7
 bindings 6
 ```
 
-本轮修复（focus 步非 group 分支父级链修正）：
+本轮修复（map 后位置谓词重置与重复父级跳过修正）：
+- 提交：joins 27→28 pass（1→0 fail, -1），parent-operator 19→20 pass（1→0 fail, -1），整体 pass 1249→1251 (+2)，fail 2→0 (-2)，通过率 99.84%→100%
+- 门禁：`moon check` 0e0w，`moon test` 204→206 passed（+2 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Evaluator: frame 路径中的 `Map#$var` 改为按每个输入 frame 局部绑定位置变量，并让 map 后的位置谓词按每个输入项重置，修复 `$.$#$pos[$pos<3]` 与 `$.$[[0..2]]` 等价性
+  - Evaluator: `parent_frames` 在连续父级导航时跳过重复的相同父级，修复多级 focus 后 `%.%` 停留在重复父级的问题
+  - Tests: 新增 map 后位置谓词重置与多级 focus `%.%` 父级链回归断言
+- 已知限制：当前 CLI 可比对官方用例已全通过；skip 仍为 harness/非字符串表达式/外部 bindings 等不可直接比较项
+
+上一轮修复（字段数组位置谓词分组判定修正）：
+- 提交：transform 56→57 pass（1→0 fail, -1），performance 0→1 pass（1→0 fail, -1），整体 pass 1247→1249 (+2)，fail 4→2 (-2)，通过率 99.68%→99.84%
+- 门禁：`moon check` 0e0w，`moon test` 203→204 passed（+1 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Evaluator: `eval_path_from` 的 Name→Filter 分组逻辑改为仅在过滤器链后继续接 Index/Slice 时保留分组；普通位置谓词（如 `state.tempReadings[[1..4]]`）直接在字段数组整体上求值，避免先拆成元素导致 range 位置谓词失效
+  - Tests: 新增字段数组位置谓词在数组构造中展平的官方等价回归断言
+- 已知限制：
+  - joins (1): `$.$#$pos[$pos<3]` tuple stream 重置
+  - parent-operator (1): `library.loans@$L.books@$B...customers@$C...$keys(%.%)` 三级 focus + %.% 祖先链重复导致解析偏差
+
+上一轮修复（focus 步非 group 分支父级链修正）：
 - 提交：parent-operator 18→19 pass（2→1 fail, -1），joins 25→27 pass（3→1 fail, -2），整体 pass 1244→1247 (+3)，fail 7→4 (-3)，通过率 99.6%→99.68%
 - 门禁：`moon check` 0e0w，`moon test` 202→203 passed（+1 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：
