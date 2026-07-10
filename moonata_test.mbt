@@ -1142,3 +1142,40 @@ test "官方套件：transforms 中间数组展平" {
     ),
   )
 }
+
+///|
+test "官方套件：parent-operator map 步数组构造展平" {
+  let d = data(
+    "{\"Account\":{\"Order\":[{\"OrderID\":\"order103\",\"Product\":[{\"Product Name\":\"Bowler Hat\",\"ProductID\":858383},{\"Product Name\":\"Trilby hat\",\"ProductID\":858236}]},{\"OrderID\":\"order104\",\"Product\":[{\"Product Name\":\"Bowler Hat\",\"ProductID\":858383},{\"Product Name\":\"Cloak\",\"ProductID\":345664}]}]}}",
+  )
+  // .[expr] with parent operator (%) should flatten (tuple stream mode)
+  assert_eval(
+    "Account.Order.Product.[`Product Name`, %.OrderID]",
+    d,
+    data(
+      "[\"Bowler Hat\",\"order103\",\"Trilby hat\",\"order103\",\"Bowler Hat\",\"order104\",\"Cloak\",\"order104\"]",
+    ),
+  )
+  // .[expr] with single parent field should also flatten
+  assert_eval(
+    "Account.Order.Product.[%.OrderID]",
+    d,
+    data("[\"order103\",\"order103\",\"order104\",\"order104\"]"),
+  )
+}
+
+///|
+test "官方套件：transforms 路径含 Eval 步 (parenthesized expression)" {
+  let d = data(
+    "{\"Account\":{\"Order\":[{\"OrderID\":\"order103\",\"Product\":[{\"Product Name\":\"Bowler Hat\",\"ProductID\":858383,\"Description\":{\"Colour\":\"Purple\"}},{\"Product Name\":\"Trilby hat\",\"ProductID\":858236,\"Description\":{\"Colour\":\"Orange\"}}]},{\"OrderID\":\"order104\",\"Product\":[{\"Product Name\":\"Bowler Hat\",\"ProductID\":858383,\"Description\":{\"Colour\":\"Purple\"}}]}]}}",
+  )
+  // (Account.Order.Product)[0] uses Eval step from parenthesized expression
+  // Transform should apply to the first Product
+  assert_eval(
+    "$ ~> |(Account.Order.Product)[0]|{\"Description\":\"blah\"}|",
+    d,
+    data(
+      "{\"Account\":{\"Order\":[{\"OrderID\":\"order103\",\"Product\":[{\"Product Name\":\"Bowler Hat\",\"ProductID\":858383,\"Description\":\"blah\"},{\"Product Name\":\"Trilby hat\",\"ProductID\":858236,\"Description\":{\"Colour\":\"Orange\"}}]},{\"OrderID\":\"order104\",\"Product\":[{\"Product Name\":\"Bowler Hat\",\"ProductID\":858383,\"Description\":{\"Colour\":\"Purple\"}}]}]}}",
+    ),
+  )
+}

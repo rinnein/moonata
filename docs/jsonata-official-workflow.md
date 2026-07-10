@@ -128,16 +128,15 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-10，transforms per-item update + 递归下降匹配，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-10，transforms Eval 步 + parent-operator map 展平，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1235 fail 16 skip 431
+eligible 1251 pass 1237 fail 14 skip 431
 top_failures
 joins 7
-parent-operator 6
+parent-operator 5
 performance 1
 transform 1
-transforms 1
 skip_reasons
 no_result 395
 non-string-expr 23
@@ -145,7 +144,21 @@ timelimit 7
 bindings 6
 ```
 
-本轮修复（transforms per-item update 求值 + 递归下降匹配）：
+本轮修复（transforms Eval 步支持 + parent-operator map 展平 + Sequence Index）：
+- 提交：transforms 1→1 pass（1→0 fail, -1），parent-operator 14→15 pass（6→5 fail, -1），整体 pass 1235→1237 (+2)，fail 16→14 (-2)，通过率 98.8%→99.0%
+- 门禁：`moon check` 0e0w，`moon test` 197/197 passed（+2 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Evaluator: `access_map_frames`（父级感知 map 求值）移除 `top_is_construct` 检查，始终展平数组结果，对齐 JSONata-js `evaluateTupleStep` 语义——tuple stream 模式下数组构造器结果不保留 `cons` 标记，元素逐个展开为 tuple
+  - Evaluator: `walk_transform_single` 新增 `Eval(inner_expr)` 步支持，处理 `(expr)[N]` 等 parenthesized expression 后接索引/过滤的变换路径——求值内部表达式后继续走剩余路径步
+  - Evaluator: `walk_transform_single` 新增 `(Sequence, Index(i))` 分支，支持对 `Eval` 产生的 `Sequence` 结果执行索引选择
+  - Tests: 新增 parent-operator map 展平 + transforms Eval 步 2 个回归断言
+- 已知限制：
+  - transform (1): `state.tempReadings[[1..4]]` slice 展平（tuple stream）
+  - joins (7): tuple stream 位置绑定与父级引用组合
+  - parent-operator (5): `(expr)[%.field]` 分组表达式后父级过滤、`$keys(%)` 父级键列表、`%.%` 多级父级链
+  - performance (1): `$$.items[$i]` 父级引用配合位置绑定（tuple stream 架构问题）
+
+上一轮修复（transforms per-item update 求值 + 递归下降匹配）：
 - 提交：transforms 1→1 pass（10→1 fail, -9），整体 pass 1226→1235 (+9)，fail 25→16 (-9)，通过率 98.0%→98.8%
 - 门禁：`moon check` 0e0w，`moon test` 195/195 passed（+4 新增 transforms 回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：
@@ -157,12 +170,6 @@ bindings 6
   - Evaluator: (Object, Filter) 与 (_, Filter) 按 JSONata 单例序列语义对值本身求值谓词（不再误迭代字段值）
   - Evaluator: `extract_delete_keys` 新增 `Json::Array` 分支，支持 `["k1","k2"]` 字面量数组作为 delete 表达式
   - Tests: 新增 transforms per-item update / update+delete / 递归下降+过滤 / 中间数组展平 4 个回归断言
-- 已知限制：
-  - transforms (1): `(Account.Order.Product)[0]` 路径含 `Eval(Block(...))` 步，walker 暂未支持 Eval 步的定位
-  - transform (1): `state.tempReadings[[1..4]]` slice 展平（tuple stream）
-  - joins (7): tuple stream 位置绑定与父级引用组合
-  - parent-operator (6): `%.%` 多级父级链与 `$keys(%)` 父级键列表
-  - performance (1): `$$.items[$i]` 父级引用配合位置绑定（tuple stream 架构问题）
 
 上一轮修复（parser precedence: `~>` 与 `=` 同优先级）：
 - 提交：sorting 17→18 pass（全绿），joins 18→21 pass，整体 pass 1210→1214 (+4)，fail 41→37 (-4)，通过率 96.7%→97.0%

@@ -126,16 +126,15 @@ _build/native/debug/build/cmd/main/main.exe '<expr>' --file '<tmp-json-data>'
 - 失败最多的前 10 个 group。
 - skip 原因计数。
 
-当前固定快照（2026-07-10，transforms per-item update + 递归下降匹配，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-10，transforms Eval 步 + parent-operator map 展平，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1235 fail 16 skip 431
+eligible 1251 pass 1237 fail 14 skip 431
 top_failures
 joins 7
-parent-operator 6
+parent-operator 5
 performance 1
 transform 1
-transforms 1
 skip_reasons
 no_result 395
 non-string-expr 23

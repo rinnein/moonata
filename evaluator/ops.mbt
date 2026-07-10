@@ -892,6 +892,18 @@ fn walk_transform_single(
         }
       }
     }
+    (@value.JsonataValue::Sequence(items), @ast.StepKind::Index(i)) => {
+      let len = items.length()
+      let normalized = if i < 0 { len + i } else { i }
+      if normalized >= 0 && normalized < len {
+        let item_val = items[normalized]
+        if is_last {
+          apply_transform_match(item_val, update_ast, delete_ast, ctx)
+        } else {
+          walk_transform(item_val, steps, idx + 1, update_ast, delete_ast, ctx)
+        }
+      }
+    }
     (@value.JsonataValue::Json(Json::Object(map)), @ast.StepKind::Wildcard) =>
       for k, v in map {
         let sub_val = @value.JsonataValue::Json(v)
@@ -986,6 +998,18 @@ fn walk_transform_single(
         } else {
           walk_transform(item_val, steps, idx + 1, update_ast, delete_ast, ctx)
         }
+      }
+    }
+    (_, @ast.StepKind::Eval(inner_expr)) => {
+      // Eval 步：求值内部表达式，对结果继续走路径
+      // 用于 (expr)[N] 等 parenthesized expression 后接索引/过滤的路径
+      let eval_result = ctx.with_context(current=value, parent=value, fn() -> @value.JsonataValue raise @error.JsonataError {
+        eval(inner_expr, ctx)
+      })
+      if is_last {
+        apply_transform_match(eval_result, update_ast, delete_ast, ctx)
+      } else {
+        walk_transform(eval_result, steps, idx + 1, update_ast, delete_ast, ctx)
       }
     }
     (@value.JsonataValue::Sequence(items), _) =>

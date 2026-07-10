@@ -1830,7 +1830,6 @@ fn access_map_frames(
   ctx : @value.EvalContext,
   results : Array[PathFrame],
 ) -> Unit raise @error.JsonataError {
-  let top_is_construct = expr is @ast.Ast::Construct(_)
   let pos_var : String? = match ctx.lookup("__pos__") {
     Some(@value.JsonataValue::Json(Json::String(name))) => Some(name)
     _ => None
@@ -1863,21 +1862,18 @@ fn access_map_frames(
             results.push(out)
           }
         }
+      // Parent-aware map (tuple stream mode): always flatten arrays,
+      // matching JSONata-js `evaluateTupleStep` which iterates array
+      // elements into individual tuples (no `cons` preservation).
       @value.JsonataValue::Json(Json::Array(arr)) =>
-        if top_is_construct {
+        for v in arr {
           results.push(
-            path_frame_with_bindings(r, frame.ancestors, frame.bindings),
+            path_frame_with_bindings(
+              @value.JsonataValue::Json(v),
+              frame.ancestors,
+              frame.bindings,
+            ),
           )
-        } else {
-          for v in arr {
-            results.push(
-              path_frame_with_bindings(
-                @value.JsonataValue::Json(v),
-                frame.ancestors,
-                frame.bindings,
-              ),
-            )
-          }
         }
       _ =>
         results.push(

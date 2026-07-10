@@ -93,22 +93,21 @@ CI 在 `master` 分支推送、PR 以及手动触发时运行。
 
 ## 兼容性状态
 
-固定快照：2026-07-10，transforms per-item update + 递归下降匹配修复阶段。
+固定快照：2026-07-10，transforms Eval 步 + parent-operator map 展平修复阶段。
 
 ```text
-本地测试：moon test 195/195
-官方可比对审计：eligible 1251, pass 1235, fail 16, skip 431
-通过率：98.8%
+本地测试：moon test 197/197
+官方可比对审计：eligible 1251, pass 1237, fail 14, skip 431
+通过率：99.0%
 ```
 
 当前剩余失败最多的官方测试分组：
 
 ```text
 joins 7
-parent-operator 6
+parent-operator 5
 performance 1
 transform 1
-transforms 1
 ```
 
 官方测试集审计流程与跳过策略记录在 `docs/jsonata-official-workflow.md`。
