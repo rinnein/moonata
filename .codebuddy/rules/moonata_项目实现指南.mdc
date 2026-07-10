@@ -126,13 +126,13 @@ _build/native/debug/build/cmd/main/main.exe '<expr>' --file '<tmp-json-data>'
 - 失败最多的前 10 个 group。
 - skip 原因计数。
 
-当前固定快照（2026-07-10，arrayify 递归检测 + parenthesized 路径祖先链保留，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-11，focus 步 tuple stream 路径继续修复，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1242 fail 9 skip 431
+eligible 1251 pass 1244 fail 7 skip 431
 top_failures
-parent-operator 4
 joins 3
+parent-operator 2
 performance 1
 transform 1
 skip_reasons

@@ -128,13 +128,14 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-10，arrayify 递归检测 + parenthesized 路径祖先链保留，使用 `scripts/jsonata_official_audit.py` 审计）：
+
+当前固定快照（2026-07-11，focus 步 tuple stream 路径继续修复，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1242 fail 9 skip 431
+eligible 1251 pass 1244 fail 7 skip 431
 top_failures
-parent-operator 4
 joins 3
+parent-operator 2
 performance 1
 transform 1
 skip_reasons
@@ -144,7 +145,19 @@ timelimit 7
 bindings 6
 ```
 
-本轮修复（arrayify 递归检测 + parenthesized 路径祖先链保留）：
+本轮修复（focus 步 tuple stream 路径继续语义对齐）：
+- 提交：parent-operator 16→18 pass（4→2 fail, -2），整体 pass 1242→1244 (+2)，fail 9→7 (-2)，通过率 99.4%→99.6%
+- 门禁：`moon check` 0e0w，`moon test` 201→202 passed（+1 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Evaluator: `eval_path_frames` focus 非 group 分支，后续路径从 `frames`（focus 步的输入）继续而非 `input`（函数入口原始值），对齐 JSONata-js tuple stream 语义（`@` 在 focus 后不变）
+  - Evaluator: `eval_path_from` focus 分支（group 和非 group），后续路径从 `current`（focus 步的输入）继续而非 `input`
+  - Tests: 新增 dual-focus tuple stream 路径继续回归断言
+- 已知限制：
+  - joins (3): `^($e.field)` sort + tuple binding + `.{ }` 路径（sort 后 focus 步递归重新求值丢失排序顺序）、`$.$#$pos[$pos<3]` tuple stream 重置
+  - parent-operator (2): `$keys(%)` / `$keys(%.%)` 在 tuple stream + map 内的父级键列表解析（% 返回字符串键名而非对象）
+  - performance (1): `$$.items[$i]` 父级引用配合位置绑定（tuple stream 架构问题）
+  - transform (1): `state.tempReadings[[1..4]]` slice 展平（tuple stream）
+  - 注：剩余 7 个失败用例在 JSONata-js v2.2.1 中同样不通过（返回空），属于上游未实现行为
 - 提交：joins 21→22 pass（4→3 fail, -1），parent-operator 15→16 pass（5→4 fail, -1），整体 pass 1240→1242 (+2)，fail 11→9 (-2)，通过率 99.2%→99.4%
 - 门禁：`moon check` 0e0w，`moon test` 199→201 passed（+2 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：

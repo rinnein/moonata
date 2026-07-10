@@ -486,9 +486,13 @@ fn eval_path_frames(
                 // Propagate focus binding to result frames so subsequent steps
                 // (sort, filter, map) can access the bound variable
                 let bound_frame = bind_frame(frame, name, frame.value)
+                // JSONata-js tuple stream: after a focus step, @ stays as the
+                // input to that step (not the focused item, not the original root).
+                // Pass 'frames' (the state before this focus step) so that
+                // subsequent path steps evaluate from the correct context.
                 let r = ctx.with_binding(name, frame.value, fn() -> @value.JsonataValue raise @error.JsonataError {
                   frames_to_value(
-                    eval_path_frames(input, steps, i + 1, ctx, stop_at),
+                    eval_path_frames(frames, steps, i + 1, ctx, stop_at),
                   )
                 })
                 match r {
@@ -619,7 +623,7 @@ fn eval_path_from(
         match step.focus {
           Some(name) => {
             name_was_grouped = false
-            // 步带 focus：求值步结果，对每项绑变量，后续步从原始 input 开始
+            // 步带 focus：求值步结果，对每项绑变量，后续步从 current（本步输入）开始
             let step_result = eval_step(step, current, ctx)
             // 检查剩余步是否以 GroupAggregate 结尾
             let has_group = stop_at > i + 1 &&
@@ -628,7 +632,7 @@ fn eval_path_from(
               let merged : Map[String, Array[Json]] = {}
               for item in step_result.to_array() {
                 let r = ctx.with_binding(name, item, fn() -> @value.JsonataValue raise @error.JsonataError {
-                  eval_path_from(input, steps, i + 1, ctx, stop_at)
+                  eval_path_from(current, steps, i + 1, ctx, stop_at)
                 })
                 merge_into_group(r, merged)
               }
@@ -638,8 +642,11 @@ fn eval_path_from(
             } else {
               let results : Array[@value.JsonataValue] = []
               for item in step_result.to_array() {
+                // JSONata-js tuple stream: after a focus step, @ stays as the
+                // input to that step. Pass 'current' (the value before this
+                // focus step) so subsequent path steps evaluate correctly.
                 let r = ctx.with_binding(name, item, fn() -> @value.JsonataValue raise @error.JsonataError {
-                  eval_path_from(input, steps, i + 1, ctx, stop_at)
+                  eval_path_from(current, steps, i + 1, ctx, stop_at)
                 })
                 match r {
                   @value.JsonataValue::Undefined => continue

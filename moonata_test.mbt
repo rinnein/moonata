@@ -1243,3 +1243,20 @@ test "官方套件：parenthesized 路径保留祖先链供父级过滤" {
     data("[\"order103\",\"order103\",\"order104\",\"order104\"]"),
   )
 }
+
+///|
+test "官方套件：dual-focus tuple stream 路径从 focus 步输入继续" {
+  // After @$var, subsequent path steps evaluate from the input to the focus
+  // step (not the focused item, not the original root).  This matches
+  // JSONata-js tuple stream semantics where @ stays unchanged.
+  let d = data(
+    "{\"lib\":{\"books\":[{\"isbn\":\"978-0\",\"title\":\"SICP\"},{\"isbn\":\"978-1\",\"title\":\"Compilers\"}],\"loans\":[{\"isbn\":\"978-0\"},{\"isbn\":\"978-1\"}]}}",
+  )
+  // lib.loans@$L.books@$B[$L.isbn=$B.isbn]: dual focus + join filter
+  // Each loan produces books, filtered by isbn match → 1 match per loan
+  assert_eval(
+    "lib.loans@$L.books@$B[$L.isbn=$B.isbn].{ \"title\": $B.title }",
+    d,
+    data("[{\"title\":\"SICP\"},{\"title\":\"Compilers\"}]"),
+  )
+}
