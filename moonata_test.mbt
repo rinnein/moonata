@@ -1085,3 +1085,60 @@ test "官方套件：tuple stream 位置绑定随路径展平和排序传播" {
     ),
   )
 }
+
+///|
+test "官方套件：transforms per-item update 求值" {
+  let d = data(
+    "{\"Account\":{\"Account Name\":\"Firefly\",\"Order\":[{\"OrderID\":\"order103\",\"Product\":[{\"Product Name\":\"Bowler Hat\",\"ProductID\":858383,\"SKU\":\"0406654608\",\"Description\":{\"Colour\":\"Purple\",\"Width\":300,\"Height\":200,\"Depth\":210,\"Weight\":0.75},\"Price\":34.45,\"Quantity\":2},{\"Product Name\":\"Trilby hat\",\"ProductID\":858236,\"SKU\":\"046634348\",\"Description\":{\"Colour\":\"Orange\",\"Width\":300,\"Height\":200,\"Depth\":210,\"Weight\":0.6},\"Price\":21.67,\"Quantity\":1}]},{\"OrderID\":\"order104\",\"Product\":[{\"Product Name\":\"Bowler Hat\",\"ProductID\":858383,\"SKU\":\"040657863\",\"Description\":{\"Colour\":\"Purple\",\"Width\":300,\"Height\":200,\"Depth\":210,\"Weight\":0.75},\"Price\":34.45,\"Quantity\":4}]}]}}",
+  )
+  // 每个匹配的 Product 都按自身上下文求值 update，添加 Total 字段
+  assert_eval(
+    "$ ~> |Account.Order.Product|{\"Total\":Price*Quantity}|",
+    d,
+    data(
+      "{\"Account\":{\"Account Name\":\"Firefly\",\"Order\":[{\"OrderID\":\"order103\",\"Product\":[{\"Product Name\":\"Bowler Hat\",\"ProductID\":858383,\"SKU\":\"0406654608\",\"Description\":{\"Colour\":\"Purple\",\"Width\":300,\"Height\":200,\"Depth\":210,\"Weight\":0.75},\"Price\":34.45,\"Quantity\":2,\"Total\":68.9},{\"Product Name\":\"Trilby hat\",\"ProductID\":858236,\"SKU\":\"046634348\",\"Description\":{\"Colour\":\"Orange\",\"Width\":300,\"Height\":200,\"Depth\":210,\"Weight\":0.6},\"Price\":21.67,\"Quantity\":1,\"Total\":21.67}]},{\"OrderID\":\"order104\",\"Product\":[{\"Product Name\":\"Bowler Hat\",\"ProductID\":858383,\"SKU\":\"040657863\",\"Description\":{\"Colour\":\"Purple\",\"Width\":300,\"Height\":200,\"Depth\":210,\"Weight\":0.75},\"Price\":34.45,\"Quantity\":4,\"Total\":137.8}]}]}}",
+    ),
+  )
+}
+
+///|
+test "官方套件：transforms per-item update + delete" {
+  let d = data(
+    "{\"items\":[{\"name\":\"A\",\"price\":10,\"temp\":\"x\"},{\"name\":\"B\",\"price\":20,\"temp\":\"y\"}]}",
+  )
+  // update 添加 total，delete 移除 temp
+  assert_eval(
+    "$ ~> |items|{\"total\":price*2},[\"temp\"]|",
+    d,
+    data(
+      "{\"items\":[{\"name\":\"A\",\"price\":10,\"total\":20},{\"name\":\"B\",\"price\":20,\"total\":40}]}",
+    ),
+  )
+}
+
+///|
+test "官方套件：transforms 递归下降 + 过滤匹配" {
+  let d = data("{\"hi\":\"world\",\"bye\":null}")
+  // `** ['hi']` 匹配所有值（字符串字面量 'hi' 在过滤上下文中恒为 truthy），
+  // 但只有 Object 类型匹配项能被 update/delete 修改
+  assert_eval(
+    "$ ~> | ** ['hi'] | {'hello': hi}, ['hi'] |",
+    d,
+    data("{\"hello\":\"world\",\"bye\":null}"),
+  )
+}
+
+///|
+test "官方套件：transforms 中间数组展平" {
+  let d = data(
+    "{\"orders\":[{\"id\":\"o1\",\"items\":[{\"name\":\"A\",\"price\":10},{\"name\":\"B\",\"price\":20}]},{\"id\":\"o2\",\"items\":[{\"name\":\"C\",\"price\":30}]}]}",
+  )
+  // 路径 orders.items 经过 Array 中间步时自动展平，对每个 item 应用 update
+  assert_eval(
+    "$ ~> |orders.items|{\"price_with_tax\":price*1.1}|",
+    d,
+    data(
+      "{\"orders\":[{\"id\":\"o1\",\"items\":[{\"name\":\"A\",\"price\":10,\"price_with_tax\":11},{\"name\":\"B\",\"price\":20,\"price_with_tax\":22}]},{\"id\":\"o2\",\"items\":[{\"name\":\"C\",\"price\":30,\"price_with_tax\":33}]}]}",
+    ),
+  )
+}

@@ -777,6 +777,11 @@ fn chain_regex_match(
 
 ///|
 /// 变换求值：在输入结构中按路径定位并应用更新/删除。
+/// 实现对齐 jsonata-js `evaluateTransformExpression`：
+/// 1. 深克隆输入
+/// 2. 在克隆结构中按路径步逐层定位匹配项（路径展平语义）
+/// 3. 对每个终端匹配项，以匹配值为当前上下文求值 update/delete
+/// 4. 通过 `Json::Object(Map)` / `Json::Array(Array)` 的可变引用在原位应用变更
 fn eval_transform(
   input : @value.JsonataValue,
   path_ast : @ast.Ast,
@@ -784,184 +789,398 @@ fn eval_transform(
   delete_ast : @ast.Ast?,
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
-  // 深克隆输入
   let cloned = deep_clone(input)
-
-  // 计算更新模板（一次性求值）
-  let update_val = eval(update_ast, ctx)
-
-  // 计算删除键（一次性求值）
-  let delete_keys = match delete_ast {
-    Some(d) => {
-      let dval = eval(d, ctx)
-      match dval {
-        @value.JsonataValue::Sequence(arr) => {
-          let keys : Array[String] = []
-          for item in arr {
-            match item {
-              @value.JsonataValue::Json(Json::String(s)) => keys.push(s)
-              _ => continue
-            }
-          }
-          keys
-        }
-        @value.JsonataValue::Json(Json::String(s)) => [s]
-        _ => []
-      }
-    }
-    None => []
-  }
-
-  // 递归在深克隆结构中替换变换匹配项
-  transform_replace(cloned, path_ast, update_val, delete_keys, ctx)
-}
-
-///|
-/// 递归在深克隆结构中替换变换匹配项。
-fn transform_replace(
-  root : @value.JsonataValue,
-  path_ast : @ast.Ast,
-  update_val : @value.JsonataValue,
-  delete_keys : Array[String],
-  ctx : @value.EvalContext,
-) -> @value.JsonataValue raise @error.JsonataError {
-  // 重新计算路径以获取匹配项索引
-  let path_result = ctx.with_context(current=root, parent=root, fn() -> @value.JsonataValue raise @error.JsonataError {
-    eval(path_ast, ctx)
-  })
-  let matches = path_result.to_array()
-  if matches.length() == 0 {
-    return root
-  }
-
-  // 遍历路径步：如果路径是简单的 Path(steps)，则按步逐层定位并替换
   match path_ast {
-    @ast.Ast::Path(steps) if steps.length() > 0 => {
-      let mut result = root
-      for i = 0; i < steps.length(); i = i + 1 {
-        let step = steps[i]
-        let is_last = i == steps.length() - 1
-        result = transform_replace_step(
-          result, step, is_last, update_val, delete_keys, steps, i, ctx,
-        )
+    @ast.Ast::Path(steps) =>
+      if steps.length() == 0 {
+        // 路径为空：根值本身即为匹配项
+        apply_transform_match(cloned, update_ast, delete_ast, ctx)
+      } else {
+        walk_transform(cloned, steps, 0, update_ast, delete_ast, ctx)
       }
-      result
-    }
-    _ => root
+    // 非 Path 路径（如变量、块、链式）：以根为匹配项应用一次变换
+    _ => apply_transform_match(cloned, update_ast, delete_ast, ctx)
+  }
+  cloned
+}
+
+///|
+/// 在克隆结构中递归按路径步定位并应用变换。
+fn walk_transform(
+  value : @value.JsonataValue,
+  steps : Array[@ast.Step],
+  idx : Int,
+  update_ast : @ast.Ast,
+  delete_ast : @ast.Ast?,
+  ctx : @value.EvalContext,
+) -> Unit raise @error.JsonataError {
+  if idx >= steps.length() {
+    // 路径已耗尽：当前值即为终端匹配项
+    apply_transform_match(value, update_ast, delete_ast, ctx)
+    return
+  }
+  let step = steps[idx]
+  match step.stage {
+    @ast.StepStage::Recursive =>
+      walk_transform_recursive(
+        value, step, steps, idx, update_ast, delete_ast, ctx,
+      )
+    @ast.StepStage::Single =>
+      walk_transform_single(
+        value, step, steps, idx, update_ast, delete_ast, ctx,
+      )
   }
 }
 
 ///|
-/// 对单个路径步执行深克隆替换。
-fn transform_replace_step(
-  input : @value.JsonataValue,
+/// 单层步：按 step.kind 在当前结构中导航或匹配。
+fn walk_transform_single(
+  value : @value.JsonataValue,
   step : @ast.Step,
-  is_last : Bool,
-  update_val : @value.JsonataValue,
-  delete_keys : Array[String],
-  all_steps : Array[@ast.Step],
-  step_idx : Int,
+  steps : Array[@ast.Step],
+  idx : Int,
+  update_ast : @ast.Ast,
+  delete_ast : @ast.Ast?,
   ctx : @value.EvalContext,
-) -> @value.JsonataValue raise @error.JsonataError {
-  match (input, step.kind) {
-    (@value.JsonataValue::Json(Json::Array(arr)), _) => {
-      let out : Array[Json] = []
-      for item in arr {
-        let result = transform_replace_step(
-          @value.JsonataValue::Json(item),
-          step,
-          is_last,
-          update_val,
-          delete_keys,
-          all_steps,
-          step_idx,
-          ctx,
-        )
-        let json_val = match result {
-          @value.JsonataValue::Json(j) => j
-          _ => item
-        }
-        out.push(json_val)
-      }
-      @value.JsonataValue::Json(Json::array(out))
-    }
-    (@value.JsonataValue::Sequence(items), _) => {
-      let out : Array[@value.JsonataValue] = []
-      for item in items {
-        let result = transform_replace_step(
-          item, step, is_last, update_val, delete_keys, all_steps, step_idx, ctx,
-        )
-        out.push(result)
-      }
-      @value.JsonataValue::sequence(out)
-    }
-    (@value.JsonataValue::Json(Json::Object(map)), @ast.StepKind::Name(name)) => {
-      let new_map : Map[String, Json] = {}
-      for k, v in map {
-        new_map[k] = v
-      }
-      let name_match = if is_last {
-        let new_val = apply_transform_update(
-          @value.JsonataValue::Json(map.get(name).unwrap_or(Json::null())),
-          update_val,
-          delete_keys,
-        )
-        match new_val {
-          @value.JsonataValue::Json(j) => Some(j)
-          _ => new_map.get(name)
-        }
-      } else {
-        let sub_result = transform_replace_step(
-          @value.JsonataValue::Json(map.get(name).unwrap_or(Json::null())),
-          all_steps[step_idx + 1],
-          step_idx + 1 == all_steps.length() - 1,
-          update_val,
-          delete_keys,
-          all_steps,
-          step_idx + 1,
-          ctx,
-        )
-        match sub_result {
-          @value.JsonataValue::Json(j) => Some(j)
-          _ => new_map.get(name)
-        }
-      }
-      match name_match {
-        Some(j) => new_map.set(name, j)
+) -> Unit raise @error.JsonataError {
+  let is_last = idx == steps.length() - 1
+  match (value, step.kind) {
+    (@value.JsonataValue::Json(Json::Object(map)), @ast.StepKind::Name(name)) =>
+      match map.get(name) {
+        Some(sub) =>
+          if is_last {
+            // 终端匹配：sub 可能是 Object / Array / 标量
+            apply_transform_match(
+              @value.JsonataValue::Json(sub),
+              update_ast,
+              delete_ast,
+              ctx,
+            )
+          } else {
+            walk_transform(
+              @value.JsonataValue::Json(sub),
+              steps,
+              idx + 1,
+              update_ast,
+              delete_ast,
+              ctx,
+            )
+          }
         None => ()
       }
-      @value.JsonataValue::Json(Json::object(new_map))
+    (@value.JsonataValue::Json(Json::Array(arr)), @ast.StepKind::Name(_)) =>
+      // 数组遇 Name 步：路径展平，对每个元素应用同一步
+      for item in arr {
+        walk_transform(
+          @value.JsonataValue::Json(item),
+          steps,
+          idx,
+          update_ast,
+          delete_ast,
+          ctx,
+        )
+      }
+    (@value.JsonataValue::Json(Json::Array(arr)), @ast.StepKind::Index(i)) => {
+      let len = arr.length()
+      let normalized = if i < 0 { len + i } else { i }
+      if normalized >= 0 && normalized < len {
+        let item_val = @value.JsonataValue::Json(arr[normalized])
+        if is_last {
+          apply_transform_match(item_val, update_ast, delete_ast, ctx)
+        } else {
+          walk_transform(item_val, steps, idx + 1, update_ast, delete_ast, ctx)
+        }
+      }
     }
-    _ => input
+    (@value.JsonataValue::Json(Json::Object(map)), @ast.StepKind::Wildcard) =>
+      for k, v in map {
+        let sub_val = @value.JsonataValue::Json(v)
+        if is_last {
+          apply_transform_match(sub_val, update_ast, delete_ast, ctx)
+        } else {
+          walk_transform(sub_val, steps, idx + 1, update_ast, delete_ast, ctx)
+        }
+        ignore(k)
+      }
+    (@value.JsonataValue::Json(Json::Array(arr)), @ast.StepKind::Wildcard) =>
+      for item in arr {
+        let item_val = @value.JsonataValue::Json(item)
+        if is_last {
+          apply_transform_match(item_val, update_ast, delete_ast, ctx)
+        } else {
+          walk_transform(item_val, steps, idx + 1, update_ast, delete_ast, ctx)
+        }
+      }
+    (@value.JsonataValue::Json(Json::Array(arr)), @ast.StepKind::Filter(expr)) =>
+      // 数组谓词：保留满足 expr 的元素位置，对每个匹配元素推进路径
+      for item in arr {
+        let item_val = @value.JsonataValue::Json(item)
+        let truthy = ctx.with_context(current=item_val, parent=item_val, fn() -> Bool raise @error.JsonataError {
+          let r = eval(expr, ctx)
+          to_bool(r)
+        })
+        if truthy {
+          if is_last {
+            apply_transform_match(item_val, update_ast, delete_ast, ctx)
+          } else {
+            walk_transform(
+              item_val,
+              steps,
+              idx + 1,
+              update_ast,
+              delete_ast,
+              ctx,
+            )
+          }
+        }
+      }
+    (@value.JsonataValue::Json(Json::Object(_)), @ast.StepKind::Filter(expr)) => {
+      // 对象谓词：对象视为单例序列，对对象本身求值 expr，truthy 则对象匹配
+      let pred_holds = ctx.with_context(current=value, parent=value, fn() -> Bool raise @error.JsonataError {
+        let r = eval(expr, ctx)
+        to_bool(r)
+      })
+      if pred_holds {
+        if is_last {
+          apply_transform_match(value, update_ast, delete_ast, ctx)
+        } else {
+          // 对象本身匹配但路径未结束：从对象继续推进路径
+          // 对象作为单例序列，等同于对对象本身推进下一步
+          walk_transform(value, steps, idx + 1, update_ast, delete_ast, ctx)
+        }
+      }
+    }
+    (_, @ast.StepKind::Filter(expr)) => {
+      // 标量/其它值视为单例序列，对值本身求值 expr
+      let pred_holds = ctx.with_context(current=value, parent=value, fn() -> Bool raise @error.JsonataError {
+        let r = eval(expr, ctx)
+        to_bool(r)
+      })
+      if pred_holds {
+        if is_last {
+          apply_transform_match(value, update_ast, delete_ast, ctx)
+        } else {
+          walk_transform(value, steps, idx + 1, update_ast, delete_ast, ctx)
+        }
+      }
+    }
+    (
+      @value.JsonataValue::Json(Json::Array(arr)),
+      @ast.StepKind::Slice(start, end),
+    ) => {
+      let len = arr.length()
+      let s = match start {
+        Some(v) => if v < 0 { len + v } else { v }
+        None => 0
+      }
+      let e = match end {
+        Some(v) => if v < 0 { len + v } else { v }
+        None => len
+      }
+      let clamped_s = if s < 0 { 0 } else if s > len { len } else { s }
+      let clamped_e = if e < 0 { 0 } else if e > len { len } else { e }
+      for i = clamped_s; i < clamped_e; i = i + 1 {
+        let item_val = @value.JsonataValue::Json(arr[i])
+        if is_last {
+          apply_transform_match(item_val, update_ast, delete_ast, ctx)
+        } else {
+          walk_transform(item_val, steps, idx + 1, update_ast, delete_ast, ctx)
+        }
+      }
+    }
+    (@value.JsonataValue::Sequence(items), _) =>
+      // 序列输入：路径展平，对每个元素应用同一步
+      for item in items {
+        walk_transform(item, steps, idx, update_ast, delete_ast, ctx)
+      }
+    _ => ()
   }
+  ignore(is_last)
 }
 
 ///|
-/// 对单值应用更新/删除。
-fn apply_transform_update(
+/// 递归步（`**`）：先在当前层应用 step（按 Single 语义），
+/// 然后下降到所有子结构继续应用同一递归步。
+/// 对于 Wildcard(Recursive)（即 `**`），当前值本身也是匹配项，
+/// 需要将剩余路径应用到当前值（不仅是子结构）。
+fn walk_transform_recursive(
   value : @value.JsonataValue,
-  update_val : @value.JsonataValue,
-  delete_keys : Array[String],
-) -> @value.JsonataValue {
-  match value {
-    @value.JsonataValue::Json(Json::Object(map)) => {
-      let new_map : Map[String, Json] = {}
-      for k, v in map {
-        new_map[k] = v
+  step : @ast.Step,
+  steps : Array[@ast.Step],
+  idx : Int,
+  update_ast : @ast.Ast,
+  delete_ast : @ast.Ast?,
+  ctx : @value.EvalContext,
+) -> Unit raise @error.JsonataError {
+  match step.kind {
+    @ast.StepKind::Wildcard => {
+      // `**`：当前值本身是匹配项，推进剩余路径
+      if idx + 1 < steps.length() {
+        walk_transform(value, steps, idx + 1, update_ast, delete_ast, ctx)
+      } else {
+        // `**` 是路径末尾：当前值即为终端匹配
+        apply_transform_match(value, update_ast, delete_ast, ctx)
       }
-      match update_val {
-        @value.JsonataValue::Json(Json::Object(update_map)) =>
-          for k, v in update_map {
-            new_map[k] = v
+      // 下降到子结构，递归应用同一 `**` 步
+      match value {
+        @value.JsonataValue::Json(Json::Object(map)) =>
+          for k, v in map {
+            walk_transform_recursive(
+              @value.JsonataValue::Json(v),
+              step,
+              steps,
+              idx,
+              update_ast,
+              delete_ast,
+              ctx,
+            )
+            ignore(k)
+          }
+        @value.JsonataValue::Json(Json::Array(arr)) =>
+          for item in arr {
+            walk_transform_recursive(
+              @value.JsonataValue::Json(item),
+              step,
+              steps,
+              idx,
+              update_ast,
+              delete_ast,
+              ctx,
+            )
+          }
+        @value.JsonataValue::Sequence(items) =>
+          for item in items {
+            walk_transform_recursive(
+              item, step, steps, idx, update_ast, delete_ast, ctx,
+            )
           }
         _ => ()
       }
-      for k in delete_keys {
-        new_map.remove(k) |> ignore
-      }
-      @value.JsonataValue::Json(Json::object(new_map))
     }
-    _ => value
+    _ => {
+      // 其它递归步（如 **.Name）：在当前层按 Single 语义应用 step，再下降
+      walk_transform_single(
+        value, step, steps, idx, update_ast, delete_ast, ctx,
+      )
+      // 下降到子结构，递归应用同一 Recursive 步
+      match value {
+        @value.JsonataValue::Json(Json::Object(map)) =>
+          for k, v in map {
+            walk_transform_recursive(
+              @value.JsonataValue::Json(v),
+              step,
+              steps,
+              idx,
+              update_ast,
+              delete_ast,
+              ctx,
+            )
+            ignore(k)
+          }
+        @value.JsonataValue::Json(Json::Array(arr)) =>
+          for item in arr {
+            walk_transform_recursive(
+              @value.JsonataValue::Json(item),
+              step,
+              steps,
+              idx,
+              update_ast,
+              delete_ast,
+              ctx,
+            )
+          }
+        @value.JsonataValue::Sequence(items) =>
+          for item in items {
+            walk_transform_recursive(
+              item, step, steps, idx, update_ast, delete_ast, ctx,
+            )
+          }
+        _ => ()
+      }
+    }
+  }
+}
+
+///|
+/// 对终端匹配项应用更新与删除（直接在 Object 的 Map 上原位修改）。
+/// - 匹配值为 Object：以 match 为当前上下文求值 update_ast，合并 update_map 入 map；求值 delete_ast，移除对应键
+/// - 匹配值为 Array：路径展平，对每个元素递归调用本函数
+/// - 其它（标量、Undefined）：不做改动
+fn apply_transform_match(
+  value : @value.JsonataValue,
+  update_ast : @ast.Ast,
+  delete_ast : @ast.Ast?,
+  ctx : @value.EvalContext,
+) -> Unit raise @error.JsonataError {
+  match value {
+    @value.JsonataValue::Json(Json::Object(map)) => {
+      // 以 match 为当前上下文求值 update/delete
+      let update_val = ctx.with_context(current=value, parent=value, fn() -> @value.JsonataValue raise @error.JsonataError {
+        eval(update_ast, ctx)
+      })
+      let delete_keys : Array[String] = match delete_ast {
+        Some(d) =>
+          ctx.with_context(current=value, parent=value, fn() -> Array[String] raise @error.JsonataError {
+            let dval = eval(d, ctx)
+            extract_delete_keys(dval)
+          })
+        None => []
+      }
+      // 合并 update（仅 Object 形式有效）
+      match update_val {
+        @value.JsonataValue::Json(Json::Object(update_map)) =>
+          for k, v in update_map {
+            map.set(k, v)
+          }
+        _ => ()
+      }
+      // 应用 delete
+      for k in delete_keys {
+        ignore(map.remove(k))
+      }
+    }
+    @value.JsonataValue::Json(Json::Array(arr)) =>
+      // 路径展平：对数组每个元素递归应用变换
+      for item in arr {
+        apply_transform_match(
+          @value.JsonataValue::Json(item),
+          update_ast,
+          delete_ast,
+          ctx,
+        )
+      }
+    _ => ()
+  }
+}
+
+///|
+/// 从 delete 表达式求值结果提取字符串键列表。
+/// 支持字符串、字符串数组（Json::Array）与序列三种形式。
+fn extract_delete_keys(dval : @value.JsonataValue) -> Array[String] {
+  match dval {
+    @value.JsonataValue::Sequence(arr) => {
+      let keys : Array[String] = []
+      for item in arr {
+        match item {
+          @value.JsonataValue::Json(Json::String(s)) => keys.push(s)
+          _ => continue
+        }
+      }
+      keys
+    }
+    @value.JsonataValue::Json(Json::Array(arr)) => {
+      let keys : Array[String] = []
+      for item in arr {
+        match item {
+          Json::String(s) => keys.push(s)
+          _ => continue
+        }
+      }
+      keys
+    }
+    @value.JsonataValue::Json(Json::String(s)) => [s]
+    @value.JsonataValue::Undefined => []
+    _ => []
   }
 }
 

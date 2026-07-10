@@ -128,16 +128,16 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-09，parser precedence + function array + $toMillis picture，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-10，transforms per-item update + 递归下降匹配，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1226 fail 25 skip 431
+eligible 1251 pass 1235 fail 16 skip 431
 top_failures
-transforms 10
 joins 7
 parent-operator 6
 performance 1
 transform 1
+transforms 1
 skip_reasons
 no_result 395
 non-string-expr 23
@@ -145,17 +145,24 @@ timelimit 7
 bindings 6
 ```
 
-本轮修复（function array：构造器保留函数值）：
-- 提交：function-applications 18→20 pass (+2)，整体 pass 1224→1226 (+2)，fail 27→25 (-2)，通过率 97.9%→98.0%
-- 门禁：`moon check` 19 warnings, 0 errors，`moon test` 191/191 passed，`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+本轮修复（transforms per-item update 求值 + 递归下降匹配）：
+- 提交：transforms 1→1 pass（10→1 fail, -9），整体 pass 1226→1235 (+9)，fail 25→16 (-9)，通过率 98.0%→98.8%
+- 门禁：`moon check` 0e0w，`moon test` 195/195 passed（+4 新增 transforms 回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：
-  - Evaluator: `eval_construct` 检测函数/正则元素，使用 `Sequence` 而非 `Json::Array` 保留非 JSON 值
-  - Evaluator: 函数数组如 `[$sum, $square]` 现在可以正确传递给 `$reduce` 等高阶函数
-  - Tests: 增加官方 function-applications case013/case014 回归断言
+  - Evaluator: 重写 `eval_transform`，删除"一次性求值 update_val/delete_keys 再走 step 替换"的旧实现
+  - Evaluator: 新增 `walk_transform` / `walk_transform_single` / `walk_transform_recursive`，按路径步逐层在深克隆结构中定位匹配项
+  - Evaluator: 新增 `apply_transform_match`，对每个终端匹配项以匹配值为当前上下文（`ctx.current()`）求值 `update_ast` 与 `delete_ast`，利用 `Json::Object(Map)` / `Json::Array(Array)` 的可变引用在原位合并 update 与移除 delete 键
+  - Evaluator: `walk_transform_single` 支持 Name / Index / Wildcard / Filter / Slice 步，Array 中间步自动路径展平
+  - Evaluator: `walk_transform_recursive` 处理 `**`（Recursive Wildcard）— 当前值本身也是匹配项，需将剩余路径应用到当前值，再下降到子结构
+  - Evaluator: (Object, Filter) 与 (_, Filter) 按 JSONata 单例序列语义对值本身求值谓词（不再误迭代字段值）
+  - Evaluator: `extract_delete_keys` 新增 `Json::Array` 分支，支持 `["k1","k2"]` 字面量数组作为 delete 表达式
+  - Tests: 新增 transforms per-item update / update+delete / 递归下降+过滤 / 中间数组展平 4 个回归断言
 - 已知限制：
-  - performance (1): `$$.items[$i]` 父级引用配合位置绑定（tuple stream 架构问题）
+  - transforms (1): `(Account.Order.Product)[0]` 路径含 `Eval(Block(...))` 步，walker 暂未支持 Eval 步的定位
   - transform (1): `state.tempReadings[[1..4]]` slice 展平（tuple stream）
-  - transforms (10): transform 模板 per-item 求值
+  - joins (7): tuple stream 位置绑定与父级引用组合
+  - parent-operator (6): `%.%` 多级父级链与 `$keys(%)` 父级键列表
+  - performance (1): `$$.items[$i]` 父级引用配合位置绑定（tuple stream 架构问题）
 
 上一轮修复（parser precedence: `~>` 与 `=` 同优先级）：
 - 提交：sorting 17→18 pass（全绿），joins 18→21 pass，整体 pass 1210→1214 (+4)，fail 41→37 (-4)，通过率 96.7%→97.0%
