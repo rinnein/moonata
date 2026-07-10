@@ -92,19 +92,6 @@ fn prepend_ancestor(
 }
 
 ///|
-fn tail_ancestors(
-  ancestors : Array[@value.JsonataValue],
-) -> Array[@value.JsonataValue] {
-  let next : Array[@value.JsonataValue] = []
-  if ancestors.length() > 1 {
-    for i in 1..<ancestors.length() {
-      next.push(ancestors[i])
-    }
-  }
-  next
-}
-
-///|
 fn ast_contains_parent(ast : @ast.Ast) -> Bool {
   match ast {
     @ast.Ast::Path(steps) => steps_contain_parent(steps)
@@ -402,6 +389,29 @@ fn ast_has_arrayify(ast : @ast.Ast) -> Bool {
 }
 
 ///|
+/// 判断 `Name` 后面的过滤器链是否继续接 Index/Slice。
+///
+/// `a.b[$p][0]` 需要在 `b` 这一步保留每个 `b` 数组的分组结构，
+/// 这样 `[0]` 才会应用到每个过滤后的子数组；但 `a.b[1..4]`
+/// 只是普通位置谓词，应直接在 `b` 数组上过滤，不能先把数组拆成
+/// 每个元素再分别执行谓词。
+fn filters_then_index_or_slice(
+  steps : Array[@ast.Step],
+  start : Int,
+  stop_at : Int,
+) -> Bool {
+  let mut i = start
+  while i < stop_at {
+    match steps[i].kind {
+      @ast.StepKind::Filter(_) => i = i + 1
+      @ast.StepKind::Index(_) | @ast.StepKind::Slice(_, _) => return true
+      _ => return false
+    }
+  }
+  false
+}
+
+///|
 /// 将值包装为 JSON array（用于 `[]` 步的语义）。
 /// `Sequence` → 保持为 `Json::Array`（阻止单例提升）
 /// `Json::Array` → 保持原样（已是数组）
@@ -429,6 +439,7 @@ fn eval_path_frames(
   let mut frames = input
   let mut i = start
   let mut name_was_grouped = false
+  let mut map_was_grouped = false
   let mut is_first_step = true
   while i < stop_at {
     let step = steps[i]
@@ -447,9 +458,26 @@ fn eval_path_frames(
     match step.pos_var {
       Some(pos_name) => {
         name_was_grouped = false
-        frames = eval_step_frames(step, frames, ctx, grouped=false)
-        for j, frame in frames {
-          frames[j] = bind_frame_index(frame, pos_name, j)
+        match step.kind {
+          @ast.StepKind::Map(expr) => {
+            let mapped : Array[PathFrame] = []
+            for frame in frames {
+              let local_frames : Array[PathFrame] = []
+              access_map_frames([frame], expr, ctx, local_frames)
+              for j, out in local_frames {
+                mapped.push(bind_frame_index(out, pos_name, j))
+              }
+            }
+            frames = mapped
+            map_was_grouped = true
+          }
+          _ => {
+            frames = eval_step_frames(step, frames, ctx, grouped=false)
+            for j, frame in frames {
+              frames[j] = bind_frame_index(frame, pos_name, j)
+            }
+            map_was_grouped = false
+          }
         }
         i = i + 1
       }
@@ -519,7 +547,19 @@ fn eval_path_frames(
             }
           }
           None => {
-            if name_was_grouped {
+            if map_was_grouped {
+              match step.kind {
+                @ast.StepKind::Filter(expr) => {
+                  let filtered : Array[PathFrame] = []
+                  for frame in frames {
+                    access_filter_frames([frame], expr, ctx, filtered)
+                  }
+                  frames = filtered
+                }
+                _ => frames = eval_step_frames(step, frames, ctx, grouped=false)
+              }
+              map_was_grouped = false
+            } else if name_was_grouped {
               match step.kind {
                 @ast.StepKind::Index(_) | @ast.StepKind::Slice(_, _) =>
                   frames = eval_step_frames(step, frames, ctx, grouped=true)
@@ -565,6 +605,7 @@ fn eval_path_frames(
                   }
                 _ => frames = eval_step_frames(step, frames, ctx, grouped=false)
               }
+              map_was_grouped = step.kind is @ast.StepKind::Map(_)
               is_first_step = false
             }
             i = i + 1
@@ -594,6 +635,7 @@ fn eval_path_from(
   let mut current = input
   let mut i = start
   let mut name_was_grouped = false
+  let mut map_was_grouped = false
   // 标记是否为路径的"首个有效步"：首步的 Name→Index 在 Array/Sequence
   // 输入上不应分组（如 phone[0] 应索引整体而非每元素），后续步的
   // Name→Index 则应分组（如 a.b[0] 需每元素索引）。
@@ -623,6 +665,7 @@ fn eval_path_from(
         name_was_grouped = false
         current = eval_step(step, current, ctx)
         ctx.bind("__pos__", @value.JsonataValue::Json(Json::string(pos_name)))
+        map_was_grouped = step.kind is @ast.StepKind::Map(_)
         i = i + 1
       }
       None =>
@@ -671,7 +714,14 @@ fn eval_path_from(
             // a.b[N] means index each b individually, not the flat result.
             // Only when the Name step was processed via access_field_grouped
             // (i.e., it had an Index/Slice step following).
-            if name_was_grouped {
+            if map_was_grouped {
+              match step.kind {
+                @ast.StepKind::Filter(expr) =>
+                  current = access_filter_grouped(current, expr, ctx)
+                _ => current = eval_step(step, current, ctx)
+              }
+              map_was_grouped = false
+            } else if name_was_grouped {
               let mut should_clear = true
               match step.kind {
                 @ast.StepKind::Index(_) | @ast.StepKind::Slice(_, _) =>
@@ -712,7 +762,9 @@ fn eval_path_from(
                       @ast.StepKind::Filter(_) =>
                         // Group Name→Filter: preserve array structure so that
                         // subsequent Index/Slice steps apply per-element.
-                        if is_first_step {
+                        if !filters_then_index_or_slice(steps, i + 1, stop_at) {
+                          current = eval_step(step, current, ctx)
+                        } else if is_first_step {
                           match current {
                             @value.JsonataValue::Sequence(_)
                             | @value.JsonataValue::Json(Json::Array(_)) =>
@@ -733,6 +785,7 @@ fn eval_path_from(
                   }
                 _ => current = eval_step(step, current, ctx)
               }
+              map_was_grouped = step.kind is @ast.StepKind::Map(_)
               is_first_step = false
             }
             i = i + 1
@@ -831,10 +884,20 @@ fn parent_frames(frames : Array[PathFrame]) -> Array[PathFrame] {
   let results : Array[PathFrame] = []
   for frame in frames {
     if frame.ancestors.length() > 0 {
+      let parent_index = if frame.ancestors.length() > 1 &&
+        frame.value.equal(frame.ancestors[0]) {
+        1
+      } else {
+        0
+      }
+      let next_ancestors : Array[@value.JsonataValue] = []
+      for i in (parent_index + 1)..<frame.ancestors.length() {
+        next_ancestors.push(frame.ancestors[i])
+      }
       results.push(
         path_frame_with_bindings(
-          frame.ancestors[0],
-          tail_ancestors(frame.ancestors),
+          frame.ancestors[parent_index],
+          next_ancestors,
           frame.bindings,
         ),
       )

@@ -314,3 +314,51 @@ test "P9.2：部分应用" {
   )
   assert_true(result == Json::number(8.0))
 }
+
+///|
+test "JSONata 官方：字段数组位置谓词后可被数组构造展平" {
+  let data = make_data(
+    (
+      #|{"state":{"tempReadings":[28.9,28,28.2,28.4,27]},"event":{"t":28.4}}
+    ),
+  )
+  let result = eval_to_json("[state.tempReadings[[1..4]], event.t]", data)
+  assert_true(
+    result ==
+    make_data(
+      (
+        #|[28,28.2,28.4,27,28.4]
+      ),
+    ),
+  )
+}
+
+///|
+test "JSONata 官方：map 后位置谓词按每个输入项重置" {
+  let data = make_data("[3,1,4,1,5,9]")
+  assert_true(eval_to_json("$.$#$pos[$pos<3]", data) == data)
+  assert_true(
+    eval_to_json("$.$#$pos[$pos<3] = $.$[[0..2]]", data) == Json::boolean(true),
+  )
+}
+
+///|
+test "JSONata 官方：多级 focus 后 %.% 跳过重复父级" {
+  let data = make_data(
+    (
+      #|{"library":{"books":[{"title":"Structure and Interpretation of Computer Programs","isbn":"9780262510875"},{"title":"Compilers: Principles, Techniques, and Tools","isbn":"9780321486813"}],"loans":[{"isbn":"9780262510875","customer":"joe"},{"isbn":"9780321486813","customer":"jason"},{"isbn":"9780262510875","customer":"jason"}],"customers":[{"id":"joe","name":"Joe Doe"},{"id":"jason","name":"Jason Arthur"}]}}
+    ),
+  )
+  let result = eval_to_json(
+    "library.loans@$L.books@$B[$L.isbn=$B.isbn].customers@$C[$C.id=$L.customer].{ 'book': $B.title, 'customer': $C.name, 'rootBook': %.%.library.books[0].title }",
+    data,
+  )
+  assert_true(
+    result ==
+    make_data(
+      (
+        #|[{"book":"Structure and Interpretation of Computer Programs","customer":"Joe Doe","rootBook":"Structure and Interpretation of Computer Programs"},{"book":"Compilers: Principles, Techniques, and Tools","customer":"Jason Arthur","rootBook":"Structure and Interpretation of Computer Programs"},{"book":"Structure and Interpretation of Computer Programs","customer":"Jason Arthur","rootBook":"Structure and Interpretation of Computer Programs"}]
+      ),
+    ),
+  )
+}

@@ -93,23 +93,14 @@ CI 在 `master` 分支推送、PR 以及手动触发时运行。
 
 ## 兼容性状态
 
-固定快照：2026-07-11，focus 步非 group 分支父级链修正阶段。
+固定快照：2026-07-10，map 后位置谓词重置与重复父级跳过修正阶段。
 
 ```text
-本地测试：moon test 203/203
-官方可比对审计：eligible 1251, pass 1247, fail 4, skip 431
-通过率：99.68%
+本地测试：moon test 206/206
+官方可比对审计：eligible 1251, pass 1251, fail 0, skip 431
+通过率：100%
 ```
 
-当前剩余失败最多的官方测试分组：
-
-```text
-joins 1
-parent-operator 1
-performance 1
-transform 1
-```
-
-注：剩余 4 个失败用例在 JSONata-js v2.2.1 中同样不通过，属于上游未实现行为。
+当前 CLI 可比对官方用例已全通过；剩余 skip 项为 harness/非字符串表达式/外部 bindings 等不可直接比较项。
 
 官方测试集审计流程与跳过策略记录在 `docs/jsonata-official-workflow.md`。
