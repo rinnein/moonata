@@ -1179,3 +1179,26 @@ test "官方套件：transforms 路径含 Eval 步 (parenthesized expression)" {
     ),
   )
 }
+
+///|
+test "官方套件：joins tuple stream group 聚合 reduce" {
+  let d = data(
+    "{\"Employee\":[{\"SSN\":\"496913021\",\"FirstName\":\"Fred\",\"Surname\":\"Smith\"},{\"SSN\":\"496737199\",\"FirstName\":\"Darren\",\"Surname\":\"Cruse\"},{\"SSN\":\"496306525\",\"FirstName\":\"Hugh\",\"Surname\":\"Jones\"}],\"Contact\":[{\"ssn\":\"496913021\",\"Phone\":[{\"type\":\"home\",\"number\":\"0203 544 1234\"},{\"type\":\"office\",\"number\":\"01962 001234\"},{\"type\":\"mobile\",\"number\":\"077 7700 1234\"}]},{\"ssn\":\"496737199\",\"Phone\":[{\"type\":\"home\",\"number\":\"3146458343\"},{\"type\":\"mobile\",\"number\":\"315 782 9279\"}]},{\"ssn\":\"496306525\",\"Phone\":[{\"type\":\"home\",\"number\":\"0280 564 6543\"}]},{\"ssn\":\"496306525\",\"Phone\":[{\"type\":\"office\",\"number\":\"0280 864 8643\"}]},{\"ssn\":\"496306525\",\"Phone\":[{\"type\":\"mobile\",\"number\":\"07735 853535\"}]}]}",
+  )
+  // Hugh Jones has 3 separate Contact entries; group should reduce all 3
+  assert_eval(
+    "Employee@$e.Contact@$c[$c.ssn = $e.SSN]{ $e.(FirstName & \" \" & Surname): $join($c.Phone.number, \", \") }",
+    d,
+    data(
+      "{\"Fred Smith\":\"0203 544 1234, 01962 001234, 077 7700 1234\",\"Darren Cruse\":\"3146458343, 315 782 9279\",\"Hugh Jones\":\"0280 564 6543, 0280 864 8643, 07735 853535\"}",
+    ),
+  )
+  // Phone[type='mobile'] filter on reduced @ (3 Contacts for Hugh)
+  assert_eval(
+    "Employee@$e.(Contact)[ssn = $e.SSN]{ $e.FirstName: Phone[type=\"mobile\"].number }",
+    d,
+    data(
+      "{\"Fred\":\"077 7700 1234\",\"Darren\":\"315 782 9279\",\"Hugh\":\"07735 853535\"}",
+    ),
+  )
+}

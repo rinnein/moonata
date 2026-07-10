@@ -128,13 +128,13 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-10，transforms Eval 步 + parent-operator map 展平，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-10，joins tuple stream group reduce，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1237 fail 14 skip 431
+eligible 1251 pass 1240 fail 11 skip 431
 top_failures
-joins 7
 parent-operator 5
+joins 4
 performance 1
 transform 1
 skip_reasons
@@ -144,7 +144,23 @@ timelimit 7
 bindings 6
 ```
 
-本轮修复（transforms Eval 步支持 + parent-operator map 展平 + Sequence Index）：
+本轮修复（joins tuple stream group 聚合 reduce）：
+- 提交：joins 18→21 pass（7→4 fail, -3），整体 pass 1237→1240 (+3)，fail 14→11 (-3)，通过率 99.0%→99.2%
+- 门禁：`moon check` 0e0w，`moon test` 198/198 passed（+1 新增 joins 回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Evaluator: 新增 `access_group_aggregate_tuple_stream` 函数，处理 tuple stream 模式下的分组聚合——按 key 分组后，对每组的 frames 执行 reduce（合并绑定 + 追加 @ 值），再以 reduced 上下文求值 value-expression
+  - Evaluator: `access_group_aggregate_frames` 检测 frames 是否携带 focus 绑定（tuple stream 模式），是则走新的 reduce 路径，否则走原 per-frame 求值路径
+  - Evaluator: focus 步在 `has_group=true` 时，将 focus 绑定传播到 frames 但保留 `@` 为原始输入（对齐 JSONata-js `evaluateTupleStep` 语义——focus 不改变 `@`，只绑定变量）
+  - Evaluator: 新增 `append_tuple_binding` 函数，实现 tuple 绑定追加（Sequence/Array/标量三种情况的合并）
+  - Evaluator: reduce 阶段同时追加 `@`（frame.value），匹配 JSONata-js `reduceTupleStream` 对所有 tuple 属性（包括 `@`）的 append 语义
+  - Tests: 新增 joins tuple stream group reduce 回归断言（Hugh Jones 3 Contacts 合并 + mobile 过滤）
+- 已知限制：
+  - joins (4): `^($e.field)` sort + tuple binding + `.{ }` 路径、`$.$#$pos[$pos<3]` tuple stream 重置、`$#$pos[][$pos<3]^($)[-1]` arrayify singleton
+  - parent-operator (5): `(expr)[%.field]` 分组表达式后父级过滤、`$keys(%)` 父级键列表、`%.%` 多级父级链
+  - performance (1): `$$.items[$i]` 父级引用配合位置绑定（tuple stream 架构问题）
+  - transform (1): `state.tempReadings[[1..4]]` slice 展平（tuple stream）
+
+上一轮修复（transforms Eval 步支持 + parent-operator map 展平 + Sequence Index）：
 - 提交：transforms 1→1 pass（1→0 fail, -1），parent-operator 14→15 pass（6→5 fail, -1），整体 pass 1235→1237 (+2)，fail 16→14 (-2)，通过率 98.8%→99.0%
 - 门禁：`moon check` 0e0w，`moon test` 197/197 passed（+2 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：
@@ -152,11 +168,6 @@ bindings 6
   - Evaluator: `walk_transform_single` 新增 `Eval(inner_expr)` 步支持，处理 `(expr)[N]` 等 parenthesized expression 后接索引/过滤的变换路径——求值内部表达式后继续走剩余路径步
   - Evaluator: `walk_transform_single` 新增 `(Sequence, Index(i))` 分支，支持对 `Eval` 产生的 `Sequence` 结果执行索引选择
   - Tests: 新增 parent-operator map 展平 + transforms Eval 步 2 个回归断言
-- 已知限制：
-  - transform (1): `state.tempReadings[[1..4]]` slice 展平（tuple stream）
-  - joins (7): tuple stream 位置绑定与父级引用组合
-  - parent-operator (5): `(expr)[%.field]` 分组表达式后父级过滤、`$keys(%)` 父级键列表、`%.%` 多级父级链
-  - performance (1): `$$.items[$i]` 父级引用配合位置绑定（tuple stream 架构问题）
 
 上一轮修复（transforms per-item update 求值 + 递归下降匹配）：
 - 提交：transforms 1→1 pass（10→1 fail, -9），整体 pass 1226→1235 (+9)，fail 25→16 (-9)，通过率 98.0%→98.8%

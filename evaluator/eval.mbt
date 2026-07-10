@@ -431,22 +431,25 @@ fn eval_path_frames(
             let has_group = stop_at > i + 1 &&
               is_aggregate_step(steps[stop_at - 1])
             if has_group {
-              let merged : Map[String, Array[Json]] = {}
+              // For tuple-stream group aggregation: propagate focus binding to
+              // frames AND continue from the original input (not focus result).
+              // This matches JSONata-js semantics where focus step binds $name
+              // but @ (current) stays as the original input.
+              // The final GroupAggregate step will reduce frames with same key.
+              let bound_frames : Array[PathFrame] = []
               for frame in step_frames {
-                let r = ctx.with_binding(name, frame.value, fn() -> @value.JsonataValue raise @error.JsonataError {
-                  frames_to_value(
-                    eval_path_frames(input, steps, i + 1, ctx, stop_at),
-                  )
-                })
-                merge_into_group(r, merged)
+                // frame.value is the focus result (e.g. Employee[i])
+                // We bind $name to it, but set the frame's value back to the
+                // original input so subsequent path steps access @ correctly
+                let input_frame = path_frame_with_bindings(
+                  ctx.current(),
+                  frame.ancestors,
+                  bind_frame(frame, name, frame.value).bindings,
+                )
+                bound_frames.push(input_frame)
               }
-              return value_to_frames(
-                @value.JsonataValue::Json(
-                  Json::object(build_merged_group(merged)),
-                ),
-                ctx.current(),
-                ctx.ancestors(),
-              )
+              frames = bound_frames
+              i = i + 1
             } else {
               let results : Array[PathFrame] = []
               for frame in step_frames {
@@ -1960,6 +1963,25 @@ fn access_group_aggregate_frames(
   group_ast : @ast.Ast,
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
+  // Tuple stream reduction: when frames carry focus bindings (e.g. $e, $c from
+  // `Employee@$e.Contact@$c`), all frames with the same group key must be
+  // reduced into a single tuple before evaluating the value-expression.
+  // This matches JSONata-js `evaluateGroupExpression` + `reduceTupleStream`:
+  //   1. For each frame, evaluate the key-expression (with frame bindings)
+  //   2. Group frames by key, preserving per-frame bindings
+  //   3. For each group, reduce tuple bindings (append array values for same
+  //      variable name across frames) and set `@` to the first frame's value
+  //   4. Evaluate the value-expression with the reduced bindings
+  let pairs : Array[(@ast.Ast, @ast.Ast)] = match group_ast {
+    @ast.Ast::Group(p) => p
+    _ => return @value.JsonataValue::Json(Json::object({}))
+  }
+  // Check if frames carry focus bindings (tuple stream mode)
+  let is_tuple_stream = frames.length() > 0 && frames[0].bindings.length() > 0
+  if is_tuple_stream {
+    return access_group_aggregate_tuple_stream(frames, pairs, ctx)
+  }
+  // Non-tuple-stream path: evaluate group_ast per frame, merge results
   let merged : Map[String, Array[Json]] = {}
   for frame in frames {
     let r = ctx.with_lineage(current=frame.value, ancestors=frame.ancestors, fn() -> @value.JsonataValue raise @error.JsonataError {
@@ -1978,4 +2000,119 @@ fn access_group_aggregate_frames(
     out[name] = json_for_merged_values(values)
   }
   @value.JsonataValue::Json(Json::object(out))
+}
+
+///|
+/// Tuple stream group aggregation: reduce frames with same key into one tuple,
+/// then evaluate value-expression with reduced bindings.
+/// Matches JSONata-js `evaluateGroupExpression` reduce path.
+fn access_group_aggregate_tuple_stream(
+  frames : Array[PathFrame],
+  pairs : Array[(@ast.Ast, @ast.Ast)],
+  ctx : @value.EvalContext,
+) -> @value.JsonataValue raise @error.JsonataError {
+  // Phase 1: group frames by key (per key-expression pair)
+  // groups: key_str -> (pair_index, list of frames)
+  let groups : Map[String, (Int, Array[PathFrame])] = {}
+  for frame in frames {
+    for pair_idx, kv in pairs {
+      let (key_ast, _) = kv
+      let key_val = ctx.with_lineage(
+        current=frame.value,
+        ancestors=frame.ancestors,
+        fn() -> @value.JsonataValue raise @error.JsonataError {
+          with_frame_bindings(ctx, frame.bindings, fn() -> @value.JsonataValue raise @error.JsonataError {
+            ctx.with_depth(() => eval(key_ast, ctx))
+          })
+        },
+      )
+      let key_str = match key_val {
+        @value.JsonataValue::Json(Json::String(s)) => s
+        @value.JsonataValue::Undefined => continue
+        _ => to_str(key_val)
+      }
+      match groups.get(key_str) {
+        Some((existing_idx, arr)) =>
+          if existing_idx == pair_idx {
+            arr.push(frame)
+          } else {
+            // D1009: key generated by different expressions - skip for now
+            ()
+          }
+        None => groups.set(key_str, (pair_idx, [frame]))
+      }
+    }
+  }
+  // Phase 2: for each group, reduce tuple bindings and evaluate value-expression
+  let out : Map[String, Json] = {}
+  for key_str, group_entry in groups {
+    let (pair_idx, group_frames) = group_entry
+    if group_frames.length() == 0 {
+      continue
+    }
+    let (_, val_ast) = pairs[pair_idx]
+    // Reduce: merge bindings across frames (append values for same name)
+    let reduced_bindings : Map[String, @value.JsonataValue] = {}
+    let first_frame = group_frames[0]
+    // Copy first frame's bindings
+    for name, value in first_frame.bindings {
+      reduced_bindings[name] = value
+    }
+    // Append subsequent frames' bindings
+    for j in 1..<group_frames.length() {
+      let frame = group_frames[j]
+      for name, value in frame.bindings {
+        match reduced_bindings.get(name) {
+          Some(existing) =>
+            // Append: collect into sequence (matching jsonata-js fn.append)
+            reduced_bindings[name] = append_tuple_binding(existing, value)
+          None => reduced_bindings[name] = value
+        }
+      }
+    }
+    // Reduce @ (frame.value) by appending across frames (matching jsonata-js
+    // reduceTupleStream which appends all tuple properties including '@')
+    let mut context_value = first_frame.value
+    for j in 1..<group_frames.length() {
+      context_value = append_tuple_binding(context_value, group_frames[j].value)
+    }
+    let val = ctx.with_lineage(
+      current=context_value,
+      ancestors=first_frame.ancestors,
+      fn() -> @value.JsonataValue raise @error.JsonataError {
+        with_frame_bindings(ctx, reduced_bindings, fn() -> @value.JsonataValue raise @error.JsonataError {
+          ctx.with_depth(() => eval(val_ast, ctx))
+        })
+      },
+    )
+    match val {
+      @value.JsonataValue::Undefined => continue
+      _ => out[key_str] = json_for_constructor(val)
+    }
+  }
+  @value.JsonataValue::Json(Json::object(out))
+}
+
+///|
+/// Append a tuple binding value (matching jsonata-js fn.append semantics):
+/// - If existing is a Sequence, append new value
+/// - If existing is a Json array, convert to Sequence and append
+/// - Otherwise, create a new Sequence [existing, new]
+fn append_tuple_binding(
+  existing : @value.JsonataValue,
+  new : @value.JsonataValue,
+) -> @value.JsonataValue {
+  match (existing, new) {
+    (@value.JsonataValue::Sequence(arr), _) =>
+      @value.JsonataValue::sequence(arr + [new])
+    (@value.JsonataValue::Json(Json::Array(arr)), _) => {
+      let items : Array[@value.JsonataValue] = []
+      for item in arr {
+        items.push(@value.JsonataValue::Json(item))
+      }
+      items.push(new)
+      @value.JsonataValue::sequence(items)
+    }
+    (_, _) => @value.JsonataValue::sequence([existing, new])
+  }
 }
