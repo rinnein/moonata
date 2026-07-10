@@ -453,6 +453,9 @@ fn eval_path_frames(
             } else {
               let results : Array[PathFrame] = []
               for frame in step_frames {
+                // Propagate focus binding to result frames so subsequent steps
+                // (sort, filter, map) can access the bound variable
+                let bound_frame = bind_frame(frame, name, frame.value)
                 let r = ctx.with_binding(name, frame.value, fn() -> @value.JsonataValue raise @error.JsonataError {
                   frames_to_value(
                     eval_path_frames(input, steps, i + 1, ctx, stop_at),
@@ -464,9 +467,9 @@ fn eval_path_frames(
                     for
                       out in value_to_frames_with_bindings(
                         r,
-                        frame.value,
-                        frame.ancestors,
-                        frame.bindings,
+                        bound_frame.value,
+                        bound_frame.ancestors,
+                        bound_frame.bindings,
                       ) {
                       results.push(out)
                     }

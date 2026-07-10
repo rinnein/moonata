@@ -23,7 +23,7 @@
 | P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | 🚧 推进中（1240/1251 可比对用例通过） |
 | 合计 | | | **26** | **66** | |
 
-> 当前固定快照（2026-07-10，joins tuple stream group reduce 修复阶段）：`moon test` 为 198/198 通过；`moon check`、`moon info` 通过；`moon fmt` 已执行。JSONata 官方可比对审计为 `eligible 1251 / pass 1240 / fail 11 / skip 431`（审计脚本：`scripts/jsonata_official_audit.py`）。
+> 当前固定快照（2026-07-10，focus 绑定传播 + sort frames 提取修复阶段）：`moon test` 为 199/199 通过；`moon check`、`moon info` 通过；`moon fmt` 已执行。JSONata 官方可比对审计为 `eligible 1251 / pass 1240 / fail 11 / skip 431`（审计脚本：`scripts/jsonata_official_audit.py`）。
 
 ### 1.1 当前暂停边界
 

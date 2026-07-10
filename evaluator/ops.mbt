@@ -1384,6 +1384,20 @@ fn eval_sort_frames(
   if frames.length() <= 1 {
     return frames
   }
+  sort_frames_by_terms(frames, terms, ctx)
+}
+
+///|
+/// Sort incoming frames by sort terms, preserving frame bindings and ancestors.
+/// Used when a sort step appears mid-path in a tuple stream.
+fn sort_frames_by_terms(
+  frames : Array[PathFrame],
+  terms : Array[@ast.SortTerm],
+  ctx : @value.EvalContext,
+) -> Array[PathFrame] raise @error.JsonataError {
+  if frames.length() <= 1 {
+    return frames
+  }
   let keyed : Array[(Array[@value.JsonataValue], Int, PathFrame)] = []
   for i, frame in frames {
     let keys : Array[@value.JsonataValue] = []

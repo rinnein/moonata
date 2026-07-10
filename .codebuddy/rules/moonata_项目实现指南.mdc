@@ -126,7 +126,7 @@ _build/native/debug/build/cmd/main/main.exe '<expr>' --file '<tmp-json-data>'
 - 失败最多的前 10 个 group。
 - skip 原因计数。
 
-当前固定快照（2026-07-10，joins tuple stream group reduce，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-10，focus 绑定传播 + sort frames 提取，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
 eligible 1251 pass 1240 fail 11 skip 431

@@ -93,10 +93,10 @@ CI 在 `master` 分支推送、PR 以及手动触发时运行。
 
 ## 兼容性状态
 
-固定快照：2026-07-10，joins tuple stream group reduce 修复阶段。
+固定快照：2026-07-10，focus 绑定传播 + sort frames 提取修复阶段。
 
 ```text
-本地测试：moon test 198/198
+本地测试：moon test 199/199
 官方可比对审计：eligible 1251, pass 1240, fail 11, skip 431
 通过率：99.2%
 ```

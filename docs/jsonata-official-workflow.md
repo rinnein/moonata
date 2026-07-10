@@ -128,7 +128,7 @@ skip_reasons
 ...
 ```
 
-当前固定快照（2026-07-10，joins tuple stream group reduce，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-10，focus 绑定传播 + sort frames 提取，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
 eligible 1251 pass 1240 fail 11 skip 431
@@ -144,7 +144,20 @@ timelimit 7
 bindings 6
 ```
 
-本轮修复（joins tuple stream group 聚合 reduce）：
+本轮修复（focus 绑定传播 + sort frames 提取）：
+- 提交：整体 pass 1240→1240（无变化，但修复了 sort+focus 的中间态），`moon test` 198→199 passed（+1 新增 sort+focus 回归断言），通过率 99.2%
+- 门禁：`moon check` 0e0w，`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Evaluator: focus 步在 `has_group=false` 的递归路径中，将 focus 绑定传播到结果 frames（`bind_frame`），使后续步（sort、filter、map）能访问 bound 变量——修复 `Employee@$e^($e.Surname).$e.Surname` 返回 null 的问题
+  - Evaluator: 从 `eval_sort_frames` 提取 `sort_frames_by_terms` 函数，支持对传入的 frames 按排序键排序（保留 frame bindings 和 ancestors），为后续 sort+tuple stream 链式求值做准备
+  - Tests: 新增 sort 后 focus 绑定变量传播回归断言
+- 已知限制：
+  - joins (4): `^($e.field)` sort + tuple binding + `.{ }` 路径（sort 后 focus 步递归重新求值丢失排序顺序）、`$.$#$pos[$pos<3]` tuple stream 重置、`$#$pos[][$pos<3]^($)[-1]` arrayify singleton
+  - parent-operator (5): `(expr)[%.field]` 分组表达式后父级过滤、`$keys(%)` 父级键列表、`%.%` 多级父级链
+  - performance (1): `$$.items[$i]` 父级引用配合位置绑定（tuple stream 架构问题）
+  - transform (1): `state.tempReadings[[1..4]]` slice 展平（tuple stream）
+
+上一轮修复（joins tuple stream group 聚合 reduce）：
 - 提交：joins 18→21 pass（7→4 fail, -3），整体 pass 1237→1240 (+3)，fail 14→11 (-3)，通过率 99.0%→99.2%
 - 门禁：`moon check` 0e0w，`moon test` 198/198 passed（+1 新增 joins 回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：
@@ -154,11 +167,6 @@ bindings 6
   - Evaluator: 新增 `append_tuple_binding` 函数，实现 tuple 绑定追加（Sequence/Array/标量三种情况的合并）
   - Evaluator: reduce 阶段同时追加 `@`（frame.value），匹配 JSONata-js `reduceTupleStream` 对所有 tuple 属性（包括 `@`）的 append 语义
   - Tests: 新增 joins tuple stream group reduce 回归断言（Hugh Jones 3 Contacts 合并 + mobile 过滤）
-- 已知限制：
-  - joins (4): `^($e.field)` sort + tuple binding + `.{ }` 路径、`$.$#$pos[$pos<3]` tuple stream 重置、`$#$pos[][$pos<3]^($)[-1]` arrayify singleton
-  - parent-operator (5): `(expr)[%.field]` 分组表达式后父级过滤、`$keys(%)` 父级键列表、`%.%` 多级父级链
-  - performance (1): `$$.items[$i]` 父级引用配合位置绑定（tuple stream 架构问题）
-  - transform (1): `state.tempReadings[[1..4]]` slice 展平（tuple stream）
 
 上一轮修复（transforms Eval 步支持 + parent-operator map 展平 + Sequence Index）：
 - 提交：transforms 1→1 pass（1→0 fail, -1），parent-operator 14→15 pass（6→5 fail, -1），整体 pass 1235→1237 (+2)，fail 16→14 (-2)，通过率 98.8%→99.0%

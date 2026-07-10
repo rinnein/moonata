@@ -1202,3 +1202,16 @@ test "官方套件：joins tuple stream group 聚合 reduce" {
     ),
   )
 }
+
+///|
+test "官方套件：sort 后 focus 绑定变量传播" {
+  let d = data(
+    "{\"Employee\":[{\"SSN\":\"496913021\",\"FirstName\":\"Fred\",\"Surname\":\"Smith\"},{\"SSN\":\"496737199\",\"FirstName\":\"Darren\",\"Surname\":\"Cruse\"},{\"SSN\":\"496306525\",\"FirstName\":\"Hugh\",\"Surname\":\"Jones\"}]}",
+  )
+  // After sort ^($e.Surname), $e should still be accessible
+  assert_eval(
+    "Employee@$e^($e.Surname).$e.Surname",
+    d,
+    data("[\"Cruse\",\"Jones\",\"Smith\"]"),
+  )
+}
