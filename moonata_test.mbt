@@ -1215,3 +1215,31 @@ test "官方套件：sort 后 focus 绑定变量传播" {
     data("[\"Cruse\",\"Jones\",\"Smith\"]"),
   )
 }
+
+///|
+test "官方套件：arrayify 在 Sort 内嵌路径中保持数组包装" {
+  let nums = data("[3,1,4,1,5,9]")
+  // [] in the middle of path (inside Sort's expr) should force array wrapping
+  assert_eval("$#$pos[][$pos<3]^($)[-1]", nums, data("[4]"))
+  // Without []: returns scalar
+  assert_eval("$#$pos[$pos<3]^($)[-1]", nums, Json::number(4.0))
+}
+
+///|
+test "官方套件：parenthesized 路径保留祖先链供父级过滤" {
+  let d = data(
+    "{\"Account\":{\"Order\":[{\"OrderID\":\"order103\",\"Product\":[{\"Product Name\":\"Bowler Hat\",\"ProductID\":858383,\"SKU\":\"0406654608\"},{\"Product Name\":\"Trilby hat\",\"ProductID\":858236,\"SKU\":\"0406634348\"}]},{\"OrderID\":\"order104\",\"Product\":[{\"Product Name\":\"Bowler Hat\",\"ProductID\":858383,\"SKU\":\"040657863\"},{\"ProductID\":345664,\"SKU\":\"0406654603\",\"Product Name\":\"Cloak\"}]}]}}",
+  )
+  // (expr)[%.field] should access parent of each item in the parenthesized result
+  assert_eval(
+    "(Account.Order.Product)[%.OrderID='order104'].SKU",
+    d,
+    data("[\"040657863\",\"0406654603\"]"),
+  )
+  // (expr).%.field should access parent field for each item
+  assert_eval(
+    "(Account.Order.Product).%.OrderID",
+    d,
+    data("[\"order103\",\"order103\",\"order104\",\"order104\"]"),
+  )
+}

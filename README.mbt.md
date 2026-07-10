@@ -93,19 +93,19 @@ CI 在 `master` 分支推送、PR 以及手动触发时运行。
 
 ## 兼容性状态
 
-固定快照：2026-07-10，focus 绑定传播 + sort frames 提取修复阶段。
+固定快照：2026-07-10，arrayify 递归检测 + parenthesized 路径祖先链保留修复阶段。
 
 ```text
-本地测试：moon test 199/199
-官方可比对审计：eligible 1251, pass 1240, fail 11, skip 431
-通过率：99.2%
+本地测试：moon test 201/201
+官方可比对审计：eligible 1251, pass 1242, fail 9, skip 431
+通过率：99.4%
 ```
 
 当前剩余失败最多的官方测试分组：
 
 ```text
-parent-operator 5
-joins 4
+parent-operator 4
+joins 3
 performance 1
 transform 1
 ```

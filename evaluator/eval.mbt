@@ -360,15 +360,45 @@ fn eval_path(
 
 ///|
 /// 检查路径步中是否包含 Arrayify 步。
+/// 递归检查 Eval 步内部的表达式（如 Sort 内嵌的 Path），
+/// 因为 `[]` 可能出现在 Sort 的输入路径中（如 `$#$pos[][$pos<3]^($)[-1]`）。
 fn steps_has_arrayify(steps : Array[@ast.Step]) -> Bool {
   let mut found = false
   for step in steps {
-    if step.kind == @ast.StepKind::Arrayify {
-      found = true
-      break
+    match step.kind {
+      @ast.StepKind::Arrayify => {
+        found = true
+        break
+      }
+      @ast.StepKind::Eval(expr) =>
+        if ast_has_arrayify(expr) {
+          found = true
+          break
+        }
+      _ => ()
     }
   }
   found
+}
+
+///|
+/// 检查 AST 中是否包含 Arrayify 步（递归检查 Path 和 Sort 内部）。
+fn ast_has_arrayify(ast : @ast.Ast) -> Bool {
+  match ast {
+    @ast.Ast::Path(steps) => steps_has_arrayify(steps)
+    @ast.Ast::Sort(expr~, ..) => ast_has_arrayify(expr)
+    @ast.Ast::Block(exprs) => {
+      let mut found = false
+      for e in exprs {
+        if ast_has_arrayify(e) {
+          found = true
+          break
+        }
+      }
+      found
+    }
+    _ => false
+  }
 }
 
 ///|
@@ -881,19 +911,66 @@ fn eval_step_frame_single(
 ) -> Unit raise @error.JsonataError {
   match step.kind {
     @ast.StepKind::Eval(expr) => {
-      let r = ctx.with_lineage(current=frame.value, ancestors=frame.ancestors, fn() -> @value.JsonataValue raise @error.JsonataError {
-        with_frame_bindings(ctx, frame.bindings, fn() -> @value.JsonataValue raise @error.JsonataError {
-          eval(expr, ctx)
-        })
-      })
-      for
-        out in value_to_frames_with_bindings(
-          r,
-          frame.value,
-          frame.ancestors,
-          frame.bindings,
-        ) {
-        results.push(out)
+      // For Path expressions (including Block-wrapped paths from parenthesized
+      // expressions), use eval_path_frames to preserve ancestor chains
+      // (needed for subsequent % parent operator steps)
+      let inner_path_steps : Array[@ast.Step]? = match expr {
+        @ast.Ast::Path(steps) => Some(steps)
+        @ast.Ast::Block([@ast.Ast::Path(steps)]) => Some(steps)
+        _ => None
+      }
+      match inner_path_steps {
+        Some(inner_steps) => {
+          let inner_frames = ctx.with_lineage(
+            current=frame.value,
+            ancestors=frame.ancestors,
+            fn() -> Array[PathFrame] raise @error.JsonataError {
+              with_frame_bindings(ctx, frame.bindings, fn() -> Array[PathFrame] raise @error.JsonataError {
+                eval_path_frames(
+                  [path_frame(ctx.current(), ctx.ancestors())],
+                  inner_steps,
+                  0,
+                  ctx,
+                  inner_steps.length(),
+                )
+              })
+            },
+          )
+          for inner_frame in inner_frames {
+            // Merge outer frame bindings with inner frame bindings
+            let merged_bindings = copy_frame_bindings(frame.bindings)
+            for name, value in inner_frame.bindings {
+              merged_bindings[name] = value
+            }
+            results.push(
+              path_frame_with_bindings(
+                inner_frame.value,
+                inner_frame.ancestors,
+                merged_bindings,
+              ),
+            )
+          }
+        }
+        None => {
+          let r = ctx.with_lineage(
+            current=frame.value,
+            ancestors=frame.ancestors,
+            fn() -> @value.JsonataValue raise @error.JsonataError {
+              with_frame_bindings(ctx, frame.bindings, fn() -> @value.JsonataValue raise @error.JsonataError {
+                eval(expr, ctx)
+              })
+            },
+          )
+          for
+            out in value_to_frames_with_bindings(
+              r,
+              frame.value,
+              frame.ancestors,
+              frame.bindings,
+            ) {
+            results.push(out)
+          }
+        }
       }
     }
     @ast.StepKind::Name(name) =>
