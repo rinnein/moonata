@@ -1245,6 +1245,26 @@ test "官方套件：parenthesized 路径保留祖先链供父级过滤" {
 }
 
 ///|
+test "官方套件：dual-focus $keys(%) 父级键列表在 tuple stream + map 内解析" {
+  // After multiple focus steps, % inside a construct should resolve to the
+  // parent object (not the key name), so $keys(%) returns the object's keys.
+  // Fixes parent-operator cases 24/26: $keys(%) and $keys(%.%) in multi-focus
+  // paths now use step_frame ancestors for correct parent resolution.
+  let d = data(
+    "{\"library\":{\"books\":[{\"isbn\":\"978-0\"},{\"isbn\":\"978-1\"}],\"loans\":[{\"isbn\":\"978-0\"},{\"isbn\":\"978-1\"}],\"customers\":[{\"id\":\"c1\"},{\"id\":\"c2\"}]}}",
+  )
+  // library.loans@$L.books@$B[$L.isbn=$B.isbn]: two focus steps + join filter
+  // $keys(%) should return keys of the library object
+  assert_eval(
+    "library.loans@$L.books@$B[$L.isbn=$B.isbn].{ \"parent\": $keys(%) }",
+    d,
+    data(
+      "[{\"parent\":[\"books\",\"loans\",\"customers\"]},{\"parent\":[\"books\",\"loans\",\"customers\"]}]",
+    ),
+  )
+}
+
+///|
 test "官方套件：dual-focus tuple stream 路径从 focus 步输入继续" {
   // After @$var, subsequent path steps evaluate from the input to the focus
   // step (not the focused item, not the original root).  This matches

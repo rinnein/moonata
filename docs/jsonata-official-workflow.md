@@ -129,13 +129,13 @@ skip_reasons
 ```
 
 
-当前固定快照（2026-07-11，focus 步 tuple stream 路径继续修复，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-11，focus 步父级链修正，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1244 fail 7 skip 431
+eligible 1251 pass 1247 fail 4 skip 431
 top_failures
-joins 3
-parent-operator 2
+joins 1
+parent-operator 1
 performance 1
 transform 1
 skip_reasons
@@ -145,20 +145,20 @@ timelimit 7
 bindings 6
 ```
 
-本轮修复（focus 步 tuple stream 路径继续语义对齐）：
-- 提交：parent-operator 16→18 pass（4→2 fail, -2），整体 pass 1242→1244 (+2)，fail 9→7 (-2)，通过率 99.4%→99.6%
-- 门禁：`moon check` 0e0w，`moon test` 201→202 passed（+1 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+本轮修复（focus 步非 group 分支父级链修正）：
+- 提交：parent-operator 18→19 pass（2→1 fail, -1），joins 25→27 pass（3→1 fail, -2），整体 pass 1244→1247 (+3)，fail 7→4 (-3)，通过率 99.6%→99.68%
+- 门禁：`moon check` 0e0w，`moon test` 202→203 passed（+1 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：
-  - Evaluator: `eval_path_frames` focus 非 group 分支，后续路径从 `frames`（focus 步的输入）继续而非 `input`（函数入口原始值），对齐 JSONata-js tuple stream 语义（`@` 在 focus 后不变）
-  - Evaluator: `eval_path_from` focus 分支（group 和非 group），后续路径从 `current`（focus 步的输入）继续而非 `input`
-  - Tests: 新增 dual-focus tuple stream 路径继续回归断言
+  - Evaluator: `eval_path_frames` focus 非 group 分支，创建 input_frame 时使用 `frames[0].value`（保持 @ 正确）和 `frame.ancestors`（step_frame 的正确祖先链），替代旧的 `frames`（祖先链陈旧导致 `%` 在多级 focus 路径中解析到错误层级）
+  - Tests: 新增 dual-focus $keys(%) 父级键列表在 tuple stream + map 内解析回归断言
 - 已知限制：
-  - joins (3): `^($e.field)` sort + tuple binding + `.{ }` 路径（sort 后 focus 步递归重新求值丢失排序顺序）、`$.$#$pos[$pos<3]` tuple stream 重置
-  - parent-operator (2): `$keys(%)` / `$keys(%.%)` 在 tuple stream + map 内的父级键列表解析（% 返回字符串键名而非对象）
+  - joins (1): `$.$#$pos[$pos<3]` tuple stream 重置
+  - parent-operator (1): `library.loans@$L.books@$B...customers@$C...$keys(%.%)` 三级 focus + %.% 祖先链重复导致解析偏差（jsonata-js v2.2.1 同样返回空，属上游未实现行为）
   - performance (1): `$$.items[$i]` 父级引用配合位置绑定（tuple stream 架构问题）
   - transform (1): `state.tempReadings[[1..4]]` slice 展平（tuple stream）
-  - 注：剩余 7 个失败用例在 JSONata-js v2.2.1 中同样不通过（返回空），属于上游未实现行为
-- 提交：joins 21→22 pass（4→3 fail, -1），parent-operator 15→16 pass（5→4 fail, -1），整体 pass 1240→1242 (+2)，fail 11→9 (-2)，通过率 99.2%→99.4%
+  - 注：剩余 4 个失败用例在 JSONata-js v2.2.1 中同样不通过（返回空），属于上游未实现行为
+
+上一轮修复（focus 步 tuple stream 路径继续语义对齐）：
 - 门禁：`moon check` 0e0w，`moon test` 199→201 passed（+2 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：
   - Evaluator: `steps_has_arrayify` 递归检查 `Eval(expr)` 步内部的表达式（如 Sort 内嵌的 Path），新增 `ast_has_arrayify` 函数递归检测 Path/Sort/Block——修复 `[]` 出现在 Sort 输入路径中（如 `$#$pos[][$pos<3]^($)[-1]`）时 arrayify 未被应用的问题

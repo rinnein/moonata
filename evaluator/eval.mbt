@@ -488,11 +488,17 @@ fn eval_path_frames(
                 let bound_frame = bind_frame(frame, name, frame.value)
                 // JSONata-js tuple stream: after a focus step, @ stays as the
                 // input to that step (not the focused item, not the original root).
-                // Pass 'frames' (the state before this focus step) so that
-                // subsequent path steps evaluate from the correct context.
+                // Use step_frame's ancestors for correct % parent resolution
+                // through focus/tuple-stream chains (e.g. $keys(%) in multi-focus
+                // paths), while keeping the pre-focus frame's value for @.
+                let input_frame = path_frame_with_bindings(
+                  frames[0].value,
+                  frame.ancestors,
+                  bound_frame.bindings,
+                )
                 let r = ctx.with_binding(name, frame.value, fn() -> @value.JsonataValue raise @error.JsonataError {
                   frames_to_value(
-                    eval_path_frames(frames, steps, i + 1, ctx, stop_at),
+                    eval_path_frames([input_frame], steps, i + 1, ctx, stop_at),
                   )
                 })
                 match r {
