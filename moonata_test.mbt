@@ -1603,3 +1603,143 @@ test "官方套件：range-operator case022/023 - D2014 range 过大" {
   }
   assert_true(raised2)
 }
+
+///|
+test "官方套件：function-formatNumber D3082/D3083 多个 percent/permille" {
+  let d = Json::null()
+  // $formatNumber(20,"#0%%") → D3082 (multiple percent)
+  let raised1 = try {
+    ignore(evaluate("$formatNumber(20,\"#0%%\")", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3082"
+    _ => false
+  }
+  assert_true(raised1)
+  // $formatNumber(20,"#0‰‰") → D3083 (multiple permille)
+  let raised2 = try {
+    ignore(evaluate("$formatNumber(20,\"#0‰‰\")", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3083"
+    _ => false
+  }
+  assert_true(raised2)
+}
+
+///|
+test "官方套件：function-formatNumber D3085 mantissa 无数字" {
+  let d = Json::null()
+  // $formatNumber(20,".e0") → D3085 (mantissa must have digit/#)
+  let raised = try {
+    ignore(evaluate("$formatNumber(20,\".e0\")", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3085"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：function-formatNumber D3086/D3087/D3088 被动字符与分隔符" {
+  let d = Json::null()
+  // $formatNumber(42, '%%') → D3086 (passive in activePart)
+  let raised1 = try {
+    ignore(evaluate("$formatNumber(42, '%%')", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3086"
+    _ => false
+  }
+  assert_true(raised1)
+  // $formatNumber(42, '%‰') → D3086 (passive in activePart, overrides D3084)
+  let raised2 = try {
+    ignore(evaluate("$formatNumber(42, '%‰')", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3086"
+    _ => false
+  }
+  assert_true(raised2)
+  // $formatNumber(20,"0,.e0") → D3087 (grouping adjacent to decimal)
+  let raised3 = try {
+    ignore(evaluate("$formatNumber(20,\"0,.e0\")", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3087"
+    _ => false
+  }
+  assert_true(raised3)
+  // $formatNumber(20,"0,") → D3088 (grouping at end of integer part)
+  let raised4 = try {
+    ignore(evaluate("$formatNumber(20,\"0,\")", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3088"
+    _ => false
+  }
+  assert_true(raised4)
+}
+
+///|
+test "官方套件：function-formatNumber D3089/D3090/D3091 分组与数字顺序" {
+  let d = Json::null()
+  // $formatNumber(20,"0,,0") → D3089 (two adjacent grouping separators)
+  let raised1 = try {
+    ignore(evaluate("$formatNumber(20,\"0,,0\")", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3089"
+    _ => false
+  }
+  assert_true(raised1)
+  // $formatNumber(20,"0#.e0") → D3090 (digit before # in integer)
+  let raised2 = try {
+    ignore(evaluate("$formatNumber(20,\"0#.e0\")", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3090"
+    _ => false
+  }
+  assert_true(raised2)
+  // $formatNumber(20,"#0.#0e0") → D3091 (# before digit in fractional)
+  let raised3 = try {
+    ignore(evaluate("$formatNumber(20,\"#0.#0e0\")", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3091"
+    _ => false
+  }
+  assert_true(raised3)
+}
+
+///|
+test "官方套件：function-formatNumber D3092/D3093 指数部分约束" {
+  let d = Json::null()
+  // $formatNumber(20,"#0.0e0%") → D3092 (exponent with percent)
+  let raised1 = try {
+    ignore(evaluate("$formatNumber(20,\"#0.0e0%\")", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3092"
+    _ => false
+  }
+  assert_true(raised1)
+  // $formatNumber(20,"#0.0e0,0") → D3093 (exponent must be all digits)
+  let raised2 = try {
+    ignore(evaluate("$formatNumber(20,\"#0.0e0,0\")", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3093"
+    _ => false
+  }
+  assert_true(raised2)
+}
+
+///|
+test "官方套件：function-formatNumber undefined 输入传播" {
+  // $formatNumber(foo, '#0.00') where foo is undefined → undefined (null)
+  let d = Json::null()
+  assert_eval("$formatNumber(foo, '#0.00')", d, Json::null())
+}

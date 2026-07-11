@@ -136,12 +136,11 @@ skip_reasons
 下方固定快照仍是旧口径下的历史记录；本轮脚本升级后，`skip` 分类会更细，待下一次复跑官方审计后再刷新这里的数字。
 
 
-当前固定快照（2026-07-11，JSONata 错误码系统 + range 边界严格校验，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-11，$formatNumber picture 完整校验 + undefined 传播，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1667 pass 1536 fail 131 skip 15
+eligible 1667 pass 1550 fail 117 skip 15
 top_failures
-function-formatNumber 14
 parent-operator 13
 errors 9
 function-tomillis 9
@@ -151,11 +150,27 @@ function-replace 5
 object-constructor 5
 comparison-operators 4
 function-string 4
+hof-single 4
 skip_reasons
 no_expected_outcome 15
 ```
 
-本轮修复（JSONata 错误码系统 + range 边界严格校验）：
+本轮修复（$formatNumber picture 完整校验 D3081-D3093 + undefined 传播）：
+- 提交：整体 pass 1536→1550 (+14)，fail 131→117 (-14)，通过率 92.2%→93.0%
+- 门禁：`moon check` 0e0w，`moon test` 230/230 passed（+6 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Functions: 重写 `validate_format_picture`，对齐 JSONata-js `validate` 的 D3081-D3093 全检查顺序与 last-error-wins 语义（后检测的错误覆盖之前的）
+  - Functions: 新增 `validate_format_subpicture` 处理单个子图，计算 prefix/suffix/activePart/mantissa/exponent/integer/fraction 各部分
+  - Functions: 新增 `is_format_active_char` 判定活跃字符（数字 0-9、#、.、,、;、e/E）
+  - Functions: 对齐 prefix/suffix 边界——无活跃字符时 prefix="" 使 activePart 包含整个子图（修复 `%%`/`---` 等纯被动字符子图的 D3086 检测）
+  - Functions: D3082/D3083 多个 %/‰、D3084 混用、D3085 mantissa 无数字、D3086 activePart 含被动字符、D3087 分组邻小数点、D3088 整数末尾分组、D3089 相邻分组、D3090/# 顺序、D3091 小数 #/数字顺序、D3092 指数含 %/‰、D3093 指数非全数字
+  - Functions: `$formatNumber` 对 undefined 输入返回 undefined（对齐 JSONata-js 语义），修复 case036
+  - Functions: 验证在 zero-digit 归一化后进行，使 ① 等数字族字符被正确识别为 active
+  - Tests: 新增 function-formatNumber D3082/D3083/D3085/D3086/D3087/D3088/D3089/D3090/D3091/D3092/D3093 + undefined 传播共 6 个回归断言
+- 修复效果：`function-formatNumber` group 14→0 fail（全绿 45/45）
+- 已知限制：errors 剩余 9 个失败涉及更深层语义（留待后续轮次）
+
+上一轮修复（JSONata 错误码系统 + range 边界严格校验）：
 - 提交：整体 pass 1505→1536 (+31)，fail 162→131 (-31)，通过率 90.2%→92.2%
 - 门禁：`moon check` 0e0w，`moon test` 224/224 passed（+10 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：

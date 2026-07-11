@@ -214,9 +214,12 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
   })
   // $formatNumber(number, picture, options?)
   register(ctx, "formatNumber", arity=2, invoke=(args, _ctx) => {
+    // undefined 输入传播为 undefined（对齐 JSONata-js 语义）
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     let n = value_to_double(args[0])
     let picture = value_to_str(args[1])
-    validate_format_picture(picture)
     let per_mille = if args.length() > 2 {
       option_string(args[2], "per-mille")
     } else {
@@ -227,6 +230,9 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
     } else {
       None
     }
+    // 验证在 zero-digit 归一化后进行，使 ① 等数字族字符被正确识别为 active
+    let normalized = normalize_number_picture_digits(picture, zero_digit)
+    validate_format_picture(normalized)
     @value.JsonataValue::Json(
       Json::string(format_number(n, picture, per_mille, zero_digit)),
     )
@@ -348,6 +354,9 @@ fn option_string(v : @value.JsonataValue, key : String) -> String? {
 
 ///|
 /// 验证 $formatNumber picture 格式，无效时抛出对应 JSONata 错误码。
+///
+/// 对齐 JSONata-js `validate` 函数的语义：按 D3081-D3093 顺序检查每个子图，
+/// 后检测到的错误覆盖之前的（last-error-wins），与官方实现一致。
 fn validate_format_picture(picture : String) -> Unit raise @error.JsonataError {
   // D3080: 多于一个分号（多于两个子图）
   let mut semicolons = 0
@@ -357,62 +366,283 @@ fn validate_format_picture(picture : String) -> Unit raise @error.JsonataError {
     }
   }
   if semicolons > 1 {
-    raise @error.runtime_error("D3080: Invalid picture: too many sub-pictures")
+    raise @error.runtime_error(
+      "D3080: Invalid picture: too many sub-pictures",
+      code=Some("D3080"),
+    )
   }
-  // D3086: 多个前缀特殊字符（---、%%、‰‰、%‰）
-  let prefix = leading_number_prefix(picture)
-  let mut prefix_special = 0
-  for _, c in prefix {
-    if c == '-' || c == '%' || c == '‰' {
-      prefix_special = prefix_special + 1
+  // 对每个子图执行完整验证；任一子图失败即抛出（取第一个失败的子图）
+  for _, sub in picture.split(";").to_array() {
+    validate_format_subpicture(sub.to_owned())
+  }
+}
+
+///|
+/// 活跃字符集合：数字 (0-9)、小数点 (.)、指数分隔符 (e/E)、分组分隔符 (,)、
+/// 可选数字 (#)、模式分隔符 (;)。
+fn is_format_active_char(c : Char) -> Bool {
+  match c {
+    '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' => true
+    '#' | '.' | ',' | ';' => true
+    'e' | 'E' => true
+    _ => false
+  }
+}
+
+///|
+/// 验证单个子图，对齐 JSONata-js `validate` 的检查顺序与 last-error-wins 语义。
+fn validate_format_subpicture(
+  subpicture : String,
+) -> Unit raise @error.JsonataError {
+  if subpicture == "" {
+    return
+  }
+  let chars = subpicture.to_array()
+  let n = chars.length()
+  // 计算前缀：第一个活跃字符（不含 e/E）之前的部分
+  // 对齐 JSONata-js：若无活跃字符，prefix=""，使 activePart 包含整个子图
+  let mut prefix_end = -1
+  for k in 0..<n {
+    let c = chars[k]
+    if is_format_active_char(c) && c != 'e' && c != 'E' {
+      prefix_end = k
+      break
     }
   }
-  if prefix_special > 1 {
-    raise @error.runtime_error(
-      "D3086: Invalid picture: too many prefix characters",
-    )
+  let prefix_start = match prefix_end {
+    -1 => 0 // 无活跃字符，prefix=""，activePart 从 0 开始
+    _ => prefix_end
   }
-  // D3081: 小数部分多于一个点
-  let normalized = normalize_number_picture_digits(picture, None)
-  let after_semicolon = match normalized.find(";") {
-    Some(i) => normalized[i + 1:].to_owned()
-    None => normalized
-  }
-  let mut dots = 0
-  for _, c in after_semicolon {
-    if c == '.' {
-      dots = dots + 1
+  // 计算后缀：最后一个活跃字符（不含 e/E）之后的部分
+  // 对齐 JSONata-js：若无活跃字符，suffix=""
+  let mut suffix_start = n
+  let mut k = n
+  while k > 0 {
+    k = k - 1
+    let c = chars[k]
+    if is_format_active_char(c) && c != 'e' && c != 'E' {
+      suffix_start = k + 1
+      break
     }
   }
-  if dots > 1 {
-    raise @error.runtime_error(
-      "D3081: Invalid picture: multiple decimal separators",
-    )
+  // activePart = subpicture[prefix_start .. suffix_start]
+  let active_part_chars : Array[Char] = []
+  for k2 in prefix_start..<suffix_start {
+    active_part_chars.push(chars[k2])
   }
-  // D3082/D3083/D3084: percent 和/或 permille 重复或混用
-  let after_prefix = strip_number_prefix(after_semicolon, prefix)
-  let suffix = trailing_number_suffix(after_prefix)
-  let body = strip_number_suffix(after_prefix, suffix)
-  let body_has_percent = body.contains("%")
-  let suffix_has_percent = suffix.contains("%")
-  let body_has_permille = body.contains("‰")
-  let suffix_has_permille = suffix.contains("‰")
-  let pct_count = (if body_has_percent { 1 } else { 0 }) +
-    (if suffix_has_percent { 1 } else { 0 })
-  let pm_count = (if body_has_permille { 1 } else { 0 }) +
-    (if suffix_has_permille { 1 } else { 0 })
-  if pct_count > 1 {
-    raise @error.runtime_error("D3082: Invalid picture: multiple percent signs")
+  // 找 activePart 中的指数分隔符位置（第一个 e/E）
+  let mut exp_pos_in_active = -1
+  for k in 0..<active_part_chars.length() {
+    let c = active_part_chars[k]
+    if c == 'e' || c == 'E' {
+      exp_pos_in_active = k
+      break
+    }
   }
-  if pm_count > 1 {
-    raise @error.runtime_error(
-      "D3083: Invalid picture: multiple permille signs",
-    )
+  // mantissaPart = activePart[:exp_pos] (若无指数则整个 activePart)
+  // exponentPart = activePart[exp_pos+1:]
+  let mantissa_chars : Array[Char] = []
+  let exponent_chars : Array[Char] = []
+  if exp_pos_in_active == -1 {
+    for c in active_part_chars {
+      mantissa_chars.push(c)
+    }
+  } else {
+    for k in 0..<exp_pos_in_active {
+      mantissa_chars.push(active_part_chars[k])
+    }
+    let exp_start = exp_pos_in_active + 1
+    for k in exp_start..<active_part_chars.length() {
+      exponent_chars.push(active_part_chars[k])
+    }
   }
-  if pct_count >= 1 && pm_count >= 1 {
-    raise @error.runtime_error(
-      "D3084: Invalid picture: percent and permille mixed",
-    )
+  // mantissaPart 中找小数点
+  let mut decimal_pos_in_mantissa = -1
+  for k in 0..<mantissa_chars.length() {
+    if mantissa_chars[k] == '.' {
+      decimal_pos_in_mantissa = k
+      break
+    }
+  }
+  // integerPart, fractionalPart
+  let integer_chars : Array[Char] = []
+  let fractional_chars : Array[Char] = []
+  if decimal_pos_in_mantissa == -1 {
+    for c in mantissa_chars {
+      integer_chars.push(c)
+    }
+  } else {
+    for k in 0..<decimal_pos_in_mantissa {
+      integer_chars.push(mantissa_chars[k])
+    }
+    let frac_start = decimal_pos_in_mantissa + 1
+    for k in frac_start..<mantissa_chars.length() {
+      fractional_chars.push(mantissa_chars[k])
+    }
+  }
+  // last-error-wins：按 JSONata 顺序检查，记录最后一个错误
+  let mut error_code : String? = None
+  // D3081: 子图中多于一个小数点
+  let mut first_dot = -1
+  let mut last_dot = -1
+  for k in 0..<n {
+    if chars[k] == '.' {
+      if first_dot == -1 {
+        first_dot = k
+      }
+      last_dot = k
+    }
+  }
+  if first_dot != -1 && first_dot != last_dot {
+    error_code = Some("D3081")
+  }
+  // D3082: 子图中多于一个 %
+  let mut first_pct = -1
+  let mut last_pct = -1
+  for k in 0..<n {
+    if chars[k] == '%' {
+      if first_pct == -1 {
+        first_pct = k
+      }
+      last_pct = k
+    }
+  }
+  if first_pct != -1 && first_pct != last_pct {
+    error_code = Some("D3082")
+  }
+  // D3083: 子图中多于一个 ‰
+  let mut first_pm = -1
+  let mut last_pm = -1
+  for k in 0..<n {
+    if chars[k] == '‰' {
+      if first_pm == -1 {
+        first_pm = k
+      }
+      last_pm = k
+    }
+  }
+  if first_pm != -1 && first_pm != last_pm {
+    error_code = Some("D3083")
+  }
+  // D3084: 同时含 % 和 ‰
+  if first_pct != -1 && first_pm != -1 {
+    error_code = Some("D3084")
+  }
+  // D3085: mantissaPart 至少含一个数字字符或 #
+  let mut has_digit_or_hash = false
+  for c in mantissa_chars {
+    if c == '#' || (c >= '0' && c <= '9') {
+      has_digit_or_hash = true
+      break
+    }
+  }
+  if !has_digit_or_hash {
+    error_code = Some("D3085")
+  }
+  // D3086: activePart 中含被动字符（前后被活跃字符夹住，或任意被动字符）
+  let mut has_passive_in_active = false
+  for c in active_part_chars {
+    if !is_format_active_char(c) {
+      has_passive_in_active = true
+      break
+    }
+  }
+  if has_passive_in_active {
+    error_code = Some("D3086")
+  }
+  // D3087: 小数点前后紧邻分组分隔符
+  if decimal_pos_in_mantissa != -1 {
+    // 在 subpicture 中找小数点的全局位置
+    let global_dot = prefix_start + decimal_pos_in_mantissa
+    if global_dot > 0 && chars[global_dot - 1] == ',' {
+      error_code = Some("D3087")
+    }
+    if global_dot + 1 < n && chars[global_dot + 1] == ',' {
+      error_code = Some("D3087")
+    }
+    // 无小数点时，integerPart 末尾不能是分组分隔符
+  } else if integer_chars.length() > 0 &&
+    integer_chars[integer_chars.length() - 1] == ',' {
+    error_code = Some("D3088")
+  }
+  // D3089: 两个相邻的分组分隔符
+  let mut k = 0
+  while k + 1 < n {
+    if chars[k] == ',' && chars[k + 1] == ',' {
+      error_code = Some("D3089")
+    }
+    k = k + 1
+  }
+  // D3090: integerPart 中 # 前面有数字字符
+  let mut opt_digit_pos = -1
+  for k in 0..<integer_chars.length() {
+    if integer_chars[k] == '#' {
+      opt_digit_pos = k
+      break
+    }
+  }
+  if opt_digit_pos != -1 {
+    let mut has_digit_before = false
+    for k in 0..<opt_digit_pos {
+      let c = integer_chars[k]
+      if c >= '0' && c <= '9' {
+        has_digit_before = true
+        break
+      }
+    }
+    if has_digit_before {
+      error_code = Some("D3090")
+    }
+  }
+  // D3091: fractionalPart 中 # 后面有数字字符
+  let mut last_opt_digit = -1
+  for k in 0..<fractional_chars.length() {
+    if fractional_chars[k] == '#' {
+      last_opt_digit = k
+    }
+  }
+  if last_opt_digit != -1 {
+    let mut has_digit_after = false
+    let after_start = last_opt_digit + 1
+    for k in after_start..<fractional_chars.length() {
+      let c = fractional_chars[k]
+      if c >= '0' && c <= '9' {
+        has_digit_after = true
+        break
+      }
+    }
+    if has_digit_after {
+      error_code = Some("D3091")
+    }
+  }
+  // D3092: 含 %/‰ 的子图不能有指数部分
+  let exponent_exists = exp_pos_in_active != -1 && exponent_chars.length() > 0
+  if exponent_exists && (first_pct != -1 || first_pm != -1) {
+    error_code = Some("D3092")
+  }
+  // D3093: 指数部分必须全为数字字符
+  if exp_pos_in_active != -1 {
+    let mut all_digits = true
+    if exponent_chars.length() == 0 {
+      all_digits = false
+    }
+    for c in exponent_chars {
+      if !(c >= '0' && c <= '9') {
+        all_digits = false
+        break
+      }
+    }
+    if !all_digits {
+      error_code = Some("D3093")
+    }
+  }
+  match error_code {
+    Some(code) =>
+      raise @error.runtime_error(
+        "D30xx: Invalid picture string: \{subpicture}",
+        code=Some(code),
+      )
+    None => ()
   }
 }
 
