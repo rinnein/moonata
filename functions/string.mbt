@@ -98,11 +98,15 @@ fn register_string_functions(ctx : @value.EvalContext) -> Unit {
     let sub = value_to_str(args[1])
     @value.JsonataValue::Json(Json::boolean(s.contains(sub)))
   })
-  // $replace(str, pattern, replacement?)
+  // $replace(str, pattern, replacement)
   register(ctx, "replace", arity=3, signature=Some("sss"), invoke=fn(
     args,
     _ctx,
   ) {
+    match args[0] {
+      @value.JsonataValue::Undefined => return @value.JsonataValue::Undefined
+      _ => ()
+    }
     let s = value_to_str(args[0])
     let pattern = value_to_str(args[1])
     let replacement = if args.length() > 2 { value_to_str(args[2]) } else { "" }

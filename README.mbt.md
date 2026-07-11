@@ -91,14 +91,14 @@ docs: update official test status
 
 ## 兼容性状态
 
-固定快照：2026-07-11，错误码对齐与参数验证阶段。
+固定快照：2026-07-11，函数参数严格验证阶段。
 
 ```text
 本地测试：moon test 206/206
-官方可比对审计：eligible 1667, pass 1395, fail 272, skip 15
-通过率：83.7%
+官方可比对审计：eligible 1667, pass 1415, fail 252, skip 15
+通过率：84.9%
 ```
 
-Top failures: errors(23), parent-operator(20), function-formatNumber(14), transform(13), function-signatures(11), function-max(10), function-number(10), function-tomillis(9), joins(9), function-replace(8)
+Top failures: errors(23), parent-operator(20), function-formatNumber(14), transform(13), function-signatures(11), function-tomillis(9), joins(9), function-replace(8), function-split(8), function-length(7)
 
 官方测试集审计流程与跳过策略记录在 `docs/jsonata-official-workflow.md`。

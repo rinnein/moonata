@@ -8,6 +8,9 @@ fn register_type_functions(ctx : @value.EvalContext) -> Unit {
   })
   // $number
   register(ctx, "number", arity=1, signature=Some("j"), invoke=(args, _ctx) => {
+    if args.length() > 1 {
+      raise @error.runtime_error("T0410: Wrong number of arguments")
+    }
     match args[0] {
       @value.JsonataValue::Json(Json::Number(_, ..)) => args[0]
       @value.JsonataValue::Json(Json::String(s)) =>
@@ -22,6 +25,22 @@ fn register_type_functions(ctx : @value.EvalContext) -> Unit {
         @value.JsonataValue::Json(Json::number(1.0))
       @value.JsonataValue::Json(Json::False) =>
         @value.JsonataValue::Json(Json::number(0.0))
+      @value.JsonataValue::Json(Json::Null) =>
+        raise @error.runtime_error(
+          "T0410: It is not possible to cast a null value to a number",
+        )
+      @value.JsonataValue::Json(Json::Array(_)) =>
+        raise @error.runtime_error(
+          "T0410: It is not possible to cast an array to a number",
+        )
+      @value.JsonataValue::Json(Json::Object(_)) =>
+        raise @error.runtime_error(
+          "T0410: It is not possible to cast an object to a number",
+        )
+      @value.JsonataValue::Func(_) =>
+        raise @error.runtime_error(
+          "T0410: It is not possible to cast a function to a number",
+        )
       _ => @value.JsonataValue::Undefined
     }
   })
