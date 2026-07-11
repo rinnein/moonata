@@ -178,6 +178,10 @@ fn Parser::parse_lambda(self : Parser) -> @ast.Ast raise @error.JsonataError {
   }
   self.expect(@lexer.TokenKind::RParen, what="')'")
   let signature = self.parse_signature()
+  match signature {
+    Some(sig) => validate_signature_syntax(sig)
+    None => ()
+  }
   self.expect(@lexer.TokenKind::LBrace, what="'{' for lambda body")
   let body = self.parse_block()
   self.expect(@lexer.TokenKind::RBrace, what="'}'")
@@ -185,13 +189,94 @@ fn Parser::parse_lambda(self : Parser) -> @ast.Ast raise @error.JsonataError {
 }
 
 ///|
+/// 校验函数签名的语法正确性，提前抛出 `S0401`/`S0402`。
+///
+/// 完整的运行时类型校验在 `value` 包中进行；本函数仅检测 JSONata 签名
+/// 语法层面的错误，使错误在解析阶段就向上传播，避免被后续 `expect('{')` 等
+/// 语法错误掩盖。
+fn validate_signature_syntax(sig : String) -> Unit raise @error.JsonataError {
+  let chars = sig.to_array()
+  let n = chars.length()
+  // 跳过外层 `<>`
+  let mut start = 0
+  let mut end = n
+  if n >= 2 && chars[0] == '<' && chars[n - 1] == '>' {
+    start = 1
+    end = n - 1
+  }
+  let mut paren_depth = 0
+  let mut prev_base : Char? = None
+  let mut i = start
+  while i < end {
+    let c = chars[i]
+    match c {
+      's' | 'n' | 'b' | 'o' | 'l' | 'a' | 'f' | 'j' | 'x' => prev_base = Some(c)
+      '(' => {
+        paren_depth += 1
+        prev_base = None
+      }
+      ')' => {
+        paren_depth -= 1
+        prev_base = None
+      }
+      '<' => {
+        // 类型参数：仅允许在 'a' 或 'f' 之后；不允许在 (...) 内
+        if paren_depth > 0 {
+          raise @error.signature_error(
+            "S0402: 选择类型内不支持参数化类型 '<...>' in signature: \{sig}",
+          )
+        }
+        match prev_base {
+          Some(b) if b == 'a' || b == 'f' => ()
+          _ =>
+            raise @error.signature_error(
+              "S0401: 类型参数 '<...>' 只能跟在 'a' 或 'f' 之后 in signature: \{sig}",
+            )
+        }
+        // 跳过到匹配的 '>'
+        let mut depth = 1
+        i += 1
+        let mut found = false
+        while i < end {
+          if chars[i] == '<' {
+            depth += 1
+          } else if chars[i] == '>' {
+            depth -= 1
+            if depth == 0 {
+              found = true
+              break
+            }
+          }
+          i += 1
+        }
+        if !found {
+          raise @error.signature_error(
+            "S0401: 未闭合的 '<' in signature: \{sig}",
+          )
+        }
+        prev_base = None
+      }
+      '?' | '+' | '-' | ':' | ' ' | '\t' | '\n' | '\r' => ()
+      _ =>
+        raise @error.signature_error(
+          "S0401: 无法识别的签名符号 '\{c}' in signature: \{sig}",
+        )
+    }
+    i += 1
+  }
+}
+
+///|
 fn Parser::parse_signature(self : Parser) -> String? raise @error.JsonataError {
   if self.peek_kind() != @lexer.TokenKind::Lt {
     return None
   }
+  // 拼接原始词素，保留 JSONata 签名语义（如 `a<s>s?:s`）以便运行时校验
   let out = StringBuilder::new()
-  let mut depth = 0
-  for ;; {
+  out.write_string("<")
+  ignore(self.advance()) // 消费起始 '<'
+  let mut depth = 1
+  while depth > 0 {
     if self.at_end() {
       raise @error.syntax_error(
         "未终止的函数签名",
@@ -202,19 +287,19 @@ fn Parser::parse_signature(self : Parser) -> String? raise @error.JsonataError {
     match self.peek_kind() {
       @lexer.TokenKind::Lt => {
         depth += 1
-        out.write_string(debug_tok(self.peek()))
+        out.write_string(token_lexeme(self.peek()))
         ignore(self.advance())
       }
       @lexer.TokenKind::Gt => {
-        out.write_string(debug_tok(self.peek()))
-        ignore(self.advance())
         depth -= 1
+        out.write_string(token_lexeme(self.peek()))
+        ignore(self.advance())
         if depth == 0 {
           break
         }
       }
       _ => {
-        out.write_string(debug_tok(self.peek()))
+        out.write_string(token_lexeme(self.peek()))
         ignore(self.advance())
       }
     }

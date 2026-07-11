@@ -1280,3 +1280,115 @@ test "官方套件：dual-focus tuple stream 路径从 focus 步输入继续" {
     data("[{\"title\":\"SICP\"},{\"title\":\"Compilers\"}]"),
   )
 }
+
+///|
+test "官方套件：function-signatures case011/012 - a<s>s?:s 标量包装与数组校验" {
+  // λ($arr, $sep)<a<s>s?:s>{$join($arr, $sep)}
+  // - 标量 "a" 经 a<s> 校验后包装为单元素数组 ["a"]
+  // - 可选 $sep 缺省时 $join 使用空字符串
+  let d = Json::null()
+  assert_eval(
+    "λ($arr, $sep)<a<s>s?:s>{$join($arr, $sep)}(\"a\")",
+    d,
+    Json::string("a"),
+  )
+  assert_eval(
+    "λ($arr, $sep)<a<s>s?:s>{$join($arr, $sep)}([\"a\"])",
+    d,
+    Json::string("a"),
+  )
+}
+
+///|
+test "官方套件：function-signatures case026 - S0401 类型参数位置错误" {
+  // <n<n>>：'<' 类型参数只能跟在 'a' 或 'f' 之后
+  let d = Json::null()
+  let raised = try {
+    ignore(evaluate("λ($arg)<n<n>>{$arg}(5)", d))
+    false
+  } catch {
+    @error.JsonataError::SignatureError(message=m, ..) => m.contains("S0401")
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：function-signatures case027/028/029 - T0410 类型与数量不匹配" {
+  // <nn:a>、<nn+:a>：参数数量/类型不匹配应抛 T0410
+  let d = Json::null()
+  for
+    expr in [
+      "λ($arg1, $arg2)<nn:a>{[$arg1, $arg2]}(1,\"2\")", "λ($arg1, $arg2)<nn:a>{[$arg1, $arg2]}(1,3,\"2\")",
+      "λ($arg1, $arg2)<nn+:a>{[$arg1, $arg2]}(1,3, 2,\"g\")",
+    ] {
+    let raised = try {
+      ignore(evaluate(expr, d))
+      false
+    } catch {
+      @error.JsonataError::SignatureError(message=m, ..) => m.contains("T0410")
+      _ => false
+    }
+    assert_true(raised)
+  }
+}
+
+///|
+test "官方套件：function-signatures case030-033 - T0412 数组元素类型不匹配" {
+  // <a<n>>：数组元素类型不匹配应抛 T0412
+  let d = Json::null()
+  for
+    expr in [
+      "λ($arr)<a<n>>{$arr}([\"3\"])", "λ($arr)<a<n>>{$arr}([1, 2, \"3\"])", "λ($arr)<a<n>>{$arr}(\"f\")",
+      "($fun := λ($arr)<a<n>>{$arr};$fun(\"f\"))",
+    ] {
+    let raised = try {
+      ignore(evaluate(expr, d))
+      false
+    } catch {
+      @error.JsonataError::SignatureError(message=m, ..) => m.contains("T0412")
+      _ => false
+    }
+    assert_true(raised)
+  }
+}
+
+///|
+test "官方套件：function-signatures case034 - S0402 选择类型内不支持参数化类型" {
+  // <(sa<n>)>：'(' 选择类型内出现 '<' 应抛 S0402
+  let d = Json::null()
+  let raised = try {
+    ignore(evaluate("λ($arr)<(sa<n>)>>{$arr}([[1]])", d))
+    false
+  } catch {
+    @error.JsonataError::SignatureError(message=m, ..) => m.contains("S0402")
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：function-signatures case035 - n+n 可变参数与后续必需参数分配" {
+  // <n+n:o>：第一个 n 为可变参数，第二个 n 为必需参数
+  // 调用 (1, 2, 3) 时，可变参数消费 2 个（1, 2），必需参数消费 1 个（3）
+  // $arg1=1, $arg2=2，第三个参数无对应绑定，被忽略
+  let d = Json::null()
+  assert_eval(
+    "λ($arg1, $arg2)<n+n:o>{{\"$arg1\": $arg1, \"$arg2\": $arg2}}(1, 2, 3)",
+    d,
+    data("{\"$arg1\": 1, \"$arg2\": 2}"),
+  )
+}
+
+///|
+test "官方套件：function-signatures case040 - s?n+ 可选参数与可变参数组合" {
+  // <s?n+:a<n>>：可选 s + 可变 n
+  // 调用 (1, 2, 3) 时，s? 不匹配 'n'，跳过；n+ 消费所有 3 个
+  // $arg1=1, $arg2=2，第三个被丢弃
+  let d = Json::null()
+  assert_eval(
+    "λ($arg1, $arg2)<s?n+:a<n>>{[$arg1, $arg2]}(1, 2, 3)",
+    d,
+    data("[1, 2]"),
+  )
+}

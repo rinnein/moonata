@@ -209,8 +209,8 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
     if args[0] is @value.JsonataValue::Json(Json::Null) {
       raise @error.runtime_error("T0410: Arguments are not of expected type")
     }
-    // Separator must be string if provided
-    if args.length() > 1 {
+    // Separator must be string if provided; undefined treated as not provided
+    if args.length() > 1 && !args[1].is_undefined() {
       match args[1] {
         @value.JsonataValue::Json(Json::String(_)) => ()
         _ =>

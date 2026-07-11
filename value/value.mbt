@@ -45,46 +45,39 @@ pub fn JsonataFunc::new(
 }
 
 ///|
-/// 按简化签名检查已提供参数。
+/// 按签名检查已提供参数。
 ///
-/// 支持的类型码：`s` string、`n` number、`b` boolean、`a` array、`o` object、
-/// `f` function、`j` any JSON/value。未提供签名时跳过检查。
+/// 签名格式参见 JSONata `parseSignature`：
+/// - 简单签名（如 `"sn"`、`"sss"`）：仅基础类型字符，宽松校验。
+/// - 复杂签名（含 `?`/`+`/`-`/`:`/`<`/`>`/`(`/`)`）：严格校验参数数量、类型、
+///   数组子类型、可选/可变/上下文修饰符，并按 JSONata 语义将标量提升为单元素数组。
+///
+/// 错误代码：`T0410`（数量/类型不匹配）、`T0411`（上下文值不兼容）、
+/// `T0412`（数组元素类型不匹配）、`S0401`/`S0402`（签名语法错误）。
 pub fn JsonataFunc::check_args(
   self : JsonataFunc,
   args : Array[JsonataValue],
 ) -> Unit raise @error.JsonataError {
   match self.signature {
     Some(sig) => {
-      let chars = sig.to_array()
-      let limit = args.length().min(chars.length())
-      for i in 0..<limit {
-        if !matches_signature(args[i], chars[i]) {
-          raise @error.signature_error(
-            "T0410: Arguments are not of expected type",
-          )
-        }
-      }
+      let _ = validate_function_args(sig, args, Undefined)
     }
     None => ()
   }
 }
 
 ///|
-fn matches_signature(value : JsonataValue, sig : Char) -> Bool {
-  // Undefined passes all signature checks — individual functions handle it
-  match value {
-    Undefined => true
-    _ =>
-      match sig {
-        'j' => true
-        's' => value is Json(Json::String(_))
-        'n' => value is Json(Json::Number(_, ..))
-        'b' => value is Json(Json::True) || value is Json(Json::False)
-        'a' => value is Json(Json::Array(_)) || value is Sequence(_)
-        'o' => value is Json(Json::Object(_))
-        'f' => value is Func(_)
-        _ => true
-      }
+/// 按签名检查参数并返回可能被包装（标量→单元素数组）后的参数列表。
+///
+/// 用于 Lambda 求值路径，使 `a<s>` 等数组参数能接收标量实参。
+pub fn JsonataFunc::validate_args(
+  self : JsonataFunc,
+  args : Array[JsonataValue],
+  context : JsonataValue,
+) -> Array[JsonataValue] raise @error.JsonataError {
+  match self.signature {
+    Some(sig) => validate_function_args(sig, args, context)
+    None => args
   }
 }
 

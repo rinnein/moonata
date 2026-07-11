@@ -869,11 +869,7 @@ test "解析：Lambda" {
   debug_inspect(
     parse_str("λ($x)<n:n>{ $x }"),
     content=(
-      #|Lambda(
-      #|  params=["x"],
-      #|  body=Var("x"),
-      #|  signature=Some("<ident(n):ident(n)>"),
-      #|)
+      #|Lambda(params=["x"], body=Var("x"), signature=Some("<n:n>"))
     ),
   )
   debug_inspect(
@@ -892,11 +888,7 @@ test "解析：Lambda" {
       #|    {
       #|      kind: Map(
       #|        Apply(
-      #|          func=Lambda(
-      #|            params=["x"],
-      #|            body=Var("x"),
-      #|            signature=Some("<ident(n):ident(n)>"),
-      #|          ),
+      #|          func=Lambda(params=["x"], body=Var("x"), signature=Some("<n:n>")),
       #|          args=[Var("")],
       #|        ),
       #|      ),

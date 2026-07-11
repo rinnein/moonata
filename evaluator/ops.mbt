@@ -494,7 +494,7 @@ fn eval_apply(
         args.push(eval(arg_ast, ctx))
       }
       let args = apply_context_argument(args, f, ctx)
-      f.check_args(args)
+      let args = f.validate_args(args, ctx.current())
       if args.length() < f.arity && should_partial_on_missing(f) {
         // 部分应用：返回捕获已提供参数的柯里化函数
         let captured = args

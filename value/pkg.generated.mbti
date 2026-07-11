@@ -9,6 +9,8 @@ import {
 // Values
 pub fn flatten_sequence(Array[JsonataValue]) -> Array[JsonataValue]
 
+pub fn validate_function_args(String, Array[JsonataValue], JsonataValue) -> Array[JsonataValue] raise @error.JsonataError
+
 // Errors
 
 // Types and methods
@@ -53,6 +55,7 @@ pub struct JsonataFunc {
 }
 pub fn JsonataFunc::check_args(Self, Array[JsonataValue]) -> Unit raise @error.JsonataError
 pub fn JsonataFunc::new(arity~ : Int, signature? : String?, contextual? : Bool, invoke~ : (Array[JsonataValue], EvalContext) -> JsonataValue raise @error.JsonataError) -> Self
+pub fn JsonataFunc::validate_args(Self, Array[JsonataValue], JsonataValue) -> Array[JsonataValue] raise @error.JsonataError
 pub impl @debug.Debug for JsonataFunc
 
 pub(all) enum JsonataValue {

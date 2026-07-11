@@ -136,27 +136,43 @@ skip_reasons
 下方固定快照仍是旧口径下的历史记录；本轮脚本升级后，`skip` 分类会更细，待下一次复跑官方审计后再刷新这里的数字。
 
 
-当前固定快照（2026-07-11，undefined/null 传播 + HOF 兼容 + 函数验证完善，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-11，函数签名系统完整实现 + $join undefined 分隔符兼容，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1667 pass 1492 fail 175 skip 15
+eligible 1667 pass 1505 fail 162 skip 15
 top_failures
 errors 23
 parent-operator 20
 function-formatNumber 14
-function-signatures 11
 transform 11
 function-tomillis 9
 joins 9
 range-operator 7
 function-replace 5
 object-constructor 5
+comparison-operators 4
 skip_reasons
 no_expected_outcome 15
 ```
 
-本轮修复（函数参数严格验证 + length/split 修复）：
-- 提交：整体 pass 1395→1430 (+35)，fail 272→237 (-35)，通过率 83.7%→85.8%
+本轮修复（JSONata 函数签名系统完整实现 + $join undefined 分隔符兼容）：
+- 提交：整体 pass 1492→1505 (+13)，fail 175→162 (-13)，通过率 89.6%→90.2%
+- 门禁：`moon check` 0e0w，`moon test` 213/213 passed（+7 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Value: 新增 `value/signature.mbt`，实现 JSONata `parseSignature` 完整语义——支持 `?` 可选、`+` 可变、`-` 上下文、`:` 返回类型、`a<...>`/`f<...>` 类型参数、`(...)` 选择类型
+  - Value: 新增 `validate_function_args` 入口，简单签名（如 `sn`/`sss`）走宽松校验保持兼容，复杂签名走严格校验
+  - Value: 新增 `JsonataFunc::validate_args` 返回可能被包装（标量→单元素数组）的参数列表，使 `a<s>` 等数组参数能接收标量实参
+  - Value: 数组参数校验子类型时，对 `m`（undefined）直通，对数组实参逐元素检查（T0412），对标量实参按子类型校验后包装
+  - Value: 实现回溯匹配算法，对齐 JSONata-js 正则 `^(p1)(p2)...(pN)$` 的贪婪与回溯语义，正确处理可变参数与后续必需参数的实参分配
+  - Value: 可选/上下文/可变参数缺省时消费 `arg_idx` 位置（可能为 undefined）并递增，对齐 JSONata-js `signature.validate` 行为
+  - Parser: 新增 `token_lexeme` 辅助函数，`parse_signature` 改为拼接原始词素（如 `a<s>s?:s`）而非 debug 字符串
+  - Parser: 新增 `validate_signature_syntax` 在解析阶段校验签名语法，提前抛出 `S0401`（类型参数位置错误）/`S0402`（选择类型内嵌参数化类型），避免被后续 `expect('{')` 错误掩盖
+  - Functions: `$join` 对 undefined 分隔符视为缺省（默认空字符串），与 JSONata-js 行为一致
+  - Tests: 新增 function-signatures case011/012/026/027-029/030-033/034/035/040 共 7 个回归断言
+- 已知限制：function-replace 5 个失败与调用路径相关（独立于本轮修改）
+
+上一轮修复（undefined/null 传播 + HOF 兼容 + 函数验证完善）：
+- 提交：整体 pass 1395→1492 (+97)，fail 272→175 (-97)，通过率 83.7%→89.6%
 - 门禁：`moon check` 0e0w，`moon test` 206/206 passed，`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：
   - Functions: `$number()` 对 null/array/object/function 输入抛出 T0410；多余参数抛出 T0410

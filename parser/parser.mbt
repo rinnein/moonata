@@ -137,6 +137,60 @@ fn debug_tok(t : @lexer.Token) -> String {
 }
 
 ///|
+/// 返回 token 的原始词素文本，用于函数签名等需要保留语义的场景。
+fn token_lexeme(t : @lexer.Token) -> String {
+  match t.kind {
+    @lexer.TokenKind::String(s) => s
+    @lexer.TokenKind::QuotedName(s) => s
+    @lexer.TokenKind::Regex(pattern~, flags~) => "/\{pattern}/\{flags}"
+    @lexer.TokenKind::Number(n) => n.to_string()
+    @lexer.TokenKind::Boolean(b) => b.to_string()
+    @lexer.TokenKind::Null => "null"
+    @lexer.TokenKind::Question => "?"
+    @lexer.TokenKind::Ident(s) => s
+    @lexer.TokenKind::Var(s) => "$" + s
+    @lexer.TokenKind::DollarDollar => "$$"
+    @lexer.TokenKind::Dot => "."
+    @lexer.TokenKind::Range => ".."
+    @lexer.TokenKind::Star => "*"
+    @lexer.TokenKind::DoubleStar => "**"
+    @lexer.TokenKind::DotStar => ".*"
+    @lexer.TokenKind::DoubleColon => "::"
+    @lexer.TokenKind::LParen => "("
+    @lexer.TokenKind::RParen => ")"
+    @lexer.TokenKind::LBracket => "["
+    @lexer.TokenKind::RBracket => "]"
+    @lexer.TokenKind::LBrace => "{"
+    @lexer.TokenKind::RBrace => "}"
+    @lexer.TokenKind::Plus => "+"
+    @lexer.TokenKind::Minus => "-"
+    @lexer.TokenKind::Star2 => "*"
+    @lexer.TokenKind::Slash => "/"
+    @lexer.TokenKind::Percent => "%"
+    @lexer.TokenKind::Amp => "&"
+    @lexer.TokenKind::Pipe => "|"
+    @lexer.TokenKind::Eq => "="
+    @lexer.TokenKind::NotEq => "!="
+    @lexer.TokenKind::Lt => "<"
+    @lexer.TokenKind::Lte => "<="
+    @lexer.TokenKind::Gt => ">"
+    @lexer.TokenKind::Gte => ">="
+    @lexer.TokenKind::And => "&&"
+    @lexer.TokenKind::Or => "||"
+    @lexer.TokenKind::Not => "!"
+    @lexer.TokenKind::Coalesce => "??"
+    @lexer.TokenKind::Default => "?:"
+    @lexer.TokenKind::Arrow => "~>"
+    @lexer.TokenKind::Caret => "^"
+    @lexer.TokenKind::Colon => ":"
+    @lexer.TokenKind::Semicolon => ";"
+    @lexer.TokenKind::Comma => ","
+    @lexer.TokenKind::At => "@"
+    @lexer.TokenKind::Hash => "#"
+  }
+}
+
+///|
 fn not(b : Bool) -> Bool {
   !b
 }
