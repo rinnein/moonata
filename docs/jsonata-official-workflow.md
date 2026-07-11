@@ -136,21 +136,21 @@ skip_reasons
 下方固定快照仍是旧口径下的历史记录；本轮脚本升级后，`skip` 分类会更细，待下一次复跑官方审计后再刷新这里的数字。
 
 
-当前固定快照（2026-07-11，函数参数严格验证 + length/split 修复，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-11，undefined 传播 + 参数严格验证 + 函数行为对齐，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1667 pass 1430 fail 237 skip 15
+eligible 1667 pass 1466 fail 201 skip 15
 top_failures
 errors 23
 parent-operator 20
 function-formatNumber 14
-transform 13
-function-signatures 11
+transform 11
+function-signatures 10
 function-tomillis 9
 joins 9
 function-replace 8
 range-operator 7
-function-average 5
+function-fromMillis 5
 skip_reasons
 no_expected_outcome 15
 ```

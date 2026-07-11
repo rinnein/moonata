@@ -45,8 +45,14 @@ fn register_type_functions(ctx : @value.EvalContext) -> Unit {
     }
   })
   // $boolean
-  register(ctx, "boolean", arity=1, invoke=fn(args, _ctx) {
-    @value.JsonataValue::Json(Json::boolean(value_to_bool(args[0])))
+  register(ctx, "boolean", arity=1, invoke=(args, _ctx) => {
+    if args.length() > 1 {
+      raise @error.runtime_error("T0410: Arguments are not of expected type")
+    }
+    match args[0] {
+      @value.JsonataValue::Undefined => @value.JsonataValue::Undefined
+      _ => @value.JsonataValue::Json(Json::boolean(value_to_bool(args[0])))
+    }
   })
   // $type
   register(ctx, "type", arity=1, invoke=fn(args, _ctx) {
@@ -58,7 +64,7 @@ fn register_type_functions(ctx : @value.EvalContext) -> Unit {
       @value.JsonataValue::Json(Json::Null) => "null"
       @value.JsonataValue::Json(Json::Array(_)) => "array"
       @value.JsonataValue::Json(Json::Object(_)) => "object"
-      @value.JsonataValue::Undefined => "undefined"
+      @value.JsonataValue::Undefined => return @value.JsonataValue::Undefined
       @value.JsonataValue::Func(_) => "function"
       @value.JsonataValue::Regex(_) => "function"
       @value.JsonataValue::Sequence(_) => "array"
@@ -287,22 +293,24 @@ fn register_higher_order_functions(ctx : @value.EvalContext) -> Unit {
   })
   // $not
   register(ctx, "not", arity=1, invoke=fn(args, _ctx) {
-    @value.JsonataValue::Json(Json::boolean(!value_to_bool(args[0])))
+    match args[0] {
+      @value.JsonataValue::Undefined => @value.JsonataValue::Undefined
+      _ => @value.JsonataValue::Json(Json::boolean(!value_to_bool(args[0])))
+    }
   })
-  // $assert — 断言条件为真，否则抛错
+  // $assert — JSONata spec: true→undefined, non-boolean→T0410, false→error
   register(ctx, "assert", arity=1, invoke=fn(
     args : Array[@value.JsonataValue],
     _ctx : @value.EvalContext,
   ) -> @value.JsonataValue raise @error.JsonataError {
-    if value_to_bool(args[0]) {
-      @value.JsonataValue::Json(Json::boolean(true))
-    } else {
-      let msg = if args.length() > 1 {
-        value_to_str(args[1])
-      } else {
-        "断言失败"
+    match args[0] {
+      @value.JsonataValue::Json(Json::True) => @value.JsonataValue::Undefined
+      @value.JsonataValue::Json(Json::False) => {
+        let msg = if args.length() > 1 { value_to_str(args[1]) } else { "" }
+        raise @error.runtime_error(msg)
       }
-      raise @error.runtime_error(msg)
+      _ =>
+        raise @error.runtime_error("T0410: Arguments are not of expected type")
     }
   })
 }
@@ -393,11 +401,17 @@ fn register_special_functions(ctx : @value.EvalContext) -> Unit {
   })
   // $base64encode
   register(ctx, "base64encode", arity=1, invoke=fn(args, _ctx) {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     let s = value_to_str(args[0])
     @value.JsonataValue::Json(Json::string(base64_encode(s)))
   })
   // $base64decode
   register(ctx, "base64decode", arity=1, invoke=fn(args, _ctx) {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     let s = value_to_str(args[0])
     @value.JsonataValue::Json(Json::string(base64_decode(s)))
   })
@@ -410,16 +424,25 @@ fn register_special_functions(ctx : @value.EvalContext) -> Unit {
   })
   // $encodeUrl — 对整个 URL 做百分号编码，保留 URL 保留字符
   register(ctx, "encodeUrl", arity=1, invoke=fn(args, _ctx) {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     let s = value_to_str(args[0])
     @value.JsonataValue::Json(Json::string(percent_encode(s, UrlMode::FullUrl)))
   })
   // $decodeUrl — 解码百分号编码的 URL
   register(ctx, "decodeUrl", arity=1, invoke=fn(args, _ctx) {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     let s = value_to_str(args[0])
     @value.JsonataValue::Json(Json::string(percent_decode(s)))
   })
   // $encodeUrlComponent — 对 URL 组件做百分号编码（不保留任何保留字符）
   register(ctx, "encodeUrlComponent", arity=1, invoke=fn(args, _ctx) {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     let s = value_to_str(args[0])
     @value.JsonataValue::Json(
       Json::string(percent_encode(s, UrlMode::Component)),
@@ -427,6 +450,9 @@ fn register_special_functions(ctx : @value.EvalContext) -> Unit {
   })
   // $decodeUrlComponent — 解码百分号编码的 URL 组件
   register(ctx, "decodeUrlComponent", arity=1, invoke=fn(args, _ctx) {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     let s = value_to_str(args[0])
     @value.JsonataValue::Json(Json::string(percent_decode(s)))
   })

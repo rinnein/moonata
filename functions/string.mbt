@@ -5,6 +5,9 @@ fn register_string_functions(ctx : @value.EvalContext) -> Unit {
     args,
     _ctx,
   ) {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     let s = value_to_str(args[0])
     let start = value_to_int(args[1])
     let chars = s.to_array()
@@ -57,6 +60,9 @@ fn register_string_functions(ctx : @value.EvalContext) -> Unit {
   )
   // $trim
   register(ctx, "trim", arity=1, invoke=fn(args, _ctx) {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     @value.JsonataValue::Json(
       Json::string(normalize_whitespace(value_to_str(args[0]))),
     )
@@ -84,12 +90,18 @@ fn register_string_functions(ctx : @value.EvalContext) -> Unit {
     args,
     _ctx,
   ) {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     @value.JsonataValue::Json(Json::string(value_to_str(args[0]).to_upper()))
   })
   register(ctx, "lowercase", arity=1, signature=Some("s"), invoke=fn(
     args,
     _ctx,
   ) {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     @value.JsonataValue::Json(Json::string(value_to_str(args[0]).to_lower()))
   })
   // $contains
@@ -122,6 +134,9 @@ fn register_string_functions(ctx : @value.EvalContext) -> Unit {
     args,
     _ctx,
   ) {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     let s = value_to_str(args[0])
     let chars = value_to_str(args[1])
     let idx = s.find(chars)
@@ -135,6 +150,9 @@ fn register_string_functions(ctx : @value.EvalContext) -> Unit {
     args,
     _ctx,
   ) {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     let s = value_to_str(args[0])
     let chars = value_to_str(args[1])
     let idx = s.find(chars)
@@ -148,6 +166,9 @@ fn register_string_functions(ctx : @value.EvalContext) -> Unit {
   })
   // $pad(str, width, char?)
   register(ctx, "pad", arity=2, invoke=fn(args, _ctx) {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     let s = value_to_str(args[0])
     let width = value_to_int(args[1])
     let target = if width < 0 { -width } else { width }

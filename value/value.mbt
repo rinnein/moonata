@@ -71,15 +71,20 @@ pub fn JsonataFunc::check_args(
 
 ///|
 fn matches_signature(value : JsonataValue, sig : Char) -> Bool {
-  match sig {
-    'j' => true
-    's' => value is Json(Json::String(_))
-    'n' => value is Json(Json::Number(_, ..))
-    'b' => value is Json(Json::True) || value is Json(Json::False)
-    'a' => value is Json(Json::Array(_)) || value is Sequence(_)
-    'o' => value is Json(Json::Object(_))
-    'f' => value is Func(_)
-    _ => true
+  // Undefined passes all signature checks — individual functions handle it
+  match value {
+    Undefined => true
+    _ =>
+      match sig {
+        'j' => true
+        's' => value is Json(Json::String(_))
+        'n' => value is Json(Json::Number(_, ..))
+        'b' => value is Json(Json::True) || value is Json(Json::False)
+        'a' => value is Json(Json::Array(_)) || value is Sequence(_)
+        'o' => value is Json(Json::Object(_))
+        'f' => value is Func(_)
+        _ => true
+      }
   }
 }
 

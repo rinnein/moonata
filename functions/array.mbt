@@ -76,7 +76,10 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
     acc
   })
   // $count
-  register(ctx, "count", arity=1, invoke=fn(args, _ctx) {
+  register(ctx, "count", arity=1, invoke=(args, _ctx) => {
+    if args.length() > 1 {
+      raise @error.runtime_error("T0410: Arguments are not of expected type")
+    }
     let count = match args[0] {
       @value.JsonataValue::Json(Json::Array(arr)) => arr.length()
       @value.JsonataValue::Sequence(arr) => arr.length()
@@ -170,6 +173,9 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
   })
   // $reverse
   register(ctx, "reverse", arity=1, invoke=fn(args, _ctx) {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     let items = args[0].to_array()
     let reversed = items.rev()
     let arr : Array[Json] = []
@@ -180,6 +186,9 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
   })
   // $shuffle
   register(ctx, "shuffle", arity=1, invoke=fn(args, _ctx) {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     let items = args[0].to_array()
     let shuffled = shuffle_items(items)
     let arr : Array[Json] = []

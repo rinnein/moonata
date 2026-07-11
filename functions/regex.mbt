@@ -37,7 +37,23 @@ fn register_regex_functions(ctx : @value.EvalContext) -> Unit {
     contains_regex(args)
   })
   // 标准函数名兼容：注册顺序晚于字符串函数，因此覆盖为正则模式版本。
-  register(ctx, "contains", arity=2, invoke=fn(args, _ctx) {
+  register(ctx, "contains", arity=2, invoke=(args, _ctx) => {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
+    // Type validation: first arg must be string, second must be string/regex/function
+    match args[0] {
+      @value.JsonataValue::Json(Json::String(_)) => ()
+      _ =>
+        raise @error.runtime_error("T0410: Arguments are not of expected type")
+    }
+    match args[1] {
+      @value.JsonataValue::Json(Json::String(_)) => ()
+      @value.JsonataValue::Func(_) => ()
+      @value.JsonataValue::Regex(_) => ()
+      _ =>
+        raise @error.runtime_error("T0410: Arguments are not of expected type")
+    }
     contains_regex(args)
   })
   // $split_regex(str, pattern) — 正则分隔符分割

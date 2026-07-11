@@ -1,7 +1,17 @@
 ///|
 fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
   // $sum
-  register(ctx, "sum", arity=1, invoke=fn(args, _ctx) {
+  register(ctx, "sum", arity=1, invoke=(args, _ctx) => {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
+    // Input must be array/sequence; non-array non-undefined → T0410
+    match args[0] {
+      @value.JsonataValue::Json(Json::Array(_)) => ()
+      @value.JsonataValue::Sequence(_) => ()
+      _ =>
+        raise @error.runtime_error("T0410: Arguments are not of expected type")
+    }
     let items = args[0].to_array()
     let mut total = 0.0
     let mut found = false
@@ -17,16 +27,19 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
     if found {
       @value.JsonataValue::Json(Json::number(total))
     } else {
-      @value.JsonataValue::Undefined
+      raise @error.runtime_error("T0412: No numbers found in the array")
     }
   })
   // $average
   register(ctx, "average", arity=1, invoke=(args, _ctx) => {
+    if args.length() > 1 {
+      raise @error.runtime_error("T0410: Arguments are not of expected type")
+    }
     let input_items = args[0].to_array()
     if input_items.length() == 0 {
       return @value.JsonataValue::Undefined
     }
-    let nums = value_to_num_array(args[0])
+    let nums = value_to_strict_num_array(args[0])
     if nums.length() == 0 {
       raise @error.runtime_error("T0412: No numbers found in the array")
     }
@@ -136,10 +149,14 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
     @value.JsonataValue::Json(Json::number(random_fraction()))
   })
   // $sqrt
-  register(ctx, "sqrt", arity=1, invoke=fn(args, _ctx) {
+  register(ctx, "sqrt", arity=1, invoke=(args, _ctx) => {
     match args[0] {
       @value.JsonataValue::Json(Json::Number(n, ..)) =>
-        @value.JsonataValue::Json(Json::number(n.sqrt()))
+        if n < 0.0 {
+          raise @error.runtime_error("D3060: Value cannot be negative")
+        } else {
+          @value.JsonataValue::Json(Json::number(n.sqrt()))
+        }
       _ => @value.JsonataValue::Undefined
     }
   })
@@ -222,30 +239,6 @@ fn value_to_double(v : @value.JsonataValue) -> Double {
     @value.JsonataValue::Json(Json::Number(n, ..)) => n
     _ => 0.0
   }
-}
-
-///|
-fn value_to_num_array(v : @value.JsonataValue) -> Array[Double] {
-  let result : Array[Double] = []
-  match v {
-    @value.JsonataValue::Json(Json::Number(n, ..)) => result.push(n)
-    @value.JsonataValue::Json(Json::Array(arr)) =>
-      for item in arr {
-        match item {
-          Json::Number(n, ..) => result.push(n)
-          _ => continue
-        }
-      }
-    @value.JsonataValue::Sequence(arr) =>
-      for item in arr {
-        match item {
-          @value.JsonataValue::Json(Json::Number(n, ..)) => result.push(n)
-          _ => continue
-        }
-      }
-    _ => ()
-  }
-  result
 }
 
 ///|
