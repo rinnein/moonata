@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -33,6 +34,22 @@ class AuditResult:
     fail_by_group: Counter[str]
     skip_by_reason: Counter[str]
     failures: list[dict[str, Any]]
+
+
+@dataclass
+class AuditCase:
+    group: str
+    group_file: Path
+    case: dict[str, Any]
+
+
+@dataclass
+class RunResult:
+    ok: bool
+    value: Any | None
+    detail: str
+    stdout: str
+    stderr: str
 
 
 def parse_args() -> argparse.Namespace:
@@ -100,13 +117,19 @@ def resolve_suite_root(upstream: Path) -> Path:
     )
 
 
-def expand_cases(payload: Any) -> Iterable[dict[str, Any]]:
-    if isinstance(payload, dict) and ("expr" in payload or "expr-file" in payload):
-        yield payload
+def expand_cases(payload: Any, group_file: Path, group: str) -> Iterable[AuditCase]:
+    if isinstance(payload, dict) and (
+        "expr" in payload
+        or "expr-file" in payload
+        or "result" in payload
+        or "undefinedResult" in payload
+        or "code" in payload
+    ):
+        yield AuditCase(group=group, group_file=group_file, case=payload)
     elif isinstance(payload, list):
         for case in payload:
             if isinstance(case, dict):
-                yield case
+                yield AuditCase(group=group, group_file=group_file, case=case)
     elif isinstance(payload, dict):
         for name, value in payload.items():
             if isinstance(value, list):
@@ -114,41 +137,131 @@ def expand_cases(payload: Any) -> Iterable[dict[str, Any]]:
                     if isinstance(case, dict):
                         cloned = dict(case)
                         cloned.setdefault("name", name)
-                        yield cloned
+                        yield AuditCase(group=group, group_file=group_file, case=cloned)
             elif isinstance(value, dict):
                 cloned = dict(value)
                 cloned.setdefault("name", name)
-                yield cloned
+                yield AuditCase(group=group, group_file=group_file, case=cloned)
 
 
-def comparable(case: dict[str, Any]) -> tuple[bool, str]:
-    if "result" not in case:
-        return False, "no_result"
-    if case.get("bindings"):
-        return False, "bindings"
-    if "timelimit" in case:
-        return False, "timelimit"
+def expected_outcome(case: dict[str, Any]) -> tuple[bool, str, Any, str]:
+    if "result" in case:
+        return True, "result", case["result"], ""
+    if case.get("undefinedResult") is True:
+        return True, "undefined", None, ""
+    if "code" in case:
+        return True, "code", case["code"], ""
     if "depth" in case:
-        return False, "depth"
-    if "expr-file" in case or not isinstance(case.get("expr"), str):
-        return False, "non-string-expr"
-    return True, ""
+        return False, "", None, "depth"
+    return False, "", None, "no_expected_outcome"
 
 
-def data_for(case: dict[str, Any], suite_root: Path) -> tuple[bool, Any, str]:
+def resolve_relative_candidates(
+    raw: str,
+    roots: list[Path],
+    suffixes: list[str] | None = None,
+) -> list[Path]:
+    path = Path(raw)
+    candidates: list[Path] = []
+
+    def add(candidate: Path) -> None:
+        if candidate not in candidates:
+            candidates.append(candidate)
+
+    if path.is_absolute():
+        add(path)
+        return candidates
+
+    suffixes = suffixes or [""]
+    for root in roots:
+        for suffix in suffixes:
+            candidate = root / path
+            if suffix and candidate.suffix != suffix:
+                candidate = candidate.with_suffix(suffix)
+            add(candidate)
+
+    return candidates
+
+
+def load_text_from_candidates(candidates: list[Path]) -> tuple[bool, str, str]:
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_file():
+            return True, candidate.read_text(encoding="utf-8"), ""
+    tried = ", ".join(str(path) for path in candidates)
+    return False, "", f"missing-file: {tried}"
+
+
+def data_for(case: dict[str, Any], source_dir: Path, suite_root: Path) -> tuple[bool, Any, str]:
     if "data" in case:
         return True, case["data"], ""
     dataset = case.get("dataset")
     if dataset:
-        dataset_name = str(dataset)
-        if not dataset_name.endswith(".json"):
-            dataset_name += ".json"
-        dataset_path = suite_root / "datasets" / dataset_name
-        if not dataset_path.exists():
-            return False, None, "missing-dataset"
-        with dataset_path.open(encoding="utf-8") as handle:
-            return True, json.load(handle), ""
+        candidates = resolve_relative_candidates(
+            str(dataset),
+            roots=[source_dir, source_dir.parent, suite_root, suite_root / "datasets"],
+            suffixes=[".json"],
+        )
+        for dataset_path in candidates:
+            if dataset_path.exists() and dataset_path.is_file():
+                with dataset_path.open(encoding="utf-8") as handle:
+                    return True, json.load(handle), ""
+        tried = ", ".join(str(path) for path in candidates)
+        return False, None, f"missing-dataset: {tried}"
     return True, None, ""
+
+
+def expr_for(case: dict[str, Any], source_dir: Path, suite_root: Path) -> tuple[bool, str, str]:
+    expr = case.get("expr")
+    if isinstance(expr, str):
+        return True, expr, ""
+
+    expr_file = case.get("expr-file")
+    if isinstance(expr_file, str):
+        candidates = resolve_relative_candidates(
+            expr_file,
+            roots=[source_dir, source_dir.parent, suite_root, suite_root / "groups"],
+        )
+        ok, text, reason = load_text_from_candidates(candidates)
+        if ok:
+            return True, text, ""
+        return False, "", reason
+
+    return False, "", "non-string-expr"
+
+
+def normalize_binding_name(name: str) -> tuple[bool, str]:
+    candidate = name if name.startswith("$") else f"${name}"
+    if re.fullmatch(r"\$[A-Za-z_][A-Za-z0-9_]*", candidate):
+        return True, candidate
+    return False, candidate
+
+
+def binding_expression(case: dict[str, Any]) -> tuple[bool, str, str]:
+    bindings = case.get("bindings")
+    if not isinstance(bindings, dict) or len(bindings) == 0:
+        return True, "", ""
+
+    parts: list[str] = []
+    for raw_name, value in bindings.items():
+        ok, name = normalize_binding_name(str(raw_name))
+        if not ok:
+            return False, "", f"invalid-binding-name: {raw_name}"
+        parts.append(f"{name} := {json.dumps(value, ensure_ascii=False)}")
+
+    return True, "; ".join(parts), ""
+
+
+def wrap_expression_with_bindings(expr: str, bindings_expr: str) -> str:
+    if bindings_expr == "":
+        return expr
+    return f"({bindings_expr}; {expr})"
+
+
+def resolve_timeout(case: dict[str, Any], fallback_timeout: float) -> float:
+    timelimit = case.get("timelimit")
+    if isinstance(timelimit, (int, float)) and timelimit > 0:
+        return float(timelimit) / 1000.0
+    return fallback_timeout
 
 
 def run_case(
@@ -156,7 +269,7 @@ def run_case(
     expr: str,
     data: Any,
     timeout: float,
-) -> tuple[bool, Any, str]:
+) -> RunResult:
     with tempfile.NamedTemporaryFile(
         "w",
         suffix=".json",
@@ -175,7 +288,7 @@ def run_case(
             check=False,
         )
     except subprocess.TimeoutExpired:
-        return False, None, "timeout"
+        return RunResult(ok=False, value=None, detail="timeout", stdout="", stderr="")
     finally:
         try:
             os.unlink(data_path)
@@ -185,13 +298,38 @@ def run_case(
     stdout = proc.stdout.strip()
     stderr = proc.stderr.strip()
     if proc.returncode != 0:
-        return False, None, f"exit {proc.returncode}: {stderr or stdout}"
+        detail = stderr or stdout
+        return RunResult(
+            ok=False,
+            value=None,
+            detail=f"exit {proc.returncode}: {detail}",
+            stdout=stdout,
+            stderr=stderr,
+        )
     if stdout.startswith("错误:"):
-        return False, None, stdout
+        return RunResult(ok=False, value=None, detail=stdout, stdout=stdout, stderr=stderr)
     try:
-        return True, json.loads(stdout), ""
+        return RunResult(ok=True, value=json.loads(stdout), detail="", stdout=stdout, stderr=stderr)
     except json.JSONDecodeError as exc:
-        return False, None, f"invalid-json-output: {exc}"
+        return RunResult(
+            ok=False,
+            value=None,
+            detail=f"invalid-json-output: {exc}",
+            stdout=stdout,
+            stderr=stderr,
+        )
+
+
+def code_matches(expected_code: Any, run_result: RunResult) -> bool:
+    if run_result.ok:
+        return False
+    code = str(expected_code).strip()
+    if not code:
+        return False
+    haystack = "\n".join(
+        part for part in [run_result.detail, run_result.stdout, run_result.stderr] if part
+    )
+    return code in haystack
 
 
 def case_id(group_file: Path) -> str:
@@ -222,44 +360,81 @@ def audit(args: argparse.Namespace) -> AuditResult:
         with group_file.open(encoding="utf-8") as handle:
             payload = json.load(handle)
 
-        for case in expand_cases(payload):
-            ok, reason = comparable(case)
+        for entry in expand_cases(payload, group_file, group):
+            case = entry.case
+
+            ok, expected_kind, expected_value, reason = expected_outcome(case)
             if not ok:
                 skipped += 1
                 skip_by_reason[reason] += 1
                 continue
 
-            data_ok, data, data_reason = data_for(case, suite_root)
+            expr_ok, expr, expr_reason = expr_for(case, entry.group_file.parent, suite_root)
+            if not expr_ok:
+                skipped += 1
+                skip_by_reason[expr_reason] += 1
+                continue
+
+            data_ok, data, data_reason = data_for(case, entry.group_file.parent, suite_root)
             if not data_ok:
                 skipped += 1
                 skip_by_reason[data_reason] += 1
                 continue
 
-            eligible += 1
-            expr = case["expr"]
-            run_ok, actual, run_reason = run_case(
-                exe=exe,
-                expr=expr,
-                data=data,
-                timeout=args.timeout,
-            )
-            expected = case["result"]
-            if run_ok and actual == expected:
-                passed += 1
+            bindings_ok, bindings_expr, bindings_reason = binding_expression(case)
+            if not bindings_ok:
+                skipped += 1
+                skip_by_reason[bindings_reason] += 1
                 continue
 
-            failed += 1
-            fail_by_group[group] += 1
-            failure = {
-                "case": case_id(group_file),
-                "group": group,
-                "expr": expr,
-                "reason": "mismatch" if run_ok else run_reason,
-                "expected": expected,
-            }
-            if run_ok:
-                failure["actual"] = actual
-            failures.append(failure)
+            eligible += 1
+            wrapped_expr = wrap_expression_with_bindings(expr, bindings_expr)
+            run_result = run_case(
+                exe=exe,
+                expr=wrapped_expr,
+                data=data,
+                timeout=resolve_timeout(case, args.timeout),
+            )
+
+            if expected_kind in {"result", "undefined"}:
+                if run_result.ok and run_result.value == expected_value:
+                    passed += 1
+                    continue
+
+                failed += 1
+                fail_by_group[group] += 1
+                failure = {
+                    "case": case_id(entry.group_file),
+                    "group": group,
+                    "expr": wrapped_expr,
+                    "reason": "mismatch" if run_result.ok else run_result.detail,
+                    "expected": expected_value,
+                }
+                if run_result.ok:
+                    failure["actual"] = run_result.value
+                failures.append(failure)
+                continue
+
+            if expected_kind == "code":
+                if code_matches(expected_value, run_result):
+                    passed += 1
+                    continue
+
+                failed += 1
+                fail_by_group[group] += 1
+                failure = {
+                    "case": case_id(entry.group_file),
+                    "group": group,
+                    "expr": wrapped_expr,
+                    "reason": "code-mismatch" if not run_result.ok else "expected-error",
+                    "expected": expected_value,
+                }
+                if not run_result.ok:
+                    failure["actual"] = run_result.detail
+                else:
+                    failure["actual"] = run_result.value
+                failures.append(failure)
+                continue
 
     return AuditResult(
         eligible=eligible,

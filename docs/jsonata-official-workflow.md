@@ -65,10 +65,11 @@ python3 scripts/jsonata_official_audit.py \
 
 纳入可比对集合的条件：
 
-- `expr` 是字符串。
-- case 包含 `result` 字段。
-- `bindings` 为空或缺省。
-- 不包含 `expr-file`、`timelimit`、`depth` 等需要官方 harness 特殊能力的字段。
+- `expr` 是字符串，或可以通过 `expr-file` 解析到外部表达式文件。
+- 期望值可以是 `result`、`undefinedResult` 或 `code`。
+- `bindings` 会被脚本注入为本地绑定块；当前仅对可 JSON 化的绑定值做可比较处理。
+- `timelimit` 会按 case 级超时处理，不再直接视为不可比。
+- `depth` 仍然属于官方 harness 能力，暂不在脚本层模拟。
 
 数据来源优先级：
 
@@ -78,10 +79,14 @@ python3 scripts/jsonata_official_audit.py \
 
 跳过项只表示当前 CLI 审计无法直接比较，不代表通过或失败。当前 skip 原因使用这些分类：
 
-- `no_result`：官方 case 不含 `result`，通常是错误断言或 harness 行为断言；
-- `non-string-expr`：表达式不在 `expr` 字符串字段内，例如 `expr-file`；
-- `timelimit`：需要官方超时 harness；
-- `bindings`：需要外部变量绑定注入。
+- `no_expected_outcome`：官方 case 没有 `result` / `undefinedResult` / `code`，通常是 harness 行为断言；
+- `non-string-expr`：`expr` 不是字符串，且 `expr-file` 也无法解析；
+- `missing-file`：`expr-file` 指向的外部表达式文件不存在；
+- `missing-dataset`：`dataset` 无法解析到本地数据文件；
+- `invalid-binding-name`：`bindings` 中出现无法安全注入的变量名；
+- `depth`：需要官方深度限制 harness。
+
+说明：`code` 类期望值会先与当前 CLI 的错误文本做包含匹配，因此只要错误消息里保留了官方代码前缀，脚本就可以直接参与比较。
 
 ## 4. 执行审计并记录快照
 
@@ -127,6 +132,8 @@ skip_reasons
 <reason> <count>
 ...
 ```
+
+下方固定快照仍是旧口径下的历史记录；本轮脚本升级后，`skip` 分类会更细，待下一次复跑官方审计后再刷新这里的数字。
 
 
 当前固定快照（2026-07-10，map 后位置谓词重置与重复父级跳过修正，使用 `scripts/jsonata_official_audit.py` 审计）：
