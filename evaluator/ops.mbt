@@ -642,10 +642,12 @@ fn eval_apply(
   args_ast : Array[@ast.Ast],
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
+  // 对含 ? (placeholder) 的参数，若函数值非函数则抛 T1008
+  let has_placeholder = has_placeholder(args_ast)
   let func_val = eval(func_ast, ctx)
   match func_val {
     @value.JsonataValue::Func(f) => {
-      if has_placeholder(args_ast) {
+      if has_placeholder {
         return make_partial_apply(f, args_ast, ctx)
       }
       let args : Array[@value.JsonataValue] = []
@@ -683,16 +685,50 @@ fn eval_apply(
         ctx.with_depth(() => (f.invoke)(args, ctx))
       }
     }
-    @value.JsonataValue::Undefined =>
-      raise @error.runtime_error(
-        "T1006: Attempted to invoke a non-function",
-        code=Some("T1006"),
-      )
+    @value.JsonataValue::Undefined => {
+      // 区分 T1005（已知函数名但求值结果为 undefined）与 T1006（字段名未找到）：
+      // 检查该名称是否在绑定中注册为函数，若是则 T1005，否则 T1006
+      let func_name = match func_ast {
+        @ast.Ast::Path(steps) if steps.length() == 1 =>
+          match steps[0].kind {
+            @ast.StepKind::Name(n) => Some(n)
+            _ => None
+          }
+        _ => None
+      }
+      match func_name {
+        Some(name) =>
+          match ctx.lookup(name) {
+            Some(@value.JsonataValue::Func(_)) =>
+              raise @error.runtime_error(
+                "T1005: Unknown function: \{name}",
+                code=Some("T1005"),
+              )
+            _ =>
+              raise @error.runtime_error(
+                "T1006: Attempted to invoke a non-function",
+                code=Some("T1006"),
+              )
+          }
+        None =>
+          raise @error.runtime_error(
+            "T1006: Attempted to invoke a non-function",
+            code=Some("T1006"),
+          )
+      }
+    }
     _ =>
-      raise @error.runtime_error(
-        "T1006: Attempted to invoke a non-function",
-        code=Some("T1006"),
-      )
+      if has_placeholder {
+        raise @error.runtime_error(
+          "T1008: Attempted to partially apply a non-lambda expression",
+          code=Some("T1008"),
+        )
+      } else {
+        raise @error.runtime_error(
+          "T1006: Attempted to invoke a non-function",
+          code=Some("T1006"),
+        )
+      }
   }
 }
 

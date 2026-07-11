@@ -3,9 +3,19 @@
 fn Parser::parse_block(self : Parser) -> @ast.Ast raise @error.JsonataError {
   let exprs : Array[@ast.Ast] = []
   exprs.push(self.parse_comparison_chain())
-  while self.match_kind(@lexer.TokenKind::Semicolon) {
-    if self.at_end() ||
-      self.peek_kind() == @lexer.TokenKind::RParen ||
+  while self.peek_kind() == @lexer.TokenKind::Semicolon {
+    let semi_pos = self.peek().pos
+    ignore(self.advance())
+    if self.at_end() {
+      // 尾部分号在顶层输入中是语法错误（S0201）
+      raise @error.syntax_error(
+        "意外的尾部 token",
+        position=Some(semi_pos),
+        token=Some(";"),
+        code=Some("S0201"),
+      )
+    }
+    if self.peek_kind() == @lexer.TokenKind::RParen ||
       self.peek_kind() == @lexer.TokenKind::RBracket ||
       self.peek_kind() == @lexer.TokenKind::RBrace {
       break
@@ -417,6 +427,7 @@ fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
       _ => ()
     }
   }
+  let mut constructor_restriction = false
   for ;; {
     // 合并 `** .Name` → Name(Recursive)
     if self.peek_kind() == @lexer.TokenKind::Dot {
@@ -476,6 +487,7 @@ fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
     }
     match self.peek_kind() {
       @lexer.TokenKind::Dot => {
+        constructor_restriction = false
         ignore(self.advance())
         match self.peek_kind() {
           @lexer.TokenKind::Ident(_) => {
@@ -484,7 +496,9 @@ fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
               @lexer.TokenKind::Ident(n) => n
               _ => ""
             }
-            if name == "function" {
+            if name == "function" &&
+              self.pos + 1 < self.tokens.length() &&
+              self.tokens[self.pos + 1].kind == @lexer.TokenKind::LParen {
               let mut mapped = self.parse_primary()
               if self.peek_kind() == @lexer.TokenKind::LParen {
                 mapped = self.parse_call(mapped)
@@ -589,6 +603,7 @@ fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
         }
       }
       @lexer.TokenKind::DotStar => {
+        constructor_restriction = false
         // .* 作为单 token
         ignore(self.advance())
         expr = append_step(expr, @ast.wildcard_step())
@@ -687,11 +702,29 @@ fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
           }
         }
       }
-      @lexer.TokenKind::LBracket => expr = self.parse_bracket_access(expr)
+      @lexer.TokenKind::LBracket => {
+        if constructor_restriction {
+          raise @error.syntax_error(
+            "构造器后不允许谓词",
+            position=Some(self.peek().pos),
+            token=Some("["),
+            code=Some("S0209"),
+          )
+        }
+        expr = self.parse_bracket_access(expr)
+      }
       @lexer.TokenKind::LParen =>
         // 函数调用
         expr = self.parse_call(expr)
       @lexer.TokenKind::LBrace => {
+        if constructor_restriction {
+          raise @error.syntax_error(
+            "构造器后不允许另一个构造器",
+            position=Some(self.peek().pos),
+            token=Some("{"),
+            code=Some("S0210"),
+          )
+        }
         ignore(self.advance())
         let mapped = self.parse_group()
         // 无前置 `.` 的 { ... }：是聚合分组，非逐元素映射
@@ -702,6 +735,7 @@ fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
             stage=@ast.StepStage::Single,
           ),
         )
+        constructor_restriction = true
       }
       @lexer.TokenKind::Caret => {
         // 排序后缀 ^(term, ...)

@@ -23,7 +23,18 @@
 | P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | ✅ 可比对官方用例全通过（1251/1251） |
 | 合计 | | | **26** | **66** | |
 
-> 当前固定快照（2026-07-11，词法错误码 S0102-S0104 + date picture D3133-D3135 阶段）：`moon test` 为 242/242 通过；`moon check`、`moon info` 通过；`moon fmt` 已执行。JSONata 官方可比对审计为 `eligible 1667 / pass 1571 / fail 96 / skip 15`（审计脚本：`scripts/jsonata_official_audit.py`）。
+> 当前固定快照（2026-07-12，错误码精度修复 S0204/S0209/S0210 + T1005/T1008 + function 关键字 + 尾部分号，使用 `scripts/jsonata_official_audit.py` 审计）：
+>
+> - `moon test` 为 249/249 通过（+7 新增回归断言）；`moon check` 0e0w；`moon info` 通过；`moon fmt` 已执行。
+> - JSONata 官方可比对审计为 `eligible 1667 / pass 1578 / fail 89 / skip 15`（通过率 94.7%）。
+> - 修复内容：
+>   - Parser: `function` 仅在紧跟 `(` 时作为 Lambda 关键字，否则作为普通标识符可用（修复 `unknown(function)` 解析冲突）
+>   - Parser: 数组字面量中非 `,`/`]`/`)`/`:` 的 token 后续抛 S0204（对齐 JSONata-js 数组语法错误）
+>   - Parser: 构造器 `{...}` 后禁止谓词 `[expr]`（S0209）和另一个构造器 `{...}`（S0210）
+>   - Parser: 尾部分号 `;` 在顶层输入末尾抛出 S0201（对齐 JSONata-js 语法检查）
+>   - Evaluator: 区分 T1005（已知函数名但路径求值失败）与 T1006（普通字段名未找到）
+>   - Evaluator: 对含 `?` 占位符的参数，非函数值抛 T1008 而非 T1006
+> - Tests: 新增 errors case005/case006/case010/case014/case022/case023/case024 共 7 个回归断言
 
 ### 1.1 当前暂停边界
 

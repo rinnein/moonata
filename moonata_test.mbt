@@ -2013,3 +2013,101 @@ test "官方套件：function-fromMillis D3135 未闭合 bracket" {
   }
   assert_true(raised)
 }
+
+///|
+test "官方套件：errors case005 - function 关键字不阻塞普通标识符" {
+  let d = Json::null()
+  // unknown(function) → T1006（function 作为普通标识符传入，不是关键字）
+  let raised = try {
+    ignore(evaluate("unknown(function)", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "T1006"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：errors case006 - 未注册函数名 T1005" {
+  let d = Json::null()
+  // sum(Account.Order.OrderID) → T1005（sum 是已注册函数但路径求值结果为 undefined）
+  let raised = try {
+    ignore(evaluate("sum(Account.Order.OrderID)", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "T1005"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：errors case010 - 数组内 S0204" {
+  let d = Json::null()
+  // [1!2] → S0204（数组元素必须用 ',' 分隔）
+  let raised = try {
+    ignore(evaluate("[1!2]", d))
+    false
+  } catch {
+    @error.JsonataError::SyntaxError(code=Some(c), ..) => c == "S0204"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：errors case014 - 非函数部分应用 T1008" {
+  let d = Json::null()
+  // 3(?) → T1008（非函数不支持部分应用）
+  let raised = try {
+    ignore(evaluate("3(?)", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "T1008"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：errors case022 - 构造器后谓词 S0209" {
+  let d = Json::null()
+  // [1,2,3]{"num": $}[true] → S0209
+  let raised = try {
+    ignore(evaluate("[1,2,3]{\"num\": $}[true]", d))
+    false
+  } catch {
+    @error.JsonataError::SyntaxError(code=Some(c), ..) => c == "S0209"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：errors case023 - 双构造器 S0210" {
+  let d = Json::null()
+  // [1,2,3]{"num": $}{"num": $} → S0210
+  let raised = try {
+    ignore(evaluate("[1,2,3]{\"num\": $}{\"num\": $}", d))
+    false
+  } catch {
+    @error.JsonataError::SyntaxError(code=Some(c), ..) => c == "S0210"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：errors case024 - 尾部分号 S0201" {
+  let d = Json::null()
+  // Account.Order[0].Product; → S0201（尾部分号是语法错误）
+  let raised = try {
+    ignore(evaluate("Account.Order[0].Product;", d))
+    false
+  } catch {
+    @error.JsonataError::SyntaxError(code=Some(c), ..) => c == "S0201"
+    _ => false
+  }
+  assert_true(raised)
+}

@@ -1,8 +1,12 @@
 ///|
 /// 主表达式：字面量、变量、路径、分组、序列构造、Lambda
 fn Parser::parse_primary(self : Parser) -> @ast.Ast raise @error.JsonataError {
-  // 先检查是否是 Lambda 关键字 "function"
-  if self.peek_kind() is @lexer.TokenKind::Ident(name) && name == "function" {
+  // 仅当 "function" 后紧跟 "(" 时才作为 Lambda 关键字，
+  // 否则 "function" 可作为普通字段名使用（如 unknown(function) → T1006）
+  if self.peek_kind() is @lexer.TokenKind::Ident(name) &&
+    name == "function" &&
+    self.pos + 1 < self.tokens.length() &&
+    self.tokens[self.pos + 1].kind == @lexer.TokenKind::LParen {
     ignore(self.advance())
     return self.parse_lambda()
   }
@@ -119,8 +123,19 @@ fn Parser::parse_primary(self : Parser) -> @ast.Ast raise @error.JsonataError {
       let items : Array[@ast.Ast] = []
       if self.peek_kind() != @lexer.TokenKind::RBracket {
         items.push(self.parse_block())
-        while self.match_kind(@lexer.TokenKind::Comma) {
+        while self.peek_kind() == @lexer.TokenKind::Comma {
+          ignore(self.advance())
           items.push(self.parse_block())
+        }
+        if self.peek_kind() != @lexer.TokenKind::RBracket &&
+          self.peek_kind() != @lexer.TokenKind::RParen &&
+          self.peek_kind() != @lexer.TokenKind::Colon {
+          raise @error.syntax_error(
+            "数组元素必须用 ',' 分隔",
+            position=Some(self.peek().pos),
+            token=Some(debug_tok(self.peek())),
+            code=Some("S0204"),
+          )
         }
       }
       self.expect(@lexer.TokenKind::RBracket, what="']'")
