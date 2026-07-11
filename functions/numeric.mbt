@@ -5,13 +5,6 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
     if args[0].is_undefined() {
       return @value.JsonataValue::Undefined
     }
-    // Input must be array/sequence; non-array non-undefined → T0410
-    match args[0] {
-      @value.JsonataValue::Json(Json::Array(_)) => ()
-      @value.JsonataValue::Sequence(_) => ()
-      _ =>
-        raise @error.runtime_error("T0410: Arguments are not of expected type")
-    }
     let items = args[0].to_array()
     let mut total = 0.0
     let mut found = false
@@ -26,8 +19,10 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
     }
     if found {
       @value.JsonataValue::Json(Json::number(total))
-    } else {
+    } else if items.length() > 0 {
       raise @error.runtime_error("T0412: No numbers found in the array")
+    } else {
+      @value.JsonataValue::Undefined
     }
   })
   // $average
@@ -139,10 +134,24 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
     }
   })
   // $power
-  register(ctx, "power", arity=2, signature=Some("nn"), invoke=fn(args, _ctx) {
+  register(ctx, "power", arity=2, signature=Some("nn"), invoke=(args, _ctx) => {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     let base = value_to_double(args[0])
     let exp = value_to_double(args[1])
-    @value.JsonataValue::Json(Json::number(@math.pow(base, exp)))
+    // D3061: negative base with fractional exponent
+    if base < 0.0 && exp != exp.floor() {
+      raise @error.runtime_error("D3061: Value out of range")
+    }
+    let result = @math.pow(base, exp)
+    // D3061: overflow to Infinity
+    if result != result ||
+      result > 1.7976931348623157e+308 ||
+      result < -1.7976931348623157e+308 {
+      raise @error.runtime_error("D3061: Value out of range")
+    }
+    @value.JsonataValue::Json(Json::number(result))
   })
   // $random
   register(ctx, "random", arity=0, invoke=fn(_args, _ctx) {
@@ -169,11 +178,14 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
     @value.JsonataValue::Json(Json::number(2.71828182845904523536))
   })
   // $formatBase(number, radix?)
-  register(ctx, "formatBase", arity=1, invoke=fn(args, _ctx) {
+  register(ctx, "formatBase", arity=1, invoke=(args, _ctx) => {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     let n = value_to_double(args[0]).round().to_int64()
     let radix = if args.length() > 1 { value_to_int(args[1]) } else { 10 }
     if radix < 2 || radix > 36 {
-      return @value.JsonataValue::Undefined
+      raise @error.runtime_error("D3100: Radix must be between 2 and 36")
     }
     let digits = "0123456789abcdefghijklmnopqrstuvwxyz"
     let mut num = if n < 0L { -n } else { n }
@@ -220,13 +232,19 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
     )
   })
   // $formatInteger(number, picture)
-  register(ctx, "formatInteger", arity=2, invoke=fn(args, _ctx) {
+  register(ctx, "formatInteger", arity=2, invoke=(args, _ctx) => {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     let n = value_to_double(args[0])
     let picture = value_to_str(args[1])
     @value.JsonataValue::Json(Json::string(format_integer(n, picture)))
   })
   // $parseInteger(string, picture)
-  register(ctx, "parseInteger", arity=2, invoke=fn(args, _ctx) {
+  register(ctx, "parseInteger", arity=2, invoke=(args, _ctx) => {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     let s = value_to_str(args[0])
     let picture = value_to_str(args[1])
     @value.JsonataValue::Json(Json::number(parse_integer(s, picture)))

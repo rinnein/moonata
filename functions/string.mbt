@@ -60,7 +60,8 @@ fn register_string_functions(ctx : @value.EvalContext) -> Unit {
   )
   // $trim
   register(ctx, "trim", arity=1, invoke=fn(args, _ctx) {
-    if args[0].is_undefined() {
+    if args[0].is_undefined() ||
+      args[0] is @value.JsonataValue::Json(Json::Null) {
       return @value.JsonataValue::Undefined
     }
     @value.JsonataValue::Json(

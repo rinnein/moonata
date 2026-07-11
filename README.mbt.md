@@ -95,10 +95,10 @@ docs: update official test status
 
 ```text
 本地测试：moon test 206/206
-官方可比对审计：eligible 1667, pass 1466, fail 201, skip 15
-通过率：85.8%
+官方可比对审计：eligible 1667, pass 1492, fail 175, skip 15
+通过率：89.5%
 ```
 
-Top failures: errors(23), parent-operator(20), function-formatNumber(14), transform(11), function-signatures(10), function-tomillis(9), joins(9), function-replace(8), range-operator(7), function-fromMillis(5)
+Top failures: errors(23), parent-operator(20), function-formatNumber(14), transform(11), function-signatures(11), function-tomillis(9), joins(9), range-operator(7), function-replace(5), object-constructor(5)
 
 官方测试集审计流程与跳过策略记录在 `docs/jsonata-official-workflow.md`。

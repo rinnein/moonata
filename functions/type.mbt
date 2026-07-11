@@ -1,8 +1,14 @@
 ///|
 fn register_type_functions(ctx : @value.EvalContext) -> Unit {
   // $string
-  register(ctx, "string", arity=0, invoke=fn(args, ctx) {
+  register(ctx, "string", arity=0, invoke=(args, ctx) => {
     let value = if args.length() == 0 { ctx.current() } else { args[0] }
+    if args.length() > 2 {
+      raise @error.runtime_error("T0410: Arguments are not of expected type")
+    }
+    if value.is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     let pretty = args.length() > 1 && value_to_bool(args[1])
     @value.JsonataValue::Json(Json::string(jsonata_string(value, pretty)))
   })
@@ -44,11 +50,8 @@ fn register_type_functions(ctx : @value.EvalContext) -> Unit {
       _ => @value.JsonataValue::Undefined
     }
   })
-  // $boolean
+  // $boolean — no extra-arg check: used as HOF callback with (item, index, array)
   register(ctx, "boolean", arity=1, invoke=(args, _ctx) => {
-    if args.length() > 1 {
-      raise @error.runtime_error("T0410: Arguments are not of expected type")
-    }
     match args[0] {
       @value.JsonataValue::Undefined => @value.JsonataValue::Undefined
       _ => @value.JsonataValue::Json(Json::boolean(value_to_bool(args[0])))
@@ -284,7 +287,10 @@ fn register_higher_order_functions(ctx : @value.EvalContext) -> Unit {
     }
   })
   // $exists
-  register(ctx, "exists", arity=1, invoke=fn(args, _ctx) {
+  register(ctx, "exists", arity=1, invoke=(args, _ctx) => {
+    if args.length() > 1 {
+      raise @error.runtime_error("T0410: Arguments are not of expected type")
+    }
     let exists = match args[0] {
       @value.JsonataValue::Undefined => false
       _ => true
@@ -334,6 +340,9 @@ fn register_special_functions(ctx : @value.EvalContext) -> Unit {
     args : Array[@value.JsonataValue],
     _ctx : @value.EvalContext,
   ) -> @value.JsonataValue raise @error.JsonataError {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     let millis = match args[0] {
       @value.JsonataValue::Json(Json::Number(n, ..)) => n
       _ => 0.0
@@ -401,7 +410,8 @@ fn register_special_functions(ctx : @value.EvalContext) -> Unit {
   })
   // $base64encode
   register(ctx, "base64encode", arity=1, invoke=fn(args, _ctx) {
-    if args[0].is_undefined() {
+    if args[0].is_undefined() ||
+      args[0] is @value.JsonataValue::Json(Json::Null) {
       return @value.JsonataValue::Undefined
     }
     let s = value_to_str(args[0])
@@ -409,18 +419,21 @@ fn register_special_functions(ctx : @value.EvalContext) -> Unit {
   })
   // $base64decode
   register(ctx, "base64decode", arity=1, invoke=fn(args, _ctx) {
-    if args[0].is_undefined() {
+    if args[0].is_undefined() ||
+      args[0] is @value.JsonataValue::Json(Json::Null) {
       return @value.JsonataValue::Undefined
     }
     let s = value_to_str(args[0])
     @value.JsonataValue::Json(Json::string(base64_decode(s)))
   })
-  // $error
-  register(ctx, "error", arity=1, invoke=fn(
-    args : Array[@value.JsonataValue],
-    _ctx : @value.EvalContext,
-  ) -> @value.JsonataValue raise @error.JsonataError {
-    raise @error.runtime_error(value_to_str(args[0]))
+  // $error — must be a string
+  register(ctx, "error", arity=1, invoke=(args, _ctx) => {
+    match args[0] {
+      @value.JsonataValue::Json(Json::String(s)) =>
+        raise @error.runtime_error(s)
+      _ =>
+        raise @error.runtime_error("T0410: Arguments are not of expected type")
+    }
   })
   // $encodeUrl — 对整个 URL 做百分号编码，保留 URL 保留字符
   register(ctx, "encodeUrl", arity=1, invoke=fn(args, _ctx) {

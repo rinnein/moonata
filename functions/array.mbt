@@ -112,6 +112,9 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
     args : Array[@value.JsonataValue],
     _ctx : @value.EvalContext,
   ) -> @value.JsonataValue raise @error.JsonataError {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     let items = args[0].to_array()
     if items.length() <= 1 {
       // $sort always returns an array (even for single-element inputs)
@@ -198,8 +201,38 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
     @value.JsonataValue::Json(Json::array(arr))
   })
   // $join
-  register(ctx, "join", arity=1, invoke=fn(args, _ctx) {
+  register(ctx, "join", arity=1, invoke=(args, _ctx) => {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
+    // Null input (e.g. from context) → T0410
+    if args[0] is @value.JsonataValue::Json(Json::Null) {
+      raise @error.runtime_error("T0410: Arguments are not of expected type")
+    }
+    // Separator must be string if provided
+    if args.length() > 1 {
+      match args[1] {
+        @value.JsonataValue::Json(Json::String(_)) => ()
+        _ =>
+          raise @error.runtime_error(
+            "T0410: Arguments are not of expected type",
+          )
+      }
+    }
     let items = args[0].to_array()
+    // T0412: if elements exist but none are strings
+    if items.length() > 0 {
+      let mut has_string = false
+      for item in items {
+        if item is @value.JsonataValue::Json(Json::String(_)) {
+          has_string = true
+          break
+        }
+      }
+      if !has_string {
+        raise @error.runtime_error("T0412: No strings found in the array")
+      }
+    }
     let sep = if args.length() > 1 { value_to_str(args[1]) } else { "" }
     let parts : Array[String] = []
     for item in items {

@@ -108,10 +108,27 @@ fn register_regex_functions(ctx : @value.EvalContext) -> Unit {
   ) -> @value.JsonataValue raise @error.JsonataError {
     replace_regex(args, ctx)
   })
-  register(ctx, "replace", arity=3, invoke=fn(
-    args,
-    ctx,
-  ) -> @value.JsonataValue raise @error.JsonataError {
+  register(ctx, "replace", arity=3, invoke=(args, ctx) => {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
+    // Validate 4th arg (limit): must be number, not null, not negative
+    if args.length() > 3 {
+      match args[3] {
+        @value.JsonataValue::Json(Json::Null) =>
+          raise @error.runtime_error(
+            "T0410: Arguments are not of expected type",
+          )
+        @value.JsonataValue::Json(Json::Number(n, ..)) =>
+          if n < 0.0 {
+            raise @error.runtime_error("D3011: Negative limit")
+          }
+        _ =>
+          raise @error.runtime_error(
+            "T0410: Arguments are not of expected type",
+          )
+      }
+    }
     replace_regex(args, ctx)
   })
 }

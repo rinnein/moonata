@@ -33,6 +33,9 @@ fn register_object_functions(ctx : @value.EvalContext) -> Unit {
   })
   // $merge
   register(ctx, "merge", arity=1, invoke=fn(args, _ctx) {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     let result : Map[String, Json] = {}
     match args[0] {
       @value.JsonataValue::Json(Json::Array(arr)) =>
