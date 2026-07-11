@@ -33,8 +33,22 @@ fn eval_binary(
   }
   let rhs = eval(rhs_ast, ctx)
   // Undefined 传播（多数运算）
-  // 例外：`..`（range）需要先校验非 undefined 边界的类型，再决定是否传播
-  if op != ".." {
+  // 例外：
+  // - `..`（range）需要先校验非 undefined 边界的类型（T2003/T2004）
+  // - 比较运算（`<`/`<=`/`>`/`>=`）需要先校验 T2010
+  // - 算术运算（`+`/`-`/`*`/`/`/`%`）需要先校验 T2001/T2002
+  // 这些运算在各自的函数内处理 undefined 传播
+  let excluded = op == ".." ||
+    op == "<" ||
+    op == "<=" ||
+    op == ">" ||
+    op == ">=" ||
+    op == "+" ||
+    op == "-" ||
+    op == "*" ||
+    op == "/" ||
+    op == "%"
+  if !excluded {
     if lhs is @value.JsonataValue::Undefined ||
       rhs is @value.JsonataValue::Undefined {
       match op {
@@ -233,18 +247,37 @@ fn arith_op(
   rhs : @value.JsonataValue,
   op : String,
 ) -> @value.JsonataValue raise @error.JsonataError {
+  // T2001: 左侧非 undefined 时必须是数字
+  if !lhs.is_undefined() {
+    let _ = to_number_with_code(lhs, "left")
+  }
+  // T2002: 右侧非 undefined 时必须是数字
+  if !rhs.is_undefined() {
+    let _ = to_number_with_code(rhs, "right")
+  }
+  // undefined 传播：任一为 undefined → 结果为 undefined
+  if lhs.is_undefined() || rhs.is_undefined() {
+    return @value.JsonataValue::Undefined
+  }
   let l = to_number_with_code(lhs, "left")
   let r = to_number_with_code(rhs, "right")
+  // 除法特殊处理：除以零返回 Infinity/NaN（对齐 JSONata-js）
+  if op == "/" {
+    if r == 0.0 {
+      if l == 0.0 {
+        return @value.JsonataValue::Json(Json::number(@double.not_a_number)) // NaN
+      } else if l > 0.0 {
+        return @value.JsonataValue::Json(Json::number(@double.infinity))
+      } else {
+        return @value.JsonataValue::Json(Json::number(@double.neg_infinity))
+      }
+    }
+    return @value.JsonataValue::Json(Json::number(l / r))
+  }
   let result = match op {
     "+" => l + r
     "-" => l - r
     "*" => l * r
-    "/" =>
-      if r == 0.0 {
-        raise @error.runtime_error("除以零")
-      } else {
-        l / r
-      }
     "%" => (l.to_int() % r.to_int()).to_double()
     _ => raise @error.runtime_error("未知算术运算: \{op}")
   }
@@ -334,28 +367,81 @@ fn compare_neq(
 }
 
 ///|
+/// 判断值是否为可比较类型（undefined、string、number）。
+/// 对齐 JSONata-js `evaluateComparisonExpression` 的 lcomparable/rcomparable 检查。
+fn is_comparable_value(v : @value.JsonataValue) -> Bool {
+  match v {
+    @value.JsonataValue::Undefined => true
+    @value.JsonataValue::Json(Json::String(_)) => true
+    @value.JsonataValue::Json(Json::Number(_)) => true
+    _ => false
+  }
+}
+
+///|
+/// 比较运算通用入口：先检查 T2010（不可比较类型），再处理 undefined 传播，
+/// 再检查 T2009（类型不匹配），最后执行比较。
+fn compare_op(
+  lhs : @value.JsonataValue,
+  rhs : @value.JsonataValue,
+  op : String,
+) -> @value.JsonataValue raise @error.JsonataError {
+  // T2010: 两边都必须是可比较类型（undefined/string/number）
+  if !is_comparable_value(lhs) || !is_comparable_value(rhs) {
+    raise @error.runtime_error(
+      "T2010: The expressions either side of operator \{op} must evaluate to numeric or string values",
+      code=Some("T2010"),
+    )
+  }
+  // undefined 传播：任一为 undefined → 结果为 undefined
+  if lhs is @value.JsonataValue::Undefined ||
+    rhs is @value.JsonataValue::Undefined {
+    return @value.JsonataValue::Undefined
+  }
+  // T2009: 两边必须同类型（都是 string 或都是 number）
+  let l_is_str = is_string_value(lhs)
+  let r_is_str = is_string_value(rhs)
+  if l_is_str != r_is_str {
+    raise @error.runtime_error(
+      "T2009: The values either side of operator \{op} must be of the same data type",
+      code=Some("T2009"),
+    )
+  }
+  // 执行比较
+  if l_is_str {
+    // 字符串比较（使用字节序比较规避 MoonBit String collation bug）
+    let l = to_str(lhs)
+    let r = to_str(rhs)
+    let result = match op {
+      "<" => str_lt(l, r)
+      "<=" => str_lte(l, r)
+      ">" => str_gt(l, r)
+      ">=" => str_gte(l, r)
+      _ => abort("unreachable: unknown comparison op")
+    }
+    @value.JsonataValue::Json(Json::boolean(result))
+  } else {
+    // 数字比较
+    let l = to_number(lhs)
+    let r = to_number(rhs)
+    let result = match op {
+      "<" => l < r
+      "<=" => l <= r
+      ">" => l > r
+      ">=" => l >= r
+      _ => abort("unreachable: unknown comparison op")
+    }
+    @value.JsonataValue::Json(Json::boolean(result))
+  }
+}
+
+///|
 /// 比较：小于
 fn compare_lt(
   lhs : @value.JsonataValue,
   rhs : @value.JsonataValue,
 ) -> @value.JsonataValue raise @error.JsonataError {
-  match (lhs, rhs) {
-    (
-      @value.JsonataValue::Json(Json::String(l)),
-      @value.JsonataValue::Json(Json::String(r)),
-    ) => @value.JsonataValue::Json(Json::boolean(str_lt(l, r)))
-    _ => {
-      // T2009: 类型不匹配（一方为字符串另一方不是）
-      if is_string_value(lhs) != is_string_value(rhs) {
-        raise @error.runtime_error(
-          "T2009: Cannot compare values of different types",
-        )
-      }
-      let l = to_number(lhs)
-      let r = to_number(rhs)
-      @value.JsonataValue::Json(Json::boolean(l < r))
-    }
-  }
+  compare_op(lhs, rhs, "<")
 }
 
 ///|
@@ -364,22 +450,7 @@ fn compare_lte(
   lhs : @value.JsonataValue,
   rhs : @value.JsonataValue,
 ) -> @value.JsonataValue raise @error.JsonataError {
-  match (lhs, rhs) {
-    (
-      @value.JsonataValue::Json(Json::String(l)),
-      @value.JsonataValue::Json(Json::String(r)),
-    ) => @value.JsonataValue::Json(Json::boolean(str_lte(l, r)))
-    _ => {
-      if is_string_value(lhs) != is_string_value(rhs) {
-        raise @error.runtime_error(
-          "T2009: Cannot compare values of different types",
-        )
-      }
-      let l = to_number(lhs)
-      let r = to_number(rhs)
-      @value.JsonataValue::Json(Json::boolean(l <= r))
-    }
-  }
+  compare_op(lhs, rhs, "<=")
 }
 
 ///|
@@ -388,22 +459,7 @@ fn compare_gt(
   lhs : @value.JsonataValue,
   rhs : @value.JsonataValue,
 ) -> @value.JsonataValue raise @error.JsonataError {
-  match (lhs, rhs) {
-    (
-      @value.JsonataValue::Json(Json::String(l)),
-      @value.JsonataValue::Json(Json::String(r)),
-    ) => @value.JsonataValue::Json(Json::boolean(str_gt(l, r)))
-    _ => {
-      if is_string_value(lhs) != is_string_value(rhs) {
-        raise @error.runtime_error(
-          "T2010: Cannot compare values of different types",
-        )
-      }
-      let l = to_number(lhs)
-      let r = to_number(rhs)
-      @value.JsonataValue::Json(Json::boolean(l > r))
-    }
-  }
+  compare_op(lhs, rhs, ">")
 }
 
 ///|
@@ -412,22 +468,7 @@ fn compare_gte(
   lhs : @value.JsonataValue,
   rhs : @value.JsonataValue,
 ) -> @value.JsonataValue raise @error.JsonataError {
-  match (lhs, rhs) {
-    (
-      @value.JsonataValue::Json(Json::String(l)),
-      @value.JsonataValue::Json(Json::String(r)),
-    ) => @value.JsonataValue::Json(Json::boolean(str_gte(l, r)))
-    _ => {
-      if is_string_value(lhs) != is_string_value(rhs) {
-        raise @error.runtime_error(
-          "T2010: Cannot compare values of different types",
-        )
-      }
-      let l = to_number(lhs)
-      let r = to_number(rhs)
-      @value.JsonataValue::Json(Json::boolean(l >= r))
-    }
-  }
+  compare_op(lhs, rhs, ">=")
 }
 
 ///|

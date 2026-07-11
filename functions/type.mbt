@@ -4,7 +4,23 @@ fn register_type_functions(ctx : @value.EvalContext) -> Unit {
   register(ctx, "string", arity=0, invoke=(args, ctx) => {
     let value = if args.length() == 0 { ctx.current() } else { args[0] }
     if args.length() > 2 {
-      raise @error.runtime_error("T0410: Arguments are not of expected type")
+      raise @error.runtime_error(
+        "T0410: Arguments are not of expected type",
+        code=Some("T0410"),
+      )
+    }
+    // 第二参数（若提供）必须是布尔值
+    if args.length() == 2 {
+      match args[1] {
+        @value.JsonataValue::Json(Json::True) => ()
+        @value.JsonataValue::Json(Json::False) => ()
+        @value.JsonataValue::Undefined => ()
+        _ =>
+          raise @error.runtime_error(
+            "T0410: Arguments are not of expected type",
+            code=Some("T0410"),
+          )
+      }
     }
     if value.is_undefined() {
       return @value.JsonataValue::Undefined
@@ -77,10 +93,22 @@ fn register_type_functions(ctx : @value.EvalContext) -> Unit {
 }
 
 ///|
-fn jsonata_string(value : @value.JsonataValue, pretty : Bool) -> String {
+fn jsonata_string(
+  value : @value.JsonataValue,
+  pretty : Bool,
+) -> String raise @error.JsonataError {
   match value {
     @value.JsonataValue::Json(Json::String(s)) => s
-    @value.JsonataValue::Json(Json::Number(n, ..)) => jsonata_string_number(n)
+    @value.JsonataValue::Json(Json::Number(n, ..)) =>
+      // D3001: 直接对 Infinity/NaN 调用 $string
+      if n.is_nan() || n.is_inf() {
+        raise @error.runtime_error(
+          "D3001: Attempting to invoke string function on Infinity or NaN",
+          code=Some("D3001"),
+        )
+      } else {
+        jsonata_string_number(n)
+      }
     @value.JsonataValue::Json(Json::True) => "true"
     @value.JsonataValue::Json(Json::False) => "false"
     @value.JsonataValue::Json(Json::Null) => "null"
@@ -88,6 +116,8 @@ fn jsonata_string(value : @value.JsonataValue, pretty : Bool) -> String {
     @value.JsonataValue::Func(_) => ""
     @value.JsonataValue::Regex(_) => ""
     _ => {
+      // D1001: 对象/数组中嵌套的 Infinity/NaN 抛 D1001
+      check_no_infinity(value)
       let json = jsonata_string_json(value)
       if pretty {
         json.stringify(indent=2)
@@ -95,6 +125,35 @@ fn jsonata_string(value : @value.JsonataValue, pretty : Bool) -> String {
         json.stringify()
       }
     }
+  }
+}
+
+///|
+/// 递归检查值中是否包含 Infinity/NaN，若包含则抛 D1001。
+fn check_no_infinity(
+  value : @value.JsonataValue,
+) -> Unit raise @error.JsonataError {
+  match value {
+    @value.JsonataValue::Json(Json::Number(n, ..)) =>
+      if n.is_nan() || n.is_inf() {
+        raise @error.runtime_error(
+          "D1001: Number out of range: \{n}",
+          code=Some("D1001"),
+        )
+      }
+    @value.JsonataValue::Json(Json::Array(arr)) =>
+      for item in arr {
+        check_no_infinity(@value.JsonataValue::Json(item))
+      }
+    @value.JsonataValue::Json(Json::Object(map)) =>
+      for _, item in map {
+        check_no_infinity(@value.JsonataValue::Json(item))
+      }
+    @value.JsonataValue::Sequence(arr) =>
+      for item in arr {
+        check_no_infinity(item)
+      }
+    _ => ()
   }
 }
 

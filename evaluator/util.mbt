@@ -29,32 +29,44 @@ fn to_number(v : @value.JsonataValue) -> Double raise @error.JsonataError {
 ///
 /// `side` 为 "left" 或 "right"，用于区分 T2001（左侧）与 T2002（右侧）。
 /// 一元负号使用 `D1002`。
+///
+/// 对齐 JSONata-js `evaluateNumericExpression` + `isNumeric`：
+/// - 仅接受真正的 Number 类型（不接受字符串、布尔值等可转数字的值）
+/// - Infinity 抛出 D1001（Number out of range）
+/// - NaN 视为非数字，抛出 T2001/T2002
+/// - undefined 通过 undefined 传播处理（在调用方检查）
 fn to_number_with_code(
   v : @value.JsonataValue,
   side : String,
 ) -> Double raise @error.JsonataError {
+  let code = if side == "left" { "T2001" } else { "T2002" }
   match v {
-    @value.JsonataValue::Json(Json::Number(n, ..)) => n
-    @value.JsonataValue::Json(Json::String(s)) =>
-      @strconv.from_str(s) catch {
-        _ =>
-          raise @error.type_error(
-            "无法转为数字: \{s}",
-            expected=Some("number"),
-            actual=Some("string"),
-            code=Some(if side == "left" { "T2001" } else { "T2002" }),
-          )
+    @value.JsonataValue::Json(Json::Number(n, ..)) =>
+      if n.is_inf() {
+        // D1001: Infinity 超出数字范围
+        raise @error.runtime_error(
+          "D1001: Number out of range: \{n}",
+          code=Some("D1001"),
+        )
+      } else if n.is_nan() {
+        // NaN 视为非数字 → T2001/T2002
+        raise @error.type_error(
+          "The \{side} side of the operator must evaluate to a number",
+          expected=Some("number"),
+          actual=None,
+          code=Some(code),
+        )
+      } else {
+        n
       }
-    @value.JsonataValue::Json(Json::True) => 1.0
-    @value.JsonataValue::Json(Json::False) => 0.0
-    @value.JsonataValue::Sequence(_) =>
-      to_number_with_code(v.lift_singleton(), side)
+    @value.JsonataValue::Sequence(arr) if arr.length() == 1 =>
+      to_number_with_code(arr[0], side)
     _ =>
       raise @error.type_error(
-        "无法转为数字",
+        "The \{side} side of the operator must evaluate to a number",
         expected=Some("number"),
         actual=None,
-        code=Some(if side == "left" { "T2001" } else { "T2002" }),
+        code=Some(code),
       )
   }
 }

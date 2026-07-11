@@ -270,6 +270,10 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
     args : Array[@value.JsonataValue],
     _ctx : @value.EvalContext,
   ) -> @value.JsonataValue raise @error.JsonataError {
+    // undefined 输入传播为 undefined（对齐 JSONata-js 语义）
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     let items = args[0].to_array()
     let candidates = if args.length() > 1 {
       let f = match args[1] {
@@ -281,9 +285,17 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
       items
     }
     match candidates.length() {
-      0 => @value.JsonataValue::Undefined
+      0 =>
+        raise @error.runtime_error(
+          "D3139: The $single() function expected exactly 1 matching result.  Instead it matched 0.",
+          code=Some("D3139"),
+        )
       1 => candidates[0]
-      _ => raise @error.runtime_error("$single: 序列包含多个元素")
+      _ =>
+        raise @error.runtime_error(
+          "D3138: The $single() function expected exactly 1 matching result.  Instead it matched more.",
+          code=Some("D3138"),
+        )
     }
   })
   // $partition — 将序列按谓词分为 [match, non-match]

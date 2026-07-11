@@ -1743,3 +1743,172 @@ test "官方套件：function-formatNumber undefined 输入传播" {
   let d = Json::null()
   assert_eval("$formatNumber(foo, '#0.00')", d, Json::null())
 }
+
+///|
+test "官方套件：comparison-operators T2010 不可比较类型" {
+  let d = Json::null()
+  // null <= "world" → T2010 (null not comparable for <<=)
+  let raised1 = try {
+    ignore(evaluate("null <= \"world\"", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "T2010"
+    _ => false
+  }
+  assert_true(raised1)
+  // 3 >= true → T2010 (boolean not comparable)
+  let raised2 = try {
+    ignore(evaluate("3 >= true", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "T2010"
+    _ => false
+  }
+  assert_true(raised2)
+  // false > 1 → T2010 (boolean not comparable)
+  let raised3 = try {
+    ignore(evaluate("false > 1", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "T2010"
+    _ => false
+  }
+  assert_true(raised3)
+  // false > $x → T2010 (boolean checked before undefined propagation)
+  let raised4 = try {
+    ignore(evaluate("false > $x", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "T2010"
+    _ => false
+  }
+  assert_true(raised4)
+}
+
+///|
+test "官方套件：comparison-operators T2009 类型不匹配与 undefined 传播" {
+  let d = Json::null()
+  // "a" < 5 → T2009 (string vs number, both comparable but different types)
+  let raised = try {
+    ignore(evaluate("\"a\" < 5", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "T2009"
+    _ => false
+  }
+  assert_true(raised)
+  // $x > 5 → undefined (undefined propagation, no error)
+  assert_eval("$x > 5", d, Json::null())
+  // 5 > $x → undefined (undefined propagation, no error)
+  assert_eval("5 > $x", d, Json::null())
+}
+
+///|
+test "官方套件：hof-single D3138/D3139 错误码" {
+  let d = Json::null()
+  // $single([0, 1, 2]) → D3138 (more than one match)
+  let raised1 = try {
+    ignore(evaluate("$single([0, 1, 2])", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3138"
+    _ => false
+  }
+  assert_true(raised1)
+  // $single([]) → D3139 (no matches)
+  let raised2 = try {
+    ignore(evaluate("$single([])", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3139"
+    _ => false
+  }
+  assert_true(raised2)
+  // $single([0, 1, 2], function($v) {$v = 3}) → D3139 (no matches with predicate)
+  let raised3 = try {
+    ignore(evaluate("$single([0, 1, 2], function($v) {$v = 3})", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3139"
+    _ => false
+  }
+  assert_true(raised3)
+}
+
+///|
+test "官方套件：numeric-operators T2001 非数字算术运算" {
+  let d = Json::null()
+  // "5" + "5" → T2001 (strings not numeric for arithmetic)
+  let raised1 = try {
+    ignore(evaluate("\"5\" + \"5\"", d))
+    false
+  } catch {
+    @error.JsonataError::TypeError(code=Some(c), ..) => c == "T2001"
+    _ => false
+  }
+  assert_true(raised1)
+  // false + 1 → T2001 (boolean not numeric)
+  let raised2 = try {
+    ignore(evaluate("false + 1", d))
+    false
+  } catch {
+    @error.JsonataError::TypeError(code=Some(c), ..) => c == "T2001"
+    _ => false
+  }
+  assert_true(raised2)
+  // false + $x → T2001 (boolean checked before undefined propagation)
+  let raised3 = try {
+    ignore(evaluate("false + $x", d))
+    false
+  } catch {
+    @error.JsonataError::TypeError(code=Some(c), ..) => c == "T2001"
+    _ => false
+  }
+  assert_true(raised3)
+}
+
+///|
+test "官方套件：function-string D3001/D1001 Infinity 检测" {
+  let d = Json::null()
+  // $string(1/0) → D3001 (string on Infinity)
+  let raised1 = try {
+    ignore(evaluate("$string(1/0)", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3001"
+    _ => false
+  }
+  assert_true(raised1)
+  // $string({"inf": 1/0}) → D1001 (object containing Infinity)
+  let raised2 = try {
+    ignore(evaluate("$string({\"inf\": 1/0})", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D1001"
+    _ => false
+  }
+  assert_true(raised2)
+  // $string(2,3) → T0410 (second arg must be boolean)
+  let raised3 = try {
+    ignore(evaluate("$string(2,3)", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "T0410"
+    _ => false
+  }
+  assert_true(raised3)
+}
+
+///|
+test "官方套件：numeric-operators D1001 Infinity 溢出" {
+  let d = Json::null()
+  // 1/(10e300 * 10e100) → D1001 (Infinity from overflow)
+  let raised = try {
+    ignore(evaluate("1/(10e300 * 10e100)", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D1001"
+    _ => false
+  }
+  assert_true(raised)
+}

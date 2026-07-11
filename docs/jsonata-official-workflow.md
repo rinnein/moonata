@@ -136,10 +136,10 @@ skip_reasons
 下方固定快照仍是旧口径下的历史记录；本轮脚本升级后，`skip` 分类会更细，待下一次复跑官方审计后再刷新这里的数字。
 
 
-当前固定快照（2026-07-11，$formatNumber picture 完整校验 + undefined 传播，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-11，比较运算 T2010/T2009 + 算术运算严格类型校验 + $single/$string 错误码，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1667 pass 1550 fail 117 skip 15
+eligible 1667 pass 1564 fail 103 skip 15
 top_failures
 parent-operator 13
 errors 9
@@ -148,14 +148,29 @@ joins 9
 transform 8
 function-replace 5
 object-constructor 5
-comparison-operators 4
-function-string 4
-hof-single 4
+literals 4
+function-eval 3
+function-fromMillis 3
 skip_reasons
 no_expected_outcome 15
 ```
 
-本轮修复（$formatNumber picture 完整校验 D3081-D3093 + undefined 传播）：
+本轮修复（比较运算 T2010/T2009 + 算术运算严格类型校验 + $single/$string 错误码）：
+- 提交：整体 pass 1550→1564 (+14)，fail 117→103 (-14)，通过率 93.0%→93.9%
+- 门禁：`moon check` 0e0w，`moon test` 236/236 passed（+6 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Evaluator: 重写比较运算为 `compare_op` 通用入口，对齐 JSONata-js `evaluateComparisonExpression` 的 T2010（不可比较类型）→ undefined 传播 → T2009（类型不匹配）三阶段检查
+  - Evaluator: 比较运算从 `eval_binary` 的 undefined 传播中排除，确保 T2010 在 undefined 传播之前检查（修复 `false > $x` 应抛 T2010 而非返回 undefined）
+  - Evaluator: 算术运算从 `eval_binary` 的 undefined 传播中排除，确保 T2001/T2002 在 undefined 传播之前检查（修复 `false + $x` 应抛 T2001）
+  - Evaluator: `to_number_with_code` 仅接受真正的 Number 类型（不接受字符串/布尔值），对齐 JSONata-js `isNumeric`
+  - Evaluator: `to_number_with_code` 检测 Infinity → D1001，NaN → T2001/T2002
+  - Evaluator: 除法以零返回 Infinity/NaN 而非报错（对齐 JSONata-js），使 `$string(1/0)` 抛 D3001
+  - Functions: `$single` 0 匹配抛 D3139，>1 匹配抛 D3138（之前 0 匹配返回 undefined）
+  - Functions: `$string` 第二参数非布尔抛 T0410；Infinity/NaN 直接调用抛 D3001；对象/数组嵌套 Infinity/NaN 抛 D1001
+  - Tests: 新增 comparison-operators T2010/T2009、hof-single D3138/D3139、numeric-operators T2001/D1001、function-string D3001/D1001/T0410 共 6 个回归断言
+- 修复效果：`comparison-operators` 4→0（全绿），`hof-single` 4→0（全绿），`numeric-operators` 4→0（全绿），`function-string` 4→1（-3）
+
+上一轮修复（$formatNumber picture 完整校验 D3081-D3093 + undefined 传播）：
 - 提交：整体 pass 1536→1550 (+14)，fail 131→117 (-14)，通过率 92.2%→93.0%
 - 门禁：`moon check` 0e0w，`moon test` 230/230 passed（+6 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：

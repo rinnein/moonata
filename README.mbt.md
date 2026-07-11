@@ -91,14 +91,14 @@ docs: update official test status
 
 ## 兼容性状态
 
-固定快照：2026-07-11，$formatNumber picture 完整校验 D3081-D3093 + undefined 传播阶段。
+固定快照：2026-07-11，比较运算 T2010/T2009 + 算术运算严格类型校验 + $single/$string 错误码阶段。
 
 ```text
-本地测试：moon test 230/230
-官方可比对审计：eligible 1667, pass 1550, fail 117, skip 15
-通过率：93.0%
+本地测试：moon test 236/236
+官方可比对审计：eligible 1667, pass 1564, fail 103, skip 15
+通过率：93.9%
 ```
 
-Top failures: parent-operator(13), errors(9), function-tomillis(9), joins(9), transform(8), function-replace(5), object-constructor(5), comparison-operators(4), function-string(4), hof-single(4)
+Top failures: parent-operator(13), errors(9), function-tomillis(9), joins(9), transform(8), function-replace(5), object-constructor(5), literals(4), function-eval(3), function-fromMillis(3)
 
 官方测试集审计流程与跳过策略记录在 `docs/jsonata-official-workflow.md`。
