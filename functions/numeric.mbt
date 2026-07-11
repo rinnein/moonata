@@ -22,9 +22,13 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
   })
   // $average
   register(ctx, "average", arity=1, invoke=fn(args, _ctx) {
+    let input_items = args[0].to_array()
+    if input_items.length() == 0 {
+      return @value.JsonataValue::Undefined
+    }
     let nums = value_to_num_array(args[0])
     if nums.length() == 0 {
-      return @value.JsonataValue::Undefined
+      raise @error.runtime_error("T0412: No numbers found in the array")
     }
     let mut total = 0.0
     for n in nums {
@@ -34,9 +38,13 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
   })
   // $max / $min
   register(ctx, "max", arity=1, invoke=fn(args, _ctx) {
+    let input_items = args[0].to_array()
+    if input_items.length() == 0 {
+      return @value.JsonataValue::Undefined
+    }
     let nums = value_to_num_array(args[0])
     if nums.length() == 0 {
-      return @value.JsonataValue::Undefined
+      raise @error.runtime_error("T0412: No numbers found in the array")
     }
     let mut m = nums[0]
     for n in nums {
@@ -47,9 +55,13 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
     @value.JsonataValue::Json(Json::number(m))
   })
   register(ctx, "min", arity=1, invoke=fn(args, _ctx) {
+    let input_items = args[0].to_array()
+    if input_items.length() == 0 {
+      return @value.JsonataValue::Undefined
+    }
     let nums = value_to_num_array(args[0])
     if nums.length() == 0 {
-      return @value.JsonataValue::Undefined
+      raise @error.runtime_error("T0412: No numbers found in the array")
     }
     let mut m = nums[0]
     for n in nums {
@@ -169,6 +181,7 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
   register(ctx, "formatNumber", arity=2, invoke=fn(args, _ctx) {
     let n = value_to_double(args[0])
     let picture = value_to_str(args[1])
+    validate_format_picture(picture)
     let per_mille = if args.length() > 2 {
       option_string(args[2], "per-mille")
     } else {
@@ -281,6 +294,76 @@ fn option_string(v : @value.JsonataValue, key : String) -> String? {
         _ => None
       }
     _ => None
+  }
+}
+
+///|
+/// 验证 $formatNumber picture 格式，无效时抛出对应 JSONata 错误码。
+fn validate_format_picture(picture : String) -> Unit raise @error.JsonataError {
+  // D3080: 多于一个分号（多于两个子图）
+  let mut semicolons = 0
+  for _, c in picture {
+    if c == ';' {
+      semicolons = semicolons + 1
+    }
+  }
+  if semicolons > 1 {
+    raise @error.runtime_error("D3080: Invalid picture: too many sub-pictures")
+  }
+  // D3086: 多个前缀特殊字符（---、%%、‰‰、%‰）
+  let prefix = leading_number_prefix(picture)
+  let mut prefix_special = 0
+  for _, c in prefix {
+    if c == '-' || c == '%' || c == '‰' {
+      prefix_special = prefix_special + 1
+    }
+  }
+  if prefix_special > 1 {
+    raise @error.runtime_error(
+      "D3086: Invalid picture: too many prefix characters",
+    )
+  }
+  // D3081: 小数部分多于一个点
+  let normalized = normalize_number_picture_digits(picture, None)
+  let after_semicolon = match normalized.find(";") {
+    Some(i) => normalized[i + 1:].to_owned()
+    None => normalized
+  }
+  let mut dots = 0
+  for _, c in after_semicolon {
+    if c == '.' {
+      dots = dots + 1
+    }
+  }
+  if dots > 1 {
+    raise @error.runtime_error(
+      "D3081: Invalid picture: multiple decimal separators",
+    )
+  }
+  // D3082/D3083/D3084: percent 和/或 permille 重复或混用
+  let after_prefix = strip_number_prefix(after_semicolon, prefix)
+  let suffix = trailing_number_suffix(after_prefix)
+  let body = strip_number_suffix(after_prefix, suffix)
+  let body_has_percent = body.contains("%")
+  let suffix_has_percent = suffix.contains("%")
+  let body_has_permille = body.contains("‰")
+  let suffix_has_permille = suffix.contains("‰")
+  let pct_count = (if body_has_percent { 1 } else { 0 }) +
+    (if suffix_has_percent { 1 } else { 0 })
+  let pm_count = (if body_has_permille { 1 } else { 0 }) +
+    (if suffix_has_permille { 1 } else { 0 })
+  if pct_count > 1 {
+    raise @error.runtime_error("D3082: Invalid picture: multiple percent signs")
+  }
+  if pm_count > 1 {
+    raise @error.runtime_error(
+      "D3083: Invalid picture: multiple permille signs",
+    )
+  }
+  if pct_count >= 1 && pm_count >= 1 {
+    raise @error.runtime_error(
+      "D3084: Invalid picture: percent and permille mixed",
+    )
   }
 }
 

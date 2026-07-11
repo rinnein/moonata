@@ -60,7 +60,7 @@ pub fn JsonataFunc::check_args(
       for i in 0..<limit {
         if !matches_signature(args[i], chars[i]) {
           raise @error.signature_error(
-            "函数参数类型不匹配: 第 \{i + 1} 个参数期望 \{chars[i]}",
+            "T0410: Arguments are not of expected type",
           )
         }
       }

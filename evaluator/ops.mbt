@@ -120,8 +120,21 @@ fn range_op(
   lhs : @value.JsonataValue,
   rhs : @value.JsonataValue,
 ) -> @value.JsonataValue raise @error.JsonataError {
-  let start = to_number(lhs).to_int()
-  let end = to_number(rhs).to_int()
+  let start_d = to_number(lhs) catch {
+    _ => raise @error.runtime_error("T2003: Integer expected")
+  }
+  let end_d = to_number(rhs) catch {
+    _ => raise @error.runtime_error("T2004: Integer expected")
+  }
+  let start = start_d.to_int()
+  let end = end_d.to_int()
+  // JSONata: range bounds must be integers
+  if start_d != start.to_double() {
+    raise @error.runtime_error("T2003: Integer expected")
+  }
+  if end_d != end.to_double() {
+    raise @error.runtime_error("T2004: Integer expected")
+  }
   let items : Array[@value.JsonataValue] = []
   if start <= end {
     for i in start..<=end {
@@ -250,6 +263,12 @@ fn compare_lt(
       @value.JsonataValue::Json(Json::String(r)),
     ) => @value.JsonataValue::Json(Json::boolean(str_lt(l, r)))
     _ => {
+      // T2009: 类型不匹配（一方为字符串另一方不是）
+      if is_string_value(lhs) != is_string_value(rhs) {
+        raise @error.runtime_error(
+          "T2009: Cannot compare values of different types",
+        )
+      }
       let l = to_number(lhs)
       let r = to_number(rhs)
       @value.JsonataValue::Json(Json::boolean(l < r))
@@ -269,6 +288,11 @@ fn compare_lte(
       @value.JsonataValue::Json(Json::String(r)),
     ) => @value.JsonataValue::Json(Json::boolean(str_lte(l, r)))
     _ => {
+      if is_string_value(lhs) != is_string_value(rhs) {
+        raise @error.runtime_error(
+          "T2009: Cannot compare values of different types",
+        )
+      }
       let l = to_number(lhs)
       let r = to_number(rhs)
       @value.JsonataValue::Json(Json::boolean(l <= r))
@@ -288,6 +312,11 @@ fn compare_gt(
       @value.JsonataValue::Json(Json::String(r)),
     ) => @value.JsonataValue::Json(Json::boolean(str_gt(l, r)))
     _ => {
+      if is_string_value(lhs) != is_string_value(rhs) {
+        raise @error.runtime_error(
+          "T2010: Cannot compare values of different types",
+        )
+      }
       let l = to_number(lhs)
       let r = to_number(rhs)
       @value.JsonataValue::Json(Json::boolean(l > r))
@@ -307,6 +336,11 @@ fn compare_gte(
       @value.JsonataValue::Json(Json::String(r)),
     ) => @value.JsonataValue::Json(Json::boolean(str_gte(l, r)))
     _ => {
+      if is_string_value(lhs) != is_string_value(rhs) {
+        raise @error.runtime_error(
+          "T2010: Cannot compare values of different types",
+        )
+      }
       let l = to_number(lhs)
       let r = to_number(rhs)
       @value.JsonataValue::Json(Json::boolean(l >= r))
@@ -491,12 +525,7 @@ fn eval_apply(
       }
     }
     @value.JsonataValue::Undefined => @value.JsonataValue::Undefined
-    _ =>
-      raise @error.type_error(
-        "不可调用的值",
-        expected=Some("function"),
-        actual=None,
-      )
+    _ => raise @error.runtime_error("T1006: Attempted to invoke a non-function")
   }
 }
 

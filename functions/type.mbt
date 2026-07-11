@@ -7,13 +7,16 @@ fn register_type_functions(ctx : @value.EvalContext) -> Unit {
     @value.JsonataValue::Json(Json::string(jsonata_string(value, pretty)))
   })
   // $number
-  register(ctx, "number", arity=1, signature=Some("j"), invoke=fn(args, _ctx) {
+  register(ctx, "number", arity=1, signature=Some("j"), invoke=(args, _ctx) => {
     match args[0] {
       @value.JsonataValue::Json(Json::Number(_, ..)) => args[0]
       @value.JsonataValue::Json(Json::String(s)) =>
         match parse_number_literal(s) {
           Some(n) => @value.JsonataValue::Json(Json::number(n))
-          None => @value.JsonataValue::Undefined
+          None =>
+            raise @error.runtime_error(
+              "D3030: Unable to cast value to a number",
+            )
         }
       @value.JsonataValue::Json(Json::True) =>
         @value.JsonataValue::Json(Json::number(1.0))

@@ -172,6 +172,14 @@ fn json_equal(a : Json, b : Json) -> Bool {
 }
 
 ///|
+fn is_string_value(v : @value.JsonataValue) -> Bool {
+  match v {
+    @value.JsonataValue::Json(Json::String(_)) => true
+    _ => false
+  }
+}
+
+///|
 fn not(b : Bool) -> Bool {
   !b
 }

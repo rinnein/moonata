@@ -136,19 +136,39 @@ skip_reasons
 下方固定快照仍是旧口径下的历史记录；本轮脚本升级后，`skip` 分类会更细，待下一次复跑官方审计后再刷新这里的数字。
 
 
-当前固定快照（2026-07-10，map 后位置谓词重置与重复父级跳过修正，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-11，错误码对齐与参数验证，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1251 pass 1251 fail 0 skip 431
+eligible 1667 pass 1395 fail 272 skip 15
 top_failures
+errors 23
+parent-operator 20
+function-formatNumber 14
+transform 13
+function-signatures 11
+function-max 10
+function-number 10
+function-tomillis 9
+joins 9
+function-replace 8
 skip_reasons
-no_result 395
-non-string-expr 23
-timelimit 7
-bindings 6
+no_expected_outcome 15
 ```
 
-本轮修复（map 后位置谓词重置与重复父级跳过修正）：
+本轮修复（错误码对齐与参数验证）：
+- 提交：整体 pass 1334→1395 (+61)，fail 333→272 (-61)，通过率 80.0%→83.7%
+- 门禁：`moon check` 0e5w，`moon test` 206/206 passed，`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Functions: `$number()` 无效字符串抛出 D3030 替代返回 undefined
+  - Functions: `$max/$min/$average` 非空数组但无数字时抛出 T0412
+  - Functions: `$formatNumber` 新增 picture 格式验证（D3080-D3086 多子图/多点/多百分号/千分号）
+  - Evaluator: range operator 非整数边界或不可转换值抛出 T2003/T2004
+  - Evaluator: 比较运算符混合类型（字符串 vs 数字）抛出 T2009/T2010
+  - Evaluator: 非函数调用抛出 T1006 替代 TypeError
+  - Value: `SignatureError` 消息对齐 T0410 错误码
+- 已知限制：审计脚本升级后口径扩大（eligible 1251→1667），新增 expected-error 和 code-mismatch 检测
+
+上一轮修复（map 后位置谓词重置与重复父级跳过修正）：
 - 提交：joins 27→28 pass（1→0 fail, -1），parent-operator 19→20 pass（1→0 fail, -1），整体 pass 1249→1251 (+2)，fail 2→0 (-2)，通过率 99.84%→100%
 - 门禁：`moon check` 0e0w，`moon test` 204→206 passed（+2 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：
