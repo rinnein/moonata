@@ -136,10 +136,10 @@ skip_reasons
 下方固定快照仍是旧口径下的历史记录；本轮脚本升级后，`skip` 分类会更细，待下一次复跑官方审计后再刷新这里的数字。
 
 
-当前固定快照（2026-07-11，比较运算 T2010/T2009 + 算术运算严格类型校验 + $single/$string 错误码，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-11，词法错误码 S0102-S0104 + date picture D3133-D3135，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1667 pass 1564 fail 103 skip 15
+eligible 1667 pass 1571 fail 96 skip 15
 top_failures
 parent-operator 13
 errors 9
@@ -148,14 +148,27 @@ joins 9
 transform 8
 function-replace 5
 object-constructor 5
-literals 4
 function-eval 3
-function-fromMillis 3
+hof-reduce 3
+regex 3
 skip_reasons
 no_expected_outcome 15
 ```
 
-本轮修复（比较运算 T2010/T2009 + 算术运算严格类型校验 + $single/$string 错误码）：
+本轮修复（词法错误码 S0102-S0104 + date picture D3133-D3135）：
+- 提交：整体 pass 1564→1571 (+7)，fail 103→96 (-7)，通过率 93.9%→94.2%
+- 门禁：`moon check` 0e0w，`moon test` 242/242 passed（+6 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Lexer: `lex_number` 检测 Infinity/NaN → S0102（数字溢出），对齐 JSONata-js `isFinite` 检查
+  - Lexer: `lex_string` 未知转义序列 → S0103（非法转义），对齐 JSONata-js `escapes` 检查
+  - Lexer: `lex_hex4` 无效十六进制位或不足 4 位 → S0104（\u 需 4 位十六进制），对齐 JSONata-js `octets` 检查
+  - Functions: `format_date_marker` 的 `[YN]` year name → D3133（N 修饰符仅适用于 M/F）
+  - Functions: `format_date_marker` 的 Z marker 数字位数 >4 → D3134（时区数字过多）
+  - Functions: `format_date_picture` 新增 `validate_date_picture_brackets` 预扫描，未闭合 marker → D3135（无匹配 `]`），对齐 JSONata-js 解析阶段先于格式化检查
+  - Tests: 新增 literals S0102/S0103/S0104 + function-fromMillis D3133/D3134/D3135 共 6 个回归断言
+- 修复效果：`literals` group 4→0（全绿），`function-fromMillis` group 3→0（全绿）
+
+上一轮修复（比较运算 T2010/T2009 + 算术运算严格类型校验 + $single/$string 错误码）：
 - 提交：整体 pass 1550→1564 (+14)，fail 117→103 (-14)，通过率 93.0%→93.9%
 - 门禁：`moon check` 0e0w，`moon test` 236/236 passed（+6 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：

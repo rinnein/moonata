@@ -1912,3 +1912,104 @@ test "官方套件：numeric-operators D1001 Infinity 溢出" {
   }
   assert_true(raised)
 }
+
+///|
+test "官方套件：literals S0102 数字溢出" {
+  let d = Json::null()
+  // 10e1000 → S0102 (number out of range)
+  let raised = try {
+    ignore(evaluate("10e1000", d))
+    false
+  } catch {
+    @error.JsonataError::SyntaxError(code=Some(c), ..) => c == "S0102"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：literals S0103 非法转义" {
+  let d = Json::null()
+  // "\y" → S0103 (illegal escape sequence)
+  let raised = try {
+    ignore(evaluate("\"\\y\"", d))
+    false
+  } catch {
+    @error.JsonataError::SyntaxError(code=Some(c), ..) => c == "S0103"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：literals S0104 无效 \\u 十六进制" {
+  let d = Json::null()
+  // "\u" → S0104 (\u must be followed by 4 hex digits)
+  // 使用字符拼接避免 MoonBit 字符串字面量中 \u 转义冲突
+  let expr1 = "\"" + "\\u" + "\""
+  let raised1 = try {
+    ignore(evaluate(expr1, d))
+    false
+  } catch {
+    @error.JsonataError::SyntaxError(code=Some(c), ..) => c == "S0104"
+    _ => false
+  }
+  assert_true(raised1)
+  // "\u123t" → S0104 (t is not hex)
+  let expr2 = "\"" + "\\u123t" + "\""
+  let raised2 = try {
+    ignore(evaluate(expr2, d))
+    false
+  } catch {
+    @error.JsonataError::SyntaxError(code=Some(c), ..) => c == "S0104"
+    _ => false
+  }
+  assert_true(raised2)
+}
+
+///|
+test "官方套件：function-fromMillis D3133 year name 不支持" {
+  let d = Json::null()
+  // $fromMillis(1419940800000, "[YN]-[M]-[D]") → D3133
+  let raised = try {
+    ignore(evaluate("$fromMillis(1419940800000, \"[YN]-[M]-[D]\")", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3133"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：function-fromMillis D3134 时区数字过多" {
+  let d = Json::null()
+  // $fromMillis(1230757500000, "...[Z010101t]", "+0530") → D3134
+  let raised = try {
+    ignore(
+      evaluate(
+        "$fromMillis(1230757500000, \"[Y]-[M01]-[D01]T[H01]:]:[s].[f001][Z010101t]\", \"+0530\")",
+        d,
+      ),
+    )
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3134"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：function-fromMillis D3135 未闭合 bracket" {
+  let d = Json::null()
+  // $fromMillis(1419940800000, "[YN]-[M") → D3135 (no closing ])
+  let raised = try {
+    ignore(evaluate("$fromMillis(1419940800000, \"[YN]-[M\")", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3135"
+    _ => false
+  }
+  assert_true(raised)
+}

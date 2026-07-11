@@ -586,6 +586,9 @@ fn format_date_picture(
   offset_seconds : Int,
 ) -> String raise @error.JsonataError {
   let dt = datetime_from_millis(millis, offset_seconds)
+  // 预扫描：检查所有 marker 是否有匹配的 ']'，无匹配则抛 D3135
+  // 对齐 JSONata-js 在解析阶段先于格式化阶段检查
+  validate_date_picture_brackets(picture)
   let out = StringBuilder::new()
   let chars = picture.to_array()
   let mut i = 0
@@ -599,19 +602,15 @@ fn format_date_picture(
         while j < chars.length() && chars[j] != ']' {
           j += 1
         }
-        if j < chars.length() {
-          out.write_string(
-            format_date_marker(
-              dt,
-              chars_to_string(chars, i + 1, j),
-              offset_seconds,
-            ),
-          )
-          i = j + 1
-        } else {
-          out.write_char(chars[i])
-          i += 1
-        }
+        // j < chars.length() 保证成立（预扫描已验证）
+        out.write_string(
+          format_date_marker(
+            dt,
+            chars_to_string(chars, i + 1, j),
+            offset_seconds,
+          ),
+        )
+        i = j + 1
       }
     } else if chars[i] == ']' && i + 1 < chars.length() && chars[i + 1] == ']' {
       out.write_char(']')
@@ -622,6 +621,48 @@ fn format_date_picture(
     }
   }
   out.to_string()
+}
+
+///|
+/// 验证 date picture 中所有 marker 都有匹配的 ']'，否则抛 D3135。
+/// 跳过 `[[`（转义的 `[`）和 `]]`（转义的 `]`）。
+fn validate_date_picture_brackets(
+  picture : String,
+) -> Unit raise @error.JsonataError {
+  let chars = picture.to_array()
+  let n = chars.length()
+  let mut i = 0
+  while i < n {
+    if chars[i] == '[' {
+      if i + 1 < n && chars[i + 1] == '[' {
+        // 转义的 [[
+        i += 2
+      } else {
+        // 查找匹配的 ]
+        let mut j = i + 1
+        let mut found = false
+        while j < n {
+          if chars[j] == ']' {
+            found = true
+            break
+          }
+          j += 1
+        }
+        if !found {
+          raise @error.runtime_error(
+            "D3135: The picture contains a component with no closing bracket ']'",
+            code=Some("D3135"),
+          )
+        }
+        i = j + 1
+      }
+    } else if chars[i] == ']' && i + 1 < n && chars[i + 1] == ']' {
+      // 转义的 ]]
+      i += 2
+    } else {
+      i += 1
+    }
+  }
 }
 
 ///|
@@ -701,6 +742,13 @@ fn format_date_marker(
     "xN" => month_name(week_numbering_month(dt), "upper")
     _ =>
       if marker.length() > 0 && marker.get_char(0) == Some('Y') {
+        if marker.contains("N") {
+          // [YN] year name 不支持 → D3133
+          raise @error.runtime_error(
+            "D3133: The 'N' name modifier is only valid for month (M) and day (F) components",
+            code=Some("D3133"),
+          )
+        }
         if marker.contains(",2-2") {
           pad2(dt.year() % 100)
         } else {
@@ -713,6 +761,23 @@ fn format_date_marker(
           }
           y.to_string()
         }
+      } else if marker.length() > 0 && marker.get_char(0) == Some('Z') {
+        // D3134: timezone 数字位数超过 4 → 错误
+        // 仅允许 1-4 位数字（1-2: hours, 3-4: hours+minutes）
+        let mut digit_count = 0
+        for k in 1..<marker.length() {
+          let c = marker.get_char(k).unwrap_or('\u{0}')
+          if c >= '0' && c <= '9' {
+            digit_count = digit_count + 1
+          }
+        }
+        if digit_count > 4 {
+          raise @error.runtime_error(
+            "D3134: The timezone marker has too many digits: \{marker}",
+            code=Some("D3134"),
+          )
+        }
+        offset_digits(offset_seconds)
       } else if marker.length() > 0 && marker.get_char(0) == Some('M') {
         dt.month().to_string()
       } else if marker.length() > 0 && marker.get_char(0) == Some('D') {

@@ -351,6 +351,7 @@ fn Lexer::lex_string(
             "未知转义: \\\{u16_to_char(esc)}",
             position=Some(self.pos),
             token=None,
+            code=Some("S0103"),
           )
       }
     } else {
@@ -375,6 +376,7 @@ fn Lexer::lex_hex4(self : Lexer) -> Int raise @error.JsonataError {
         "\\u 转义需要 4 位十六进制",
         position=Some(self.pos),
         token=None,
+        code=Some("S0104"),
       )
     }
     let c = self.advance()
@@ -389,6 +391,7 @@ fn Lexer::lex_hex4(self : Lexer) -> Int raise @error.JsonataError {
         "无效十六进制位",
         position=Some(self.pos),
         token=None,
+        code=Some("S0104"),
       )
     }
     val = val * 16 + digit
@@ -433,7 +436,16 @@ fn Lexer::lex_number(
   }
   let s = buf.to_string()
   try {
-    let d = @strconv.from_str(s)
+    let d : Double = @strconv.from_str(s)
+    // S0102: 数字溢出（Infinity/NaN）报错，对齐 JSONata-js
+    if d.is_inf() || d.is_nan() {
+      raise @error.syntax_error(
+        "无效数字: \{s}",
+        position=Some(start),
+        token=Some(s),
+        code=Some("S0102"),
+      )
+    }
     Token::new(kind=TokenKind::Number(d), pos=start)
   } catch {
     _ =>
@@ -441,6 +453,7 @@ fn Lexer::lex_number(
         "无效数字: \{s}",
         position=Some(start),
         token=Some(s),
+        code=Some("S0102"),
       )
   }
 }
