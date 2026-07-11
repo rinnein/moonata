@@ -25,6 +25,41 @@ fn to_number(v : @value.JsonataValue) -> Double raise @error.JsonataError {
 }
 
 ///|
+/// 值转数字，失败时携带 JSONata 官方错误码（如 T2001/T2002/D1002）。
+///
+/// `side` 为 "left" 或 "right"，用于区分 T2001（左侧）与 T2002（右侧）。
+/// 一元负号使用 `D1002`。
+fn to_number_with_code(
+  v : @value.JsonataValue,
+  side : String,
+) -> Double raise @error.JsonataError {
+  match v {
+    @value.JsonataValue::Json(Json::Number(n, ..)) => n
+    @value.JsonataValue::Json(Json::String(s)) =>
+      @strconv.from_str(s) catch {
+        _ =>
+          raise @error.type_error(
+            "无法转为数字: \{s}",
+            expected=Some("number"),
+            actual=Some("string"),
+            code=Some(if side == "left" { "T2001" } else { "T2002" }),
+          )
+      }
+    @value.JsonataValue::Json(Json::True) => 1.0
+    @value.JsonataValue::Json(Json::False) => 0.0
+    @value.JsonataValue::Sequence(_) =>
+      to_number_with_code(v.lift_singleton(), side)
+    _ =>
+      raise @error.type_error(
+        "无法转为数字",
+        expected=Some("number"),
+        actual=None,
+        code=Some(if side == "left" { "T2001" } else { "T2002" }),
+      )
+  }
+}
+
+///|
 /// 值转字符串
 fn to_str(v : @value.JsonataValue) -> String {
   match v {

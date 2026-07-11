@@ -6,24 +6,25 @@ import {
 }
 
 // Values
-pub fn guardrail_error(String, limit? : String?) -> JsonataError
+pub fn guardrail_error(String, limit? : String?, code? : String?) -> JsonataError
 
-pub fn runtime_error(String) -> JsonataError
+pub fn runtime_error(String, code? : String?) -> JsonataError
 
-pub fn signature_error(String, func? : String?) -> JsonataError
+pub fn signature_error(String, func? : String?, code? : String?) -> JsonataError
 
-pub fn syntax_error(String, position? : Int?, token? : String?) -> JsonataError
+pub fn syntax_error(String, position? : Int?, token? : String?, code? : String?) -> JsonataError
 
-pub fn type_error(String, expected? : String?, actual? : String?) -> JsonataError
+pub fn type_error(String, expected? : String?, actual? : String?, code? : String?) -> JsonataError
 
 // Errors
 pub(all) suberror JsonataError {
-  SyntaxError(message~ : String, position~ : Int?, token~ : String?)
-  RuntimeError(message~ : String)
-  TypeError(message~ : String, expected~ : String?, actual~ : String?)
-  SignatureError(message~ : String, func~ : String?)
-  GuardrailError(message~ : String, limit~ : String?)
+  SyntaxError(message~ : String, position~ : Int?, token~ : String?, code~ : String?)
+  RuntimeError(message~ : String, code~ : String?)
+  TypeError(message~ : String, expected~ : String?, actual~ : String?, code~ : String?)
+  SignatureError(message~ : String, func~ : String?, code~ : String?)
+  GuardrailError(message~ : String, limit~ : String?, code~ : String?)
 } derive(Eq, @debug.Debug)
+pub fn JsonataError::error_code(Self) -> String?
 
 // Types and methods
 

@@ -91,14 +91,14 @@ docs: update official test status
 
 ## 兼容性状态
 
-固定快照：2026-07-11，函数签名系统完整实现 + $join undefined 分隔符兼容阶段。
+固定快照：2026-07-11，JSONata 错误码系统 + range 边界严格校验阶段。
 
 ```text
-本地测试：moon test 213/213
-官方可比对审计：eligible 1667, pass 1505, fail 162, skip 15
-通过率：90.2%
+本地测试：moon test 224/224
+官方可比对审计：eligible 1667, pass 1536, fail 131, skip 15
+通过率：92.2%
 ```
 
-Top failures: errors(23), parent-operator(20), function-formatNumber(14), transform(11), function-tomillis(9), joins(9), range-operator(7), function-replace(5), object-constructor(5), comparison-operators(4)
+Top failures: function-formatNumber(14), parent-operator(13), errors(9), function-tomillis(9), joins(9), transform(8), function-replace(5), object-constructor(5), comparison-operators(4), function-string(4)
 
 官方测试集审计流程与跳过策略记录在 `docs/jsonata-official-workflow.md`。

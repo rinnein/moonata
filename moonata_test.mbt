@@ -1392,3 +1392,214 @@ test "官方套件：function-signatures case040 - s?n+ 可选参数与可变参
     data("[1, 2]"),
   )
 }
+
+///|
+test "官方套件：errors case000/001 - T2001/T2002 算术运算类型错误" {
+  let d = Json::null()
+  // "s" - 1 → T2001 (left side of - must be number)
+  let raised1 = try {
+    ignore(evaluate("\"s\" - 1", d))
+    false
+  } catch {
+    @error.JsonataError::TypeError(code=Some(c), ..) => c == "T2001"
+    _ => false
+  }
+  assert_true(raised1)
+  // 1 + null → T2002 (right side of + must be number)
+  let raised2 = try {
+    ignore(evaluate("1 + null", d))
+    false
+  } catch {
+    @error.JsonataError::TypeError(code=Some(c), ..) => c == "T2002"
+    _ => false
+  }
+  assert_true(raised2)
+}
+
+///|
+test "官方套件：errors case004 - D1002 一元负号非数字" {
+  let d = Json::null()
+  let raised = try {
+    ignore(evaluate("- \"s\"", d))
+    false
+  } catch {
+    @error.JsonataError::TypeError(code=Some(c), ..) => c == "D1002"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：errors case002/003 - S0101/S0105 未终止字符串" {
+  let d = Json::null()
+  // "no closing quote → S0101
+  let raised1 = try {
+    ignore(evaluate("\"no closing quote", d))
+    false
+  } catch {
+    @error.JsonataError::SyntaxError(code=Some(c), ..) => c == "S0101"
+    _ => false
+  }
+  assert_true(raised1)
+  // `no closing backtick → S0105
+  let raised2 = try {
+    ignore(evaluate("`no closing backtick", d))
+    false
+  } catch {
+    @error.JsonataError::SyntaxError(code=Some(c), ..) => c == "S0105"
+    _ => false
+  }
+  assert_true(raised2)
+}
+
+///|
+test "官方套件：errors case007/008 - S0202 期望 token 不匹配" {
+  let d = Json::null()
+  // [1,2) → S0202 (expected ])
+  let raised1 = try {
+    ignore(evaluate("[1,2)", d))
+    false
+  } catch {
+    @error.JsonataError::SyntaxError(code=Some(c), ..) => c == "S0202"
+    _ => false
+  }
+  assert_true(raised1)
+  // [1:2] → S0202 (expected ])
+  let raised2 = try {
+    ignore(evaluate("[1:2]", d))
+    false
+  } catch {
+    @error.JsonataError::SyntaxError(code=Some(c), ..) => c == "S0202"
+    _ => false
+  }
+  assert_true(raised2)
+}
+
+///|
+test "官方套件：errors case015 - S0207 意外输入结束" {
+  let d = Json::null()
+  // 1= → S0207 (unexpected end of expression)
+  let raised = try {
+    ignore(evaluate("1=", d))
+    false
+  } catch {
+    @error.JsonataError::SyntaxError(code=Some(c), ..) => c == "S0207"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：errors case016 - S0208 Lambda 参数必须 $name" {
+  let d = Json::null()
+  // function(x){$x}(3) → S0208 (param must be $name)
+  let raised = try {
+    ignore(evaluate("function(x){$x}(3)", d))
+    false
+  } catch {
+    @error.JsonataError::SyntaxError(code=Some(c), ..) => c == "S0208"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：errors case017/018 - S0212 := 左侧必须 $name" {
+  let d = Json::null()
+  // x:=1 → S0212
+  let raised1 = try {
+    ignore(evaluate("x:=1", d))
+    false
+  } catch {
+    @error.JsonataError::SyntaxError(code=Some(c), ..) => c == "S0212"
+    _ => false
+  }
+  assert_true(raised1)
+  // 2:=1 → S0212
+  let raised2 = try {
+    ignore(evaluate("2:=1", d))
+    false
+  } catch {
+    @error.JsonataError::SyntaxError(code=Some(c), ..) => c == "S0212"
+    _ => false
+  }
+  assert_true(raised2)
+}
+
+///|
+test "官方套件：errors case019/020/021 - T1006/S0211 非函数调用与意外 token" {
+  let d = Json::null()
+  // $foo() → T1006 (undefined function)
+  let raised1 = try {
+    ignore(evaluate("$foo()", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "T1006"
+    _ => false
+  }
+  assert_true(raised1)
+  // 55=>5 → S0211 (> unexpected as unary)
+  let raised2 = try {
+    ignore(evaluate("55=>5", d))
+    false
+  } catch {
+    @error.JsonataError::SyntaxError(code=Some(c), ..) => c == "S0211"
+    _ => false
+  }
+  assert_true(raised2)
+}
+
+///|
+test "官方套件：range-operator case012/017/018 - T2003/T2004 range 边界类型" {
+  let d = Json::null()
+  // [true..false] → T2003 (left not integer)
+  let raised1 = try {
+    ignore(evaluate("[true..false]", d))
+    false
+  } catch {
+    @error.JsonataError::TypeError(code=Some(c), ..) => c == "T2003"
+    _ => false
+  }
+  assert_true(raised1)
+  // [1..false] → T2004 (right not integer)
+  let raised2 = try {
+    ignore(evaluate("[1..false]", d))
+    false
+  } catch {
+    @error.JsonataError::TypeError(code=Some(c), ..) => c == "T2004"
+    _ => false
+  }
+  assert_true(raised2)
+  // [2..true] → T2004 (right not integer)
+  let raised3 = try {
+    ignore(evaluate("[2..true]", d))
+    false
+  } catch {
+    @error.JsonataError::TypeError(code=Some(c), ..) => c == "T2004"
+    _ => false
+  }
+  assert_true(raised3)
+}
+
+///|
+test "官方套件：range-operator case022/023 - D2014 range 过大" {
+  let d = Json::null()
+  // [0..10000000] ~> $count() → D2014
+  let raised1 = try {
+    ignore(evaluate("[0..10000000] ~> $count()", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D2014"
+    _ => false
+  }
+  assert_true(raised1)
+  // [1..10000001] ~> $count() → D2014
+  let raised2 = try {
+    ignore(evaluate("[1..10000001] ~> $count()", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D2014"
+    _ => false
+  }
+  assert_true(raised2)
+}

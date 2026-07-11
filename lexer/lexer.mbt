@@ -289,6 +289,7 @@ fn Lexer::lex_string(
         "未终止的字符串",
         position=Some(start),
         token=None,
+        code=Some(if quote == '`' { "S0105" } else { "S0101" }),
       )
     }
     let c = match self.src.get_char(self.pos) {

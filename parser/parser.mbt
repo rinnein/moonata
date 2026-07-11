@@ -12,11 +12,24 @@ pub fn parse(
 ) -> @ast.Ast raise @error.JsonataError {
   let p = Parser::new(tokens)
   let result = p.parse_block()
+  // 检查 `expr := ...` 模式：左侧不是 $var 时应抛 S0212
+  // （parse_bind 仅在 $var 后消费 :=，非变量表达式后的 := 会作为尾部 token 残留）
+  if p.peek_kind() == @lexer.TokenKind::Colon &&
+    p.pos + 1 < p.tokens.length() &&
+    p.tokens[p.pos + 1].kind == @lexer.TokenKind::Eq {
+    raise @error.syntax_error(
+      ":= 左侧必须是 $name",
+      position=Some(p.peek().pos),
+      token=Some(":"),
+      code=Some("S0212"),
+    )
+  }
   if not(p.at_end()) {
     raise @error.syntax_error(
       "意外的尾部 token",
       position=Some(p.peek().pos),
       token=Some(debug_tok(p.peek())),
+      code=Some("S0201"),
     )
   }
   result
@@ -79,6 +92,7 @@ fn Parser::expect(
       "期望 \{what}，得到 \{debug_tok(self.peek())}",
       position=Some(self.peek().pos),
       token=Some(debug_tok(self.peek())),
+      code=Some("S0202"),
     )
   }
 }

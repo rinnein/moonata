@@ -136,26 +136,45 @@ skip_reasons
 下方固定快照仍是旧口径下的历史记录；本轮脚本升级后，`skip` 分类会更细，待下一次复跑官方审计后再刷新这里的数字。
 
 
-当前固定快照（2026-07-11，函数签名系统完整实现 + $join undefined 分隔符兼容，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-11，JSONata 错误码系统 + range 边界严格校验，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1667 pass 1505 fail 162 skip 15
+eligible 1667 pass 1536 fail 131 skip 15
 top_failures
-errors 23
-parent-operator 20
 function-formatNumber 14
-transform 11
+parent-operator 13
+errors 9
 function-tomillis 9
 joins 9
-range-operator 7
+transform 8
 function-replace 5
 object-constructor 5
 comparison-operators 4
+function-string 4
 skip_reasons
 no_expected_outcome 15
 ```
 
-本轮修复（JSONata 函数签名系统完整实现 + $join undefined 分隔符兼容）：
+本轮修复（JSONata 错误码系统 + range 边界严格校验）：
+- 提交：整体 pass 1505→1536 (+31)，fail 162→131 (-31)，通过率 90.2%→92.2%
+- 门禁：`moon check` 0e0w，`moon test` 224/224 passed（+10 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Error: 为 `JsonataError` 所有变体新增 `code~ : String?` 字段，携带 JSONata 官方错误码（如 `T2001`/`S0101`）
+  - Error: 新增 `JsonataError::error_code` 方法提取错误码；便捷构造函数 `syntax_error`/`runtime_error`/`type_error`/`signature_error`/`guardrail_error` 均支持 `code?` 参数
+  - CLI: 错误输出前缀官方错误码（如 `错误: T2001: TypeError(...)`），使审计脚本能通过子串匹配验证错误码
+  - Evaluator: 算术运算左侧非数字抛出 `T2001`，右侧非数字抛出 `T2002`（新增 `to_number_with_code` 区分左右）
+  - Evaluator: 一元负号非数字抛出 `D1002`
+  - Evaluator: 调用 undefined 或非函数值抛出 `T1006`（之前 undefined 静默返回 undefined）
+  - Evaluator: range 运算严格校验边界类型——非 undefined 边界必须为整数，否则抛出 `T2003`/`T2004`；仅接受真正的 Number 类型，不接受布尔值或可转数字的字符串
+  - Evaluator: range 运算大小超过 1e7 抛出 `D2014`
+  - Evaluator: `..` 运算排除 undefined 传播的提前返回，确保非 undefined 边界先经过类型校验
+  - Lexer: 未终止字符串字面量抛出 `S0101`（双引号）/ `S0105`（反引号）
+  - Parser: `expect()` 不匹配时抛出 `S0202`；尾部 token 抛出 `S0201`；Lambda 参数非 `$name` 抛出 `S0208`；非变量 `:=` 抛出 `S0212`；意外 token 抛出 `S0211`；输入结束抛出 `S0207`
+  - Tests: 新增 errors case000/001/002/003/004/007/008/015/016/017/018/019/020/021 + range-operator case012/017/018/022/023 共 10 个回归断言
+- 修复效果：`errors` group 23→9 fail（-14），`range-operator` group 7→0 fail（全绿），`parent-operator` 20→13（-7 连带受益）
+- 已知限制：errors 剩余 9 个失败涉及更深层的解析器/求值器语义（如 `unknown(function)` 关键字冲突、`3(?)` 部分应用非函数 T1008、构造后过滤 S0209/S0210），留待后续轮次
+
+上一轮修复（JSONata 函数签名系统完整实现 + $join undefined 分隔符兼容）：
 - 提交：整体 pass 1492→1505 (+13)，fail 175→162 (-13)，通过率 89.6%→90.2%
 - 门禁：`moon check` 0e0w，`moon test` 213/213 passed（+7 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：

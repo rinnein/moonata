@@ -65,7 +65,14 @@ async fn main {
     let result = @moonata.evaluate(expr, json_data)
     println(result.stringify(indent=2))
   } catch {
-    e => println("错误: \{to_repr(e)}")
+    e => {
+      // 提取 JSONata 官方错误码并在消息前缀输出，便于测试集匹配
+      let code = @error.JsonataError::error_code(e)
+      match code {
+        Some(c) => println("错误: \{c}: \{to_repr(e)}")
+        None => println("错误: \{to_repr(e)}")
+      }
+    }
   }
 }
 

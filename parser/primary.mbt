@@ -34,6 +34,7 @@ fn Parser::parse_primary(self : Parser) -> @ast.Ast raise @error.JsonataError {
           "意外的输入结束",
           position=Some(tok.pos),
           token=None,
+          code=Some("S0207"),
         )
       }
       ignore(self.advance())
@@ -134,6 +135,7 @@ fn Parser::parse_primary(self : Parser) -> @ast.Ast raise @error.JsonataError {
         "意外的 token: \{debug_tok(tok)}",
         position=Some(tok.pos),
         token=Some(debug_tok(tok)),
+        code=Some("S0211"),
       )
   }
 }
@@ -319,6 +321,7 @@ fn Parser::parse_param(self : Parser) -> String raise @error.JsonataError {
         "Lambda 参数期望 $name",
         position=Some(self.peek().pos),
         token=Some(debug_tok(self.peek())),
+        code=Some("S0208"),
       )
   }
 }

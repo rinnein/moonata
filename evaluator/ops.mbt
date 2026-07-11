@@ -33,28 +33,31 @@ fn eval_binary(
   }
   let rhs = eval(rhs_ast, ctx)
   // Undefined 传播（多数运算）
-  if lhs is @value.JsonataValue::Undefined ||
-    rhs is @value.JsonataValue::Undefined {
-    match op {
-      "=" => return compare_eq(lhs, rhs)
-      "!=" => return compare_neq(lhs, rhs)
-      "in" => return in_op(lhs, rhs)
-      "&" => return concat_or_merge(lhs, rhs)
-      "&&" =>
-        // 短路：若 lhs 为 false 则结果 false
-        match lhs {
-          @value.JsonataValue::Json(Json::False) =>
-            return @value.JsonataValue::Json(Json::boolean(false))
-          _ => return @value.JsonataValue::Undefined
-        }
-      "||" =>
-        // 短路：若 lhs 为 true 则结果 true
-        match lhs {
-          @value.JsonataValue::Json(Json::True) =>
-            return @value.JsonataValue::Json(Json::boolean(true))
-          _ => return @value.JsonataValue::Undefined
-        }
-      _ => return @value.JsonataValue::Undefined
+  // 例外：`..`（range）需要先校验非 undefined 边界的类型，再决定是否传播
+  if op != ".." {
+    if lhs is @value.JsonataValue::Undefined ||
+      rhs is @value.JsonataValue::Undefined {
+      match op {
+        "=" => return compare_eq(lhs, rhs)
+        "!=" => return compare_neq(lhs, rhs)
+        "in" => return in_op(lhs, rhs)
+        "&" => return concat_or_merge(lhs, rhs)
+        "&&" =>
+          // 短路：若 lhs 为 false 则结果 false
+          match lhs {
+            @value.JsonataValue::Json(Json::False) =>
+              return @value.JsonataValue::Json(Json::boolean(false))
+            _ => return @value.JsonataValue::Undefined
+          }
+        "||" =>
+          // 短路：若 lhs 为 true 则结果 true
+          match lhs {
+            @value.JsonataValue::Json(Json::True) =>
+              return @value.JsonataValue::Json(Json::boolean(true))
+            _ => return @value.JsonataValue::Undefined
+          }
+        _ => return @value.JsonataValue::Undefined
+      }
     }
   }
   match op {
@@ -120,20 +123,99 @@ fn range_op(
   lhs : @value.JsonataValue,
   rhs : @value.JsonataValue,
 ) -> @value.JsonataValue raise @error.JsonataError {
-  let start_d = to_number(lhs) catch {
-    _ => raise @error.runtime_error("T2003: Integer expected")
+  // T2003: The left side of the range operator (..) must evaluate to an integer
+  // T2004: The right side of the range operator (..) must evaluate to an integer
+  // JSONata 语义：先检查非 undefined 边界是否为整数，再处理 undefined 传播。
+  // 即 [$x..true] 中 $x 为 undefined，但 true 非 integer → 抛 T2004。
+  // lhs 非 undefined 时检查是否为 integer
+  if not(lhs is @value.JsonataValue::Undefined) {
+    let _ = match lhs {
+      @value.JsonataValue::Json(Json::Number(n, ..)) => n
+      @value.JsonataValue::Sequence(arr) if arr.length() == 1 =>
+        match arr[0] {
+          @value.JsonataValue::Json(Json::Number(n, ..)) => n
+          _ =>
+            raise @error.type_error(
+              "T2003: The left side of the range operator (..) must evaluate to an integer",
+              expected=Some("integer"),
+              actual=None,
+              code=Some("T2003"),
+            )
+        }
+      _ =>
+        raise @error.type_error(
+          "T2003: The left side of the range operator (..) must evaluate to an integer",
+          expected=Some("integer"),
+          actual=None,
+          code=Some("T2003"),
+        )
+    }
   }
-  let end_d = to_number(rhs) catch {
-    _ => raise @error.runtime_error("T2004: Integer expected")
+  // rhs 非 undefined 时检查是否为 integer
+  if not(rhs is @value.JsonataValue::Undefined) {
+    let _ = match rhs {
+      @value.JsonataValue::Json(Json::Number(n, ..)) => n
+      @value.JsonataValue::Sequence(arr) if arr.length() == 1 =>
+        match arr[0] {
+          @value.JsonataValue::Json(Json::Number(n, ..)) => n
+          _ =>
+            raise @error.type_error(
+              "T2004: The right side of the range operator (..) must evaluate to an integer",
+              expected=Some("integer"),
+              actual=None,
+              code=Some("T2004"),
+            )
+        }
+      _ =>
+        raise @error.type_error(
+          "T2004: The right side of the range operator (..) must evaluate to an integer",
+          expected=Some("integer"),
+          actual=None,
+          code=Some("T2004"),
+        )
+    }
+  }
+  // undefined 边界 → 结果为 undefined
+  if lhs is @value.JsonataValue::Undefined ||
+    rhs is @value.JsonataValue::Undefined {
+    return @value.JsonataValue::Undefined
+  }
+  // 此时两侧均为 Number；提取值
+  let start_d = match lhs {
+    @value.JsonataValue::Json(Json::Number(n, ..)) => n
+    _ => abort("unreachable: lhs validated above")
+  }
+  let end_d = match rhs {
+    @value.JsonataValue::Json(Json::Number(n, ..)) => n
+    _ => abort("unreachable: rhs validated above")
   }
   let start = start_d.to_int()
   let end = end_d.to_int()
   // JSONata: range bounds must be integers
   if start_d != start.to_double() {
-    raise @error.runtime_error("T2003: Integer expected")
+    raise @error.type_error(
+      "T2003: The left side of the range operator (..) must evaluate to an integer",
+      expected=Some("integer"),
+      actual=None,
+      code=Some("T2003"),
+    )
   }
   if end_d != end.to_double() {
-    raise @error.runtime_error("T2004: Integer expected")
+    raise @error.type_error(
+      "T2004: The right side of the range operator (..) must evaluate to an integer",
+      expected=Some("integer"),
+      actual=None,
+      code=Some("T2004"),
+    )
+  }
+  // D2014: The size of the sequence allocated by the range operator (..)
+  // must not exceed 1e7
+  let size = if start <= end { end - start + 1 } else { 0 }
+  if size > 10000000 {
+    raise @error.runtime_error(
+      "D2014: The size of the sequence allocated by the range operator (..) must not exceed 1e7. Attempted to allocate \{size}.",
+      code=Some("D2014"),
+    )
   }
   let items : Array[@value.JsonataValue] = []
   if start <= end {
@@ -151,8 +233,8 @@ fn arith_op(
   rhs : @value.JsonataValue,
   op : String,
 ) -> @value.JsonataValue raise @error.JsonataError {
-  let l = to_number(lhs)
-  let r = to_number(rhs)
+  let l = to_number_with_code(lhs, "left")
+  let r = to_number_with_code(rhs, "right")
   let result = match op {
     "+" => l + r
     "-" => l - r
@@ -379,7 +461,43 @@ fn eval_unary(
   }
   match op {
     "-" => {
-      let n = to_number(v)
+      // D1002: Cannot negate a non-numeric value
+      let n = match v {
+        @value.JsonataValue::Json(Json::Number(n, ..)) => n
+        @value.JsonataValue::Json(Json::String(s)) =>
+          @strconv.from_str(s) catch {
+            _ =>
+              raise @error.type_error(
+                "无法转为数字: \{s}",
+                expected=Some("number"),
+                actual=Some("string"),
+                code=Some("D1002"),
+              )
+          }
+        @value.JsonataValue::Json(Json::True) => 1.0
+        @value.JsonataValue::Json(Json::False) => 0.0
+        @value.JsonataValue::Sequence(_) => {
+          // 单元素序列提升后递归处理
+          let lifted = v.lift_singleton()
+          match lifted {
+            @value.JsonataValue::Json(Json::Number(n, ..)) => n
+            _ =>
+              raise @error.type_error(
+                "无法转为数字",
+                expected=Some("number"),
+                actual=None,
+                code=Some("D1002"),
+              )
+          }
+        }
+        _ =>
+          raise @error.type_error(
+            "无法转为数字",
+            expected=Some("number"),
+            actual=None,
+            code=Some("D1002"),
+          )
+      }
       @value.JsonataValue::Json(Json::number(-n))
     }
     "!" => @value.JsonataValue::Json(Json::boolean(not(to_bool(v))))
@@ -524,8 +642,16 @@ fn eval_apply(
         ctx.with_depth(() => (f.invoke)(args, ctx))
       }
     }
-    @value.JsonataValue::Undefined => @value.JsonataValue::Undefined
-    _ => raise @error.runtime_error("T1006: Attempted to invoke a non-function")
+    @value.JsonataValue::Undefined =>
+      raise @error.runtime_error(
+        "T1006: Attempted to invoke a non-function",
+        code=Some("T1006"),
+      )
+    _ =>
+      raise @error.runtime_error(
+        "T1006: Attempted to invoke a non-function",
+        code=Some("T1006"),
+      )
   }
 }
 
