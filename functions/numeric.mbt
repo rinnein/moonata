@@ -21,7 +21,7 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
     }
   })
   // $average
-  register(ctx, "average", arity=1, invoke=fn(args, _ctx) {
+  register(ctx, "average", arity=1, invoke=(args, _ctx) => {
     let input_items = args[0].to_array()
     if input_items.length() == 0 {
       return @value.JsonataValue::Undefined
@@ -37,7 +37,7 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
     @value.JsonataValue::Json(Json::number(total / nums.length().to_double()))
   })
   // $max / $min
-  register(ctx, "max", arity=1, invoke=fn(args, _ctx) {
+  register(ctx, "max", arity=1, invoke=(args, _ctx) => {
     if args.length() > 1 {
       raise @error.runtime_error("T0410: Wrong number of arguments")
     }
@@ -57,7 +57,7 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
     }
     @value.JsonataValue::Json(Json::number(m))
   })
-  register(ctx, "min", arity=1, invoke=fn(args, _ctx) {
+  register(ctx, "min", arity=1, invoke=(args, _ctx) => {
     if args.length() > 1 {
       raise @error.runtime_error("T0410: Wrong number of arguments")
     }
@@ -184,7 +184,7 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
     @value.JsonataValue::Json(Json::string(buf.to_string()))
   })
   // $formatNumber(number, picture, options?)
-  register(ctx, "formatNumber", arity=2, invoke=fn(args, _ctx) {
+  register(ctx, "formatNumber", arity=2, invoke=(args, _ctx) => {
     let n = value_to_double(args[0])
     let picture = value_to_str(args[1])
     validate_format_picture(picture)

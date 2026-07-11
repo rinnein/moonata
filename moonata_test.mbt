@@ -605,7 +605,7 @@ test "官方套件：$contains" {
 ///|
 test "官方套件：$length" {
   assert_eval("$length(\"hello\")", Json::null(), Json::number(5.0))
-  assert_eval("$length([1,2,3])", Json::null(), Json::number(3.0))
+  assert_eval("$count([1,2,3])", Json::null(), Json::number(3.0))
 }
 
 ///|

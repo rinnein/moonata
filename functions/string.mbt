@@ -28,38 +28,41 @@ fn register_string_functions(ctx : @value.EvalContext) -> Unit {
       }
     }
   })
-  // $length
-  register(ctx, "length", arity=1, invoke=fn(args, _ctx) {
-    match args[0] {
-      @value.JsonataValue::Json(Json::String(s)) =>
-        @value.JsonataValue::Json(
-          Json::number(unicode_char_count(s).to_double()),
-        )
-      @value.JsonataValue::Json(Json::Array(arr)) =>
-        @value.JsonataValue::Json(Json::number(arr.length().to_double()))
-      @value.JsonataValue::Json(Json::Object(map)) =>
-        @value.JsonataValue::Json(Json::number(map.length().to_double()))
-      @value.JsonataValue::Sequence(arr) =>
-        @value.JsonataValue::Json(Json::number(arr.length().to_double()))
-      _ => @value.JsonataValue::Undefined
-    }
-  })
+  // $length（非上下文感知，直接绑定）
+  ctx.bind(
+    "length",
+    @value.JsonataValue::Func(
+      @value.JsonataFunc::new(arity=1, contextual=false, invoke=(args, _ctx) => {
+        if args.length() < 1 {
+          raise @error.runtime_error("T0411: Incorrect number of arguments")
+        }
+        if args.length() > 1 {
+          raise @error.runtime_error(
+            "T0410: Arguments are not of expected type",
+          )
+        }
+        match args[0] {
+          @value.JsonataValue::Json(Json::String(s)) =>
+            @value.JsonataValue::Json(
+              Json::number(unicode_char_count(s).to_double()),
+            )
+          @value.JsonataValue::Undefined => @value.JsonataValue::Undefined
+          _ =>
+            raise @error.runtime_error(
+              "T0410: Arguments are not of expected type",
+            )
+        }
+      }),
+    ),
+  )
   // $trim
   register(ctx, "trim", arity=1, invoke=fn(args, _ctx) {
     @value.JsonataValue::Json(
       Json::string(normalize_whitespace(value_to_str(args[0]))),
     )
   })
-  // $split
-  register(ctx, "split", arity=2, invoke=fn(args, _ctx) {
-    let s = value_to_str(args[0])
-    let sep = value_to_str(args[1])
-    let arr : Array[Json] = []
-    for p in s.split(sep) {
-      arr.push(Json::string(p.to_owned()))
-    }
-    @value.JsonataValue::Json(Json::array(arr))
-  })
+  // $split（实际实现在 regex.mbt 中注册，此处仅占位）
+  // register(ctx, "split", arity=2, invoke=(args, _ctx) => { ... })
   // $concat
   register(ctx, "concat", arity=1, invoke=fn(args, _ctx) {
     let buf = StringBuilder::new()
