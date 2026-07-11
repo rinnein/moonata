@@ -21,7 +21,7 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
     }
   })
   // $average
-  register(ctx, "average", arity=1, invoke=fn(args, _ctx) {
+  register(ctx, "average", arity=1, invoke=(args, _ctx) => {
     let input_items = args[0].to_array()
     if input_items.length() == 0 {
       return @value.JsonataValue::Undefined
@@ -37,12 +37,15 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
     @value.JsonataValue::Json(Json::number(total / nums.length().to_double()))
   })
   // $max / $min
-  register(ctx, "max", arity=1, invoke=fn(args, _ctx) {
+  register(ctx, "max", arity=1, invoke=(args, _ctx) => {
+    if args.length() > 1 {
+      raise @error.runtime_error("T0410: Wrong number of arguments")
+    }
     let input_items = args[0].to_array()
     if input_items.length() == 0 {
       return @value.JsonataValue::Undefined
     }
-    let nums = value_to_num_array(args[0])
+    let nums = value_to_strict_num_array(args[0])
     if nums.length() == 0 {
       raise @error.runtime_error("T0412: No numbers found in the array")
     }
@@ -54,12 +57,15 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
     }
     @value.JsonataValue::Json(Json::number(m))
   })
-  register(ctx, "min", arity=1, invoke=fn(args, _ctx) {
+  register(ctx, "min", arity=1, invoke=(args, _ctx) => {
+    if args.length() > 1 {
+      raise @error.runtime_error("T0410: Wrong number of arguments")
+    }
     let input_items = args[0].to_array()
     if input_items.length() == 0 {
       return @value.JsonataValue::Undefined
     }
-    let nums = value_to_num_array(args[0])
+    let nums = value_to_strict_num_array(args[0])
     if nums.length() == 0 {
       raise @error.runtime_error("T0412: No numbers found in the array")
     }
@@ -178,7 +184,7 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
     @value.JsonataValue::Json(Json::string(buf.to_string()))
   })
   // $formatNumber(number, picture, options?)
-  register(ctx, "formatNumber", arity=2, invoke=fn(args, _ctx) {
+  register(ctx, "formatNumber", arity=2, invoke=(args, _ctx) => {
     let n = value_to_double(args[0])
     let picture = value_to_str(args[1])
     validate_format_picture(picture)
@@ -235,6 +241,38 @@ fn value_to_num_array(v : @value.JsonataValue) -> Array[Double] {
         match item {
           @value.JsonataValue::Json(Json::Number(n, ..)) => result.push(n)
           _ => continue
+        }
+      }
+    _ => ()
+  }
+  result
+}
+
+///|
+fn value_to_strict_num_array(
+  v : @value.JsonataValue,
+) -> Array[Double] raise @error.JsonataError {
+  let result : Array[Double] = []
+  match v {
+    @value.JsonataValue::Json(Json::Number(n, ..)) => result.push(n)
+    @value.JsonataValue::Json(Json::Array(arr)) =>
+      for item in arr {
+        match item {
+          Json::Number(n, ..) => result.push(n)
+          _ =>
+            raise @error.runtime_error(
+              "T0412: Argument 1 of function must be an array of numbers",
+            )
+        }
+      }
+    @value.JsonataValue::Sequence(arr) =>
+      for item in arr {
+        match item {
+          @value.JsonataValue::Json(Json::Number(n, ..)) => result.push(n)
+          _ =>
+            raise @error.runtime_error(
+              "T0412: Argument 1 of function must be an array of numbers",
+            )
         }
       }
     _ => ()

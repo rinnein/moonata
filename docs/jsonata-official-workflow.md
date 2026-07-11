@@ -136,36 +136,37 @@ skip_reasons
 下方固定快照仍是旧口径下的历史记录；本轮脚本升级后，`skip` 分类会更细，待下一次复跑官方审计后再刷新这里的数字。
 
 
-当前固定快照（2026-07-11，错误码对齐与参数验证，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-11，函数参数严格验证 + length/split 修复，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1667 pass 1395 fail 272 skip 15
+eligible 1667 pass 1430 fail 237 skip 15
 top_failures
 errors 23
 parent-operator 20
 function-formatNumber 14
 transform 13
 function-signatures 11
-function-max 10
-function-number 10
 function-tomillis 9
 joins 9
 function-replace 8
+range-operator 7
+function-average 5
 skip_reasons
 no_expected_outcome 15
 ```
 
-本轮修复（错误码对齐与参数验证）：
-- 提交：整体 pass 1334→1395 (+61)，fail 333→272 (-61)，通过率 80.0%→83.7%
-- 门禁：`moon check` 0e5w，`moon test` 206/206 passed，`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+本轮修复（函数参数严格验证 + length/split 修复）：
+- 提交：整体 pass 1395→1430 (+35)，fail 272→237 (-35)，通过率 83.7%→85.8%
+- 门禁：`moon check` 0e0w，`moon test` 206/206 passed，`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：
-  - Functions: `$number()` 无效字符串抛出 D3030 替代返回 undefined
-  - Functions: `$max/$min/$average` 非空数组但无数字时抛出 T0412
-  - Functions: `$formatNumber` 新增 picture 格式验证（D3080-D3086 多子图/多点/多百分号/千分号）
-  - Evaluator: range operator 非整数边界或不可转换值抛出 T2003/T2004
-  - Evaluator: 比较运算符混合类型（字符串 vs 数字）抛出 T2009/T2010
-  - Evaluator: 非函数调用抛出 T1006 替代 TypeError
-  - Value: `SignatureError` 消息对齐 T0410 错误码
+  - Functions: `$number()` 对 null/array/object/function 输入抛出 T0410；多余参数抛出 T0410
+  - Functions: `$max/$min` 严格数字数组验证，混合类型抛出 T0412；多余参数抛出 T0410
+  - Functions: `$length()` 改为非上下文感知，仅接受字符串；0 参数抛出 T0411；非字符串抛出 T0410
+  - Functions: `$split()` 在 regex.mbt 注册版本添加类型验证（字符串/正则 pattern）和 limit 验证（D3020 负数/T0410 非法类型）
+  - Functions: `$replace()` 对 undefined 首参返回 undefined
+  - Evaluator: `should_partial_on_missing` 禁用隐式部分应用
+  - Functions: `average/max/min/formatNumber` invoke 从 `fn` 改为 `=>` 消除 deprecated_syntax warning
+- 已知限制：function-replace 8 个失败与调用路径相关（独立于本轮修改）
 - 已知限制：审计脚本升级后口径扩大（eligible 1251→1667），新增 expected-error 和 code-mismatch 检测
 
 上一轮修复（map 后位置谓词重置与重复父级跳过修正）：

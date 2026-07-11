@@ -44,7 +44,47 @@ fn register_regex_functions(ctx : @value.EvalContext) -> Unit {
   register(ctx, "split_regex", arity=2, invoke=fn(args, _ctx) {
     split_regex(args)
   })
-  register(ctx, "split", arity=2, invoke=fn(args, _ctx) { split_regex(args) })
+  register(ctx, "split", arity=2, invoke=(args, _ctx) => {
+    if args.length() >= 2 {
+      match args[0] {
+        @value.JsonataValue::Undefined => return @value.JsonataValue::Undefined
+        _ => ()
+      }
+      match args[0] {
+        @value.JsonataValue::Json(Json::String(_)) => ()
+        _ =>
+          raise @error.runtime_error(
+            "T0410: Arguments are not of expected type",
+          )
+      }
+      match args[1] {
+        @value.JsonataValue::Json(Json::String(_)) => ()
+        @value.JsonataValue::Func(_) => ()
+        @value.JsonataValue::Regex(_) => ()
+        _ =>
+          raise @error.runtime_error(
+            "T0410: Arguments are not of expected type",
+          )
+      }
+      if args.length() > 2 {
+        match args[2] {
+          @value.JsonataValue::Json(Json::Null) =>
+            raise @error.runtime_error(
+              "T0410: Arguments are not of expected type",
+            )
+          @value.JsonataValue::Json(Json::Number(n, ..)) =>
+            if n < 0.0 {
+              raise @error.runtime_error("D3020: Negative limit")
+            }
+          _ =>
+            raise @error.runtime_error(
+              "T0410: Arguments are not of expected type",
+            )
+        }
+      }
+    }
+    split_regex(args)
+  })
   // $replace_regex(str, pattern, replacement) — 正则替换（首个匹配）
   register(ctx, "replace_regex", arity=3, invoke=fn(
     args,

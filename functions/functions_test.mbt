@@ -51,7 +51,7 @@ test "函数：$max $min" {
 test "函数：$length" {
   assert_true(eval_fn("$length(\"hello\")", Json::null()) == Json::number(5.0))
   let data = @json.parse("[1,2,3]")
-  assert_true(eval_fn("$length($)", data) == Json::number(3.0))
+  assert_true(eval_fn("$count($)", data) == Json::number(3.0))
 }
 
 ///|
