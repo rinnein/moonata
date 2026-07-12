@@ -423,6 +423,9 @@ fn register_special_functions(ctx : @value.EvalContext) -> Unit {
     @value.JsonataValue::Json(Json::string(result))
   })
   // $toMillis — ISO 8601 字符串转毫秒数
+  // JSONata 签名 <s-(s):n>：首参字符串，可选第二参 picture 字符串。
+  // 无 picture 时严格校验 ISO 8601 格式，不匹配抛 D3110。
+  // 有 picture 时按 picture 解析；输入不匹配 picture 返回 undefined（对齐 JSONata-js）。
   register(ctx, "toMillis", arity=1, invoke=fn(
     args : Array[@value.JsonataValue],
     _ctx : @value.EvalContext,
@@ -433,12 +436,15 @@ fn register_special_functions(ctx : @value.EvalContext) -> Unit {
         let s = value_to_str(args[0])
         // Use context timestamp for default date components (today's date)
         let now_millis = @env.now().to_double()
-        let millis = if args.length() > 1 {
+        let millis_opt = if args.length() > 1 && !args[1].is_undefined() {
           parse_date_picture_with_now(s, value_to_str(args[1]), now_millis)
         } else {
           parse_iso_millis(s)
         }
-        @value.JsonataValue::Json(Json::number(millis))
+        match millis_opt {
+          None => @value.JsonataValue::Undefined
+          Some(m) => @value.JsonataValue::Json(Json::number(m))
+        }
       }
     }
   })
@@ -828,10 +834,20 @@ fn parse_date_picture_with_now(
   s : String,
   picture : String,
   now_millis : Double,
-) -> Double raise @error.JsonataError {
+) -> Double? raise @error.JsonataError {
   let segments = split_picture(picture)
-  let comps = extract_date_components(s, segments)
-  build_date_from_components_with_now(comps, picture, now_millis)
+  // 若 picture 中无 marker（全 literal），对齐 JSONata-js 返回 undefined
+  let has_marker = segments
+    .iter()
+    .any(fn(seg) { seg is PictureSegment::Marker(_) })
+  if !has_marker {
+    return None
+  }
+  match extract_date_components(s, segments) {
+    None => None
+    Some(comps) =>
+      Some(build_date_from_components_with_now(comps, picture, now_millis))
+  }
 }
 
 ///|
@@ -883,7 +899,7 @@ fn split_picture(picture : String) -> Array[PictureSegment] {
 fn extract_date_components(
   input : String,
   segments : Array[PictureSegment],
-) -> DateComponents raise @error.JsonataError {
+) -> DateComponents? raise @error.JsonataError {
   let comps = DateComponents::default()
 
   // Build a flat token list: literal segments become delimiters
@@ -905,9 +921,8 @@ fn extract_date_components(
           if idx == segments.length() - 1 && pos == input_chars.length() {
             // trailing literal at end, ok
           } else {
-            raise @error.runtime_error(
-              "D3110: date/time string does not match picture format",
-            )
+            // 输入不匹配 picture literal，对齐 JSONata-js 返回 undefined
+            return None
           }
         } else {
           let mut matched = true
@@ -918,9 +933,8 @@ fn extract_date_components(
             }
           }
           if !matched {
-            raise @error.runtime_error(
-              "D3110: date/time string does not match picture format",
-            )
+            // 输入不匹配 picture literal，对齐 JSONata-js 返回 undefined
+            return None
           }
           pos += lit_chars.length()
         }
@@ -933,18 +947,44 @@ fn extract_date_components(
         if pos >= end_pos && marker_is_optional(marker) {
           continue // e.g., timezone that defaults to UTC
         }
+        if pos >= end_pos {
+          // marker 未消费任何字符且非可选，输入不匹配
+          return None
+        }
         let value = chars_to_string(input_chars, pos, end_pos)
-        // Parse value according to marker type
-        extract_marker_value(comps, marker, value)
+        // Parse value according to marker type。
+        // D3110 (invalid numeric value) 视为输入不匹配 picture，返回 None（对齐 JSONata-js）。
+        // D3132/D3133/D3136 等 picture 错误仍然向上传播。
+        extract_marker_value(comps, marker, value) catch {
+          @error.JsonataError::RuntimeError(code=Some("D3110"), ..) =>
+            return None
+          e => raise e
+        }
         pos = end_pos
       }
     }
   }
-  // If we haven't consumed all input and last segment was not a marker, error
+  // If we haven't consumed all input, input doesn't match picture
   if pos < input_chars.length() {
-    raise @error.runtime_error("D3110: trailing characters in date/time string")
+    return None
   }
-  comps
+  // 若没有任何组件被提取，对齐 JSONata-js 返回 undefined
+  let has_any = comps.year is Some(_) ||
+    comps.month is Some(_) ||
+    comps.day is Some(_) ||
+    comps.day_of_year is Some(_) ||
+    comps.hour24 is Some(_) ||
+    comps.hour12 is Some(_) ||
+    comps.minute is Some(_) ||
+    comps.second is Some(_) ||
+    comps.millis is Some(_) ||
+    comps.offset is Some(_) ||
+    comps.am_pm is Some(_) ||
+    comps.weekday is Some(_)
+  if !has_any {
+    return None
+  }
+  Some(comps)
 }
 
 ///|
@@ -1239,7 +1279,13 @@ fn extract_marker_value(
   }
   match c0 {
     'Y' =>
-      if marker.contains("I") || marker.contains("i") {
+      if marker.contains("N") {
+        // [YN] named year → D3133: 'N' name modifier only valid for M and F
+        raise @error.runtime_error(
+          "D3133: The 'name' modifier can only be applied to months and days in the date/time picture string, not Y",
+          code=Some("D3133"),
+        )
+      } else if marker.contains("I") || marker.contains("i") {
         // Roman numeral year
         comps.year = Some(parse_roman_numeral(value))
       } else if marker.contains("w") {
@@ -1248,7 +1294,7 @@ fn extract_marker_value(
       } else {
         comps.year = parse_int_opt(value)
         if comps.year is None {
-          raise @error.runtime_error("D3110: invalid year")
+          raise @error.runtime_error("D3110: invalid year", code=Some("D3110"))
         }
       }
     'M' =>
@@ -1265,7 +1311,7 @@ fn extract_marker_value(
       } else {
         comps.month = parse_int_opt(value)
         if comps.month is None {
-          raise @error.runtime_error("D3110: invalid month")
+          raise @error.runtime_error("D3110: invalid month", code=Some("D3110"))
         }
       }
     'D' =>
@@ -1287,7 +1333,7 @@ fn extract_marker_value(
       } else {
         comps.day = parse_int_opt(value)
         if comps.day is None {
-          raise @error.runtime_error("D3110: invalid day")
+          raise @error.runtime_error("D3110: invalid day", code=Some("D3110"))
         }
       }
     'F' =>
@@ -1304,25 +1350,25 @@ fn extract_marker_value(
     'H' => {
       comps.hour24 = parse_int_opt(value)
       if comps.hour24 is None {
-        raise @error.runtime_error("D3110: invalid hour")
+        raise @error.runtime_error("D3110: invalid hour", code=Some("D3110"))
       }
     }
     'h' => {
       comps.hour12 = parse_int_opt(value)
       if comps.hour12 is None {
-        raise @error.runtime_error("D3110: invalid hour")
+        raise @error.runtime_error("D3110: invalid hour", code=Some("D3110"))
       }
     }
     'm' => {
       comps.minute = parse_int_opt(value)
       if comps.minute is None {
-        raise @error.runtime_error("D3110: invalid minute")
+        raise @error.runtime_error("D3110: invalid minute", code=Some("D3110"))
       }
     }
     's' => {
       comps.second = parse_int_opt(value)
       if comps.second is None {
-        raise @error.runtime_error("D3110: invalid second")
+        raise @error.runtime_error("D3110: invalid second", code=Some("D3110"))
       }
     }
     'f' => comps.millis = Some(parse_fraction_from_string(value))
@@ -1334,7 +1380,10 @@ fn extract_marker_value(
       } else {
         comps.day_of_year = parse_int_opt(value)
         if comps.day_of_year is None {
-          raise @error.runtime_error("D3110: invalid day of year")
+          raise @error.runtime_error(
+            "D3110: invalid day of year",
+            code=Some("D3110"),
+          )
         }
       }
     'Z' | 'z' =>
@@ -1342,17 +1391,37 @@ fn extract_marker_value(
         comps.offset = Some(parse_picture_timezone(value))
       }
     'P' => comps.am_pm = Some(parse_am_pm(value))
-    'X' => raise @error.runtime_error("D3136: unsupported picture component")
-    'x' => raise @error.runtime_error("D3136: unsupported picture component")
-    'W' => raise @error.runtime_error("D3136: unsupported picture component")
-    'w' => raise @error.runtime_error("D3136: unsupported picture component")
+    'X' =>
+      raise @error.runtime_error(
+        "D3136: unsupported picture component",
+        code=Some("D3136"),
+      )
+    'x' =>
+      raise @error.runtime_error(
+        "D3136: unsupported picture component",
+        code=Some("D3136"),
+      )
+    'W' =>
+      raise @error.runtime_error(
+        "D3136: unsupported picture component",
+        code=Some("D3136"),
+      )
+    'w' =>
+      raise @error.runtime_error(
+        "D3136: unsupported picture component",
+        code=Some("D3136"),
+      )
     'C' | 'E' => ()
     _ =>
       // Try to handle Y-variant markers that start differently
       if marker.contains(",2-2") {
         comps.year = parse_int_opt(value)
       } else {
-        raise @error.runtime_error("D3136: unsupported picture component")
+        // 未知组件标识符 → D3132（对齐 JSONata-js analyseDateTimePicture）
+        raise @error.runtime_error(
+          "D3132: Unknown component specifier \{c0} in date/time picture string",
+          code=Some("D3132"),
+        )
       }
   }
 }
@@ -1414,7 +1483,7 @@ fn parse_ordinal_day(s : String) -> Int raise @error.JsonataError {
   // Strip ordinal suffix
   let trimmed = s.trim().to_owned()
   if trimmed.length() < 2 {
-    raise @error.runtime_error("D3110: invalid ordinal")
+    raise @error.runtime_error("D3110: invalid ordinal", code=Some("D3110"))
   }
   let mut num_end = trimmed.length()
   // Remove trailing ordinal suffix
@@ -1428,7 +1497,11 @@ fn parse_ordinal_day(s : String) -> Int raise @error.JsonataError {
   let num_part = trimmed[:num_end].to_owned()
   match parse_int_opt(num_part) {
     Some(n) => n
-    None => raise @error.runtime_error("D3110: invalid ordinal day")
+    None =>
+      raise @error.runtime_error(
+        "D3110: invalid ordinal day",
+        code=Some("D3110"),
+      )
   }
 }
 
@@ -1449,7 +1522,11 @@ fn parse_month_name(s : String) -> Int raise @error.JsonataError {
     "october" | "oct" => 10
     "november" | "nov" => 11
     "december" | "dec" => 12
-    _ => raise @error.runtime_error("D3110: invalid month name")
+    _ =>
+      raise @error.runtime_error(
+        "D3110: invalid month name",
+        code=Some("D3110"),
+      )
   }
 }
 
@@ -1465,7 +1542,11 @@ fn parse_weekday_name(s : String) -> Int raise @error.JsonataError {
     "friday" | "fri" => 5
     "saturday" | "sat" => 6
     "sunday" | "sun" => 7
-    _ => raise @error.runtime_error("D3110: invalid weekday name")
+    _ =>
+      raise @error.runtime_error(
+        "D3110: invalid weekday name",
+        code=Some("D3110"),
+      )
   }
 }
 
@@ -1586,7 +1667,11 @@ fn parse_roman_numeral(s : String) -> Int raise @error.JsonataError {
       'C' => 100
       'D' => 500
       'M' => 1000
-      _ => raise @error.runtime_error("D3110: invalid roman numeral")
+      _ =>
+        raise @error.runtime_error(
+          "D3110: invalid roman numeral",
+          code=Some("D3110"),
+        )
     }
     if val < prev {
       total -= val
@@ -1820,6 +1905,52 @@ fn build_date_from_components_with_now(
     comps.second is Some(_) ||
     comps.millis is Some(_)
 
+  // 间隔检测（对齐 JSONata-js parseDateTime D3136）：
+  // 日期组件顺序 Y M D（或 Y d 即 day_of_year）；
+  // 时间组件顺序 H(h) m s f。
+  // 在已指定的组件中，若 MSV 与 LSV 之间存在未指定的间隔，抛 D3136。
+  // 例如：Y 和 D 指定但 M 缺失 → D3136；H 和 s 指定但 m 缺失 → D3136。
+  // 使用 day_of_year 时，它替代 M+D，不检查 M/D 间隔。
+  if comps.day_of_year is None {
+    // 日期间隔检测：Y → M → D
+    let y_spec = comps.year is Some(_)
+    let m_spec = comps.month is Some(_)
+    let d_spec = comps.day is Some(_)
+    // Y and D specified but M missing → gap
+    if y_spec && d_spec && !m_spec {
+      raise @error.runtime_error(
+        "D3136: The date/time picture string is missing specifiers required to parse the timestamp",
+        code=Some("D3136"),
+      )
+    }
+  }
+  // 时间间隔检测：H/h → m → s → f
+  let h_spec = comps.hour24 is Some(_) || comps.hour12 is Some(_)
+  let m_spec = comps.minute is Some(_)
+  let s_spec = comps.second is Some(_)
+  let f_spec = comps.millis is Some(_)
+  // H and s specified but m missing → gap
+  if h_spec && s_spec && !m_spec {
+    raise @error.runtime_error(
+      "D3136: The date/time picture string is missing specifiers required to parse the timestamp",
+      code=Some("D3136"),
+    )
+  }
+  // H and f specified but m/s missing → gap
+  if h_spec && f_spec && !m_spec {
+    raise @error.runtime_error(
+      "D3136: The date/time picture string is missing specifiers required to parse the timestamp",
+      code=Some("D3136"),
+    )
+  }
+  // m and f specified but s missing → gap
+  if m_spec && f_spec && !s_spec {
+    raise @error.runtime_error(
+      "D3136: The date/time picture string is missing specifiers required to parse the timestamp",
+      code=Some("D3136"),
+    )
+  }
+
   // Apply defaults per JSONata rules:
   // - Before first specified: use now
   // - After last specified: use 1 for date (month/day), 0 for time
@@ -2031,13 +2162,135 @@ fn parse_timezone_string(s : String) -> Int {
 }
 
 ///|
-fn parse_iso_millis(s : String) -> Double raise @error.JsonataError {
+/// 校验字符串是否符合 ISO 8601 格式（对齐 JSONata-js iso8601regex）。
+/// regex: ^\d{4}(-[01]\d)?(-[0-3]\d)?(T[0-2]\d:[0-5]\d:[0-5]\d)?(\.\d+)?([+-][0-2]\d:?[0-5]\d|Z)?$
+fn is_iso8601(chars : Array[Char]) -> Bool {
+  let n = chars.length()
+  if n < 4 {
+    return false
+  }
+  // 4-digit year
+  for i in 0..<4 {
+    if !is_digit(chars[i]) {
+      return false
+    }
+  }
+  let mut pos = 4
+  // Optional -MM
+  if pos < n && chars[pos] == '-' {
+    if pos + 2 >= n {
+      return false
+    }
+    if !is_digit(chars[pos + 1]) || !is_digit(chars[pos + 2]) {
+      return false
+    }
+    let mm = (chars[pos + 1].to_int() - 48) * 10 +
+      (chars[pos + 2].to_int() - 48)
+    if mm < 1 || mm > 12 {
+      return false
+    }
+    pos += 3
+    // Optional -DD
+    if pos < n && chars[pos] == '-' {
+      if pos + 2 >= n {
+        return false
+      }
+      if !is_digit(chars[pos + 1]) || !is_digit(chars[pos + 2]) {
+        return false
+      }
+      let dd = (chars[pos + 1].to_int() - 48) * 10 +
+        (chars[pos + 2].to_int() - 48)
+      if dd < 1 || dd > 31 {
+        return false
+      }
+      pos += 3
+    }
+  }
+  // Optional Thh:mm:ss
+  if pos < n && chars[pos] == 'T' {
+    if pos + 8 >= n {
+      return false
+    }
+    if !is_digit(chars[pos + 1]) ||
+      !is_digit(chars[pos + 2]) ||
+      chars[pos + 3] != ':' ||
+      !is_digit(chars[pos + 4]) ||
+      !is_digit(chars[pos + 5]) ||
+      chars[pos + 6] != ':' ||
+      !is_digit(chars[pos + 7]) ||
+      !is_digit(chars[pos + 8]) {
+      return false
+    }
+    let hh = (chars[pos + 1].to_int() - 48) * 10 +
+      (chars[pos + 2].to_int() - 48)
+    let mi = (chars[pos + 4].to_int() - 48) * 10 +
+      (chars[pos + 5].to_int() - 48)
+    let ss = (chars[pos + 7].to_int() - 48) * 10 +
+      (chars[pos + 8].to_int() - 48)
+    if hh > 23 || mi > 59 || ss > 59 {
+      return false
+    }
+    pos += 9
+    // Optional .fff
+    if pos < n && chars[pos] == '.' {
+      pos += 1
+      if pos >= n || !is_digit(chars[pos]) {
+        return false
+      }
+      while pos < n && is_digit(chars[pos]) {
+        pos += 1
+      }
+    }
+    // Optional timezone: Z or +hh:mm or +hhmm or -hh:mm or -hhmm
+    if pos < n {
+      if chars[pos] == 'Z' {
+        pos += 1
+      } else if chars[pos] == '+' || chars[pos] == '-' {
+        pos += 1
+        if pos + 1 >= n || !is_digit(chars[pos]) || !is_digit(chars[pos + 1]) {
+          return false
+        }
+        let tzh = (chars[pos].to_int() - 48) * 10 +
+          (chars[pos + 1].to_int() - 48)
+        if tzh > 23 {
+          return false
+        }
+        pos += 2
+        if pos < n && chars[pos] == ':' {
+          pos += 1
+        }
+        if pos + 1 < n && is_digit(chars[pos]) && is_digit(chars[pos + 1]) {
+          let tzm = (chars[pos].to_int() - 48) * 10 +
+            (chars[pos + 1].to_int() - 48)
+          if tzm > 59 {
+            return false
+          }
+          pos += 2
+        }
+      }
+    }
+  }
+  pos == n
+}
+
+///|
+fn parse_iso_millis(s : String) -> Double? raise @error.JsonataError {
   let chars = s.to_array()
+  // ISO 8601 严格校验，对齐 JSONata-js iso8601regex:
+  // ^\d{4}(-[01]\d)?(-[0-3]\d)?(T[0-2]\d:[0-5]\d:[0-5]\d)?(\.\d+)?([+-][0-2]\d:?[0-5]\d|Z)?$
+  // 不匹配时抛 D3110。
+  if !is_iso8601(chars) {
+    raise @error.runtime_error(
+      "D3110: The argument of the toMillis function must be an ISO 8601 formatted timestamp. Given \{s}",
+      code=Some("D3110"),
+    )
+  }
   if chars.length() == 4 && all_digits(chars, 0, 4) {
-    return millis_from_date(parse_digits(chars, 0, 4), 1, 1)
+    return Some(millis_from_date(parse_digits(chars, 0, 4), 1, 1))
   }
   if chars.length() < 10 {
-    return @strconv.from_str(s) catch { _ => 0.0 }
+    // 4-digit year only (already validated by is_iso8601)
+    return Some(millis_from_date(parse_digits(chars, 0, 4), 1, 1))
   }
   let year = parse_digits(chars, 0, 4)
   let month = parse_digits(chars, 5, 7)
@@ -2081,9 +2334,13 @@ fn parse_iso_millis(s : String) -> Double raise @error.JsonataError {
     nanosecond=millis * 1_000_000,
     zone~,
   ) catch {
-    _ => raise @error.runtime_error("invalid date time")
+    _ =>
+      raise @error.runtime_error(
+        "D3110: The argument of the toMillis function must be an ISO 8601 formatted timestamp. Given \{s}",
+        code=Some("D3110"),
+      )
   }
-  dt.to_unix_second().to_double() * 1000.0 + millis.to_double()
+  Some(dt.to_unix_second().to_double() * 1000.0 + millis.to_double())
 }
 
 ///|
@@ -2154,7 +2411,11 @@ fn _parse_slash_date(s : String) -> Double raise @error.JsonataError {
   let slash1 = find_char(chars, '/', 0)
   let slash2 = find_char(chars, '/', slash1 + 1)
   if slash1 < 0 || slash2 < 0 {
-    return parse_iso_millis(s)
+    // parse_iso_millis 现在返回 Double?；非 ISO 8601 会抛 D3110
+    match parse_iso_millis(s) {
+      Some(m) => return m
+      None => raise @error.runtime_error("invalid date time")
+    }
   }
   let day = parse_digits(chars, 0, slash1)
   let month = parse_digits(chars, slash1 + 1, slash2)

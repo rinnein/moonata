@@ -2111,3 +2111,95 @@ test "官方套件：errors case024 - 尾部分号 S0201" {
   }
   assert_true(raised)
 }
+
+///|
+test "官方套件：function-tomillis case007 - 非ISO 8601 字符串 D3110" {
+  let d = Json::null()
+  let raised = try {
+    ignore(evaluate("$toMillis(\"foo\")", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3110"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：function-tomillis case008 - 非ISO 8601 格式 D3110" {
+  let d = Json::null()
+  let raised = try {
+    ignore(evaluate("$toMillis(\"01-02-2018\")", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3110"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：function-tomillis case009 - 空格分隔日期时间 D3110" {
+  let d = Json::null()
+  let raised = try {
+    ignore(evaluate("$toMillis(\"2018-02-03 11:15:33\")", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3110"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：function-tomillis parseDateTime - 无marker picture 返回 undefined" {
+  let d = data("{}")
+  let result = evaluate("$toMillis('Hello', 'Hello')", d)
+  assert_true(result == Json::null())
+}
+
+///|
+test "官方套件：function-tomillis parseDateTime - 输入不匹配 picture 返回 undefined" {
+  let d = data("{}")
+  let result = evaluate("$toMillis('irrelevent string', '[Y]-[M]-[D]')", d)
+  assert_true(result == Json::null())
+}
+
+///|
+test "官方套件：function-tomillis parseDateTime - 未知组件 q 抛 D3132" {
+  let d = data("{}")
+  let raised = try {
+    ignore(evaluate("$toMillis('2018-05-22', '[Y]-[M]-[q]')", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3132"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：function-tomillis parseDateTime - [YN] 命名年抛 D3133" {
+  let d = data("{}")
+  let raised = try {
+    ignore(evaluate("$toMillis('2018-05-22', '[YN]-[M]-[D]')", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3133"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：function-tomillis parseDateTime - 日期组件间隔 D3136" {
+  let d = data("{}")
+  let raised = try {
+    ignore(evaluate("$toMillis('2018-22', '[Y]-[D]')", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3136"
+    _ => false
+  }
+  assert_true(raised)
+}

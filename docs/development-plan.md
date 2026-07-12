@@ -23,18 +23,18 @@
 | P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | ✅ 可比对官方用例全通过（1251/1251） |
 | 合计 | | | **26** | **66** | |
 
-> 当前固定快照（2026-07-12，错误码精度修复 S0204/S0209/S0210 + T1005/T1008 + function 关键字 + 尾部分号，使用 `scripts/jsonata_official_audit.py` 审计）：
+> 当前固定快照（2026-07-12，$toMillis ISO 8601 严格校验 + picture 解析错误码对齐 + undefined 返回，使用 `scripts/jsonata_official_audit.py` 审计）：
 >
-> - `moon test` 为 249/249 通过（+7 新增回归断言）；`moon check` 0e0w；`moon info` 通过；`moon fmt` 已执行。
-> - JSONata 官方可比对审计为 `eligible 1667 / pass 1578 / fail 89 / skip 15`（通过率 94.7%）。
+> - `moon test` 为 257/257 通过（+8 新增回归断言）；`moon check` 0e0w；`moon info` 通过；`moon fmt` 已执行。
+> - JSONata 官方可比对审计为 `eligible 1667 / pass 1586 / fail 81 / skip 15`（通过率 95.1%）。
 > - 修复内容：
->   - Parser: `function` 仅在紧跟 `(` 时作为 Lambda 关键字，否则作为普通标识符可用（修复 `unknown(function)` 解析冲突）
->   - Parser: 数组字面量中非 `,`/`]`/`)`/`:` 的 token 后续抛 S0204（对齐 JSONata-js 数组语法错误）
->   - Parser: 构造器 `{...}` 后禁止谓词 `[expr]`（S0209）和另一个构造器 `{...}`（S0210）
->   - Parser: 尾部分号 `;` 在顶层输入末尾抛出 S0201（对齐 JSONata-js 语法检查）
->   - Evaluator: 区分 T1005（已知函数名但路径求值失败）与 T1006（普通字段名未找到）
->   - Evaluator: 对含 `?` 占位符的参数，非函数值抛 T1008 而非 T1006
-> - Tests: 新增 errors case005/case006/case010/case014/case022/case023/case024 共 7 个回归断言
+>   - Functions: `parse_iso_millis` 新增 `is_iso8601` 严格校验，非 ISO 8601 格式抛 D3110 with code
+>   - Functions: `parse_iso_millis`/`parse_date_picture_with_now` 返回 `Double?`，`toMillis` 在 None 时返回 Undefined
+>   - Functions: `extract_date_components` 返回 `DateComponents?`；输入不匹配 picture 或 marker 值解析 D3110 时返回 None（对齐 JSONata-js 返回 undefined）
+>   - Functions: `extract_marker_value` 未知组件标识符抛 D3132，`[YN]` 命名年抛 D3133，X/x/W/w 仍抛 D3136
+>   - Functions: `build_date_from_components_with_now` 新增日期/时间组件间隔检测（D3136）
+>   - Functions: 所有 D3110 raise 附带 `code=Some("D3110")`
+> - Tests: 新增 function-tomillis case007/008/009 + parseDateTime 5 个等价回归断言
 
 ### 1.1 当前暂停边界
 
@@ -43,15 +43,15 @@ P11 已完成日期时间 picture 修复、Lambda 签名语法与范围表达式
 | 排名 | 官方 group | 失败数 |
 | --- | --- | --- |
 | 1 | `parent-operator` | 13 |
-| 2 | `errors` | 9 |
-| 3 | `function-tomillis` | 9 |
-| 4 | `joins` | 9 |
-| 5 | `transform` | 8 |
-| 6 | `function-replace` | 5 |
-| 7 | `object-constructor` | 5 |
-| 8 | `function-eval` | 3 |
-| 9 | `hof-reduce` | 3 |
-| 10 | `regex` | 3 |
+| 2 | `joins` | 9 |
+| 3 | `transform` | 8 |
+| 4 | `function-replace` | 5 |
+| 5 | `object-constructor` | 5 |
+| 6 | `function-eval` | 3 |
+| 7 | `hof-reduce` | 3 |
+| 8 | `regex` | 3 |
+| 9 | `sorting` | 3 |
+| 10 | `tail-recursion` | 3 |
 
 跳过项仅表示当前 CLI 审计 harness 无法直接比较，不表示通过或失败：`no_expected_outcome 15`。
 

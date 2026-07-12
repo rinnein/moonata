@@ -136,13 +136,12 @@ skip_reasons
 下方固定快照仍是旧口径下的历史记录；本轮脚本升级后，`skip` 分类会更细，待下一次复跑官方审计后再刷新这里的数字。
 
 
-当前固定快照（2026-07-12，错误码精度修复 S0204/S0209/S0210 + T1005/T1008 + function 关键字 + 尾部分号，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-12，$toMillis ISO 8601 严格校验 + picture 解析错误码对齐 + undefined 返回，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1667 pass 1578 fail 89 skip 15
+eligible 1667 pass 1586 fail 81 skip 15
 top_failures
 parent-operator 13
-function-tomillis 9
 joins 9
 transform 8
 function-replace 5
@@ -155,7 +154,22 @@ skip_reasons
 no_expected_outcome 15
 ```
 
-本轮修复（错误码精度修复 S0204/S0209/S0210 + T1005/T1008 + function 关键字 + 尾部分号）：
+本轮修复（$toMillis ISO 8601 严格校验 + picture 解析错误码对齐 + undefined 返回）：
+- 提交：整体 pass 1578→1586 (+8)，fail 89→81 (-8)，通过率 94.7%→95.1%
+- 门禁：`moon check` 0e0w，`moon test` 257/257 passed（+8 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Functions: `parse_iso_millis` 新增 `is_iso8601` 严格校验，非 ISO 8601 格式（如 `"foo"`、`"01-02-2018"`、`"2018-02-03 11:15:33"` 空格分隔）抛 D3110 with code
+  - Functions: `parse_iso_millis` 返回类型改为 `Double?`，`toMillis` 在 None 时返回 Undefined
+  - Functions: `parse_date_picture_with_now` 返回类型改为 `Double?`；picture 无 marker（全 literal）时返回 None（对齐 JSONata-js "should parse string literal" 返回 undefined）
+  - Functions: `extract_date_components` 返回类型改为 `DateComponents?`；输入不匹配 picture literal 时返回 None（对齐 JSONata-js "nothing matches" 返回 undefined）；marker 值解析 D3110 视为不匹配返回 None
+  - Functions: `extract_marker_value` 未知组件标识符（如 `q`）抛 D3132（对齐 JSONata-js `analyseDateTimePicture`），X/x/W/w 仍抛 D3136（known but unsupported）
+  - Functions: `extract_marker_value` `[YN]` 命名年抛 D3133（N 修饰符仅适用于 M 和 F）
+  - Functions: `build_date_from_components_with_now` 新增日期/时间组件间隔检测（D3136）：Y+D 缺 M、H+s 缺 m、H+f 缺 m、m+f 缺 s 均抛 D3136
+  - Functions: `extract_marker_value` 所有 D3110 raise 附带 `code=Some("D3110")`，使 CLI 输出错误码前缀
+  - Tests: 新增 function-tomillis case007/008/009 + parseDateTime 5 个等价回归断言
+- 修复效果：`function-tomillis` group 51→59 pass（-8 fail，仅剩 1 个非确定性用例）
+
+上一轮修复（错误码精度修复 S0204/S0209/S0210 + T1005/T1008 + function 关键字 + 尾部分号）：
 - 提交：整体 pass 1571→1578 (+7)，fail 96→89 (-7)，通过率 94.2%→94.7%
 - 门禁：`moon check` 0e0w，`moon test` 249/249 passed（+7 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：
