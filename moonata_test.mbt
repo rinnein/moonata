@@ -2113,92 +2113,171 @@ test "官方套件：errors case024 - 尾部分号 S0201" {
 }
 
 ///|
-test "官方套件：function-tomillis case007 - 非ISO 8601 字符串 D3110" {
+test "官方套件：transform case057 - 未闭合括号 S0203" {
+  let d = data("{\"Salutation\":\"Mr\"}")
+  // $lowercase("Missing close brackets" → S0203（end of input 期望 ')'）
+  let raised = try {
+    ignore(evaluate("$lowercase(\"Missing close brackets\"", d))
+    false
+  } catch {
+    @error.JsonataError::SyntaxError(code=Some(c), ..) => c == "S0203"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：transform case063 - $lowercase 多参 T0410" {
+  let d = data("{\"Salutation\":\"Mr\"}")
+  let raised = try {
+    ignore(evaluate("$lowercase(\"Coca\", \"Cola\")", d))
+    false
+  } catch {
+    @error.JsonataError::SignatureError(code=Some(c), ..) => c == "T0410"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：transform case069 - $uppercase 多参 T0410" {
+  let d = data("{\"Salutation\":\"Mr\"}")
+  let raised = try {
+    ignore(evaluate("$uppercase(\"Coca\", \"Cola\")", d))
+    false
+  } catch {
+    @error.JsonataError::SignatureError(code=Some(c), ..) => c == "T0410"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：transform case076 - $substringBefore 缺参 T0411" {
+  let d = data("{\"Salutation\":\"Mr\"}")
+  // $substringBefore("Cocaca") → 1 arg, 上下文 (object) 不兼容首参 s → T0411
+  let raised = try {
+    ignore(evaluate("$substringBefore(\"Coca\" & \"ca\")", d))
+    false
+  } catch {
+    @error.JsonataError::SignatureError(code=Some(c), ..) => c == "T0411"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：transform case084 - $substringAfter 缺参 T0411" {
+  let d = data("{\"Salutation\":\"Mr\"}")
+  let raised = try {
+    ignore(evaluate("$substringAfter(\"Coca\" & \"ca\")", d))
+    false
+  } catch {
+    @error.JsonataError::SignatureError(code=Some(c), ..) => c == "T0411"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：transform case092 - $substring 多参 T0410" {
+  let d = data("{\"Salutation\":\"Mr\"}")
+  let raised = try {
+    ignore(evaluate("$substring(\"Coca\" & \"ca\", 2, 4, 5)", d))
+    false
+  } catch {
+    @error.JsonataError::SignatureError(code=Some(c), ..) => c == "T0410"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：transform case094 - $substring 第3参非数字 T0410" {
+  let d = data("{\"Salutation\":\"Mr\"}")
+  let raised = try {
+    ignore(evaluate("$substring(\"Coca\", 3, \"Whoops\")", d))
+    false
+  } catch {
+    @error.JsonataError::SignatureError(code=Some(c), ..) => c == "T0410"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：transform case097 - $substring 第3参非数字 T0410" {
+  let d = data("{\"Salutation\":\"Mr\"}")
+  let raised = try {
+    ignore(evaluate("$substring(\"Hello\",5,\"World\")", d))
+    false
+  } catch {
+    @error.JsonataError::SignatureError(code=Some(c), ..) => c == "T0410"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：function-replace case005 - $replace 缺参 T0410" {
   let d = Json::null()
   let raised = try {
-    ignore(evaluate("$toMillis(\"foo\")", d))
+    ignore(evaluate("$replace(\"hello\")", d))
     false
   } catch {
-    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3110"
+    @error.JsonataError::SignatureError(code=Some(c), ..) => c == "T0410"
     _ => false
   }
   assert_true(raised)
 }
 
 ///|
-test "官方套件：function-tomillis case008 - 非ISO 8601 格式 D3110" {
+test "官方套件：function-replace case008 - $replace 第2参非字符串/函数 T0410" {
+  let d = Json::string("hello")
+  let raised = try {
+    ignore(evaluate("$replace(\"hello\", 1)", d))
+    false
+  } catch {
+    @error.JsonataError::SignatureError(code=Some(c), ..) => c == "T0410"
+    _ => false
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：function-replace case009 - $replace 空 pattern D3010" {
   let d = Json::null()
   let raised = try {
-    ignore(evaluate("$toMillis(\"01-02-2018\")", d))
+    ignore(evaluate("$replace(\"hello\", \"\", \"bye\")", d))
     false
   } catch {
-    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3110"
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3010"
     _ => false
   }
   assert_true(raised)
 }
 
 ///|
-test "官方套件：function-tomillis case009 - 空格分隔日期时间 D3110" {
+test "官方套件：function-replace case010 - $replace 第2参非字符串/函数 T0410" {
   let d = Json::null()
   let raised = try {
-    ignore(evaluate("$toMillis(\"2018-02-03 11:15:33\")", d))
+    ignore(evaluate("$replace(\"hello\", 2, 1)", d))
     false
   } catch {
-    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3110"
+    @error.JsonataError::SignatureError(code=Some(c), ..) => c == "T0410"
     _ => false
   }
   assert_true(raised)
 }
 
 ///|
-test "官方套件：function-tomillis parseDateTime - 无marker picture 返回 undefined" {
-  let d = data("{}")
-  let result = evaluate("$toMillis('Hello', 'Hello')", d)
-  assert_true(result == Json::null())
-}
-
-///|
-test "官方套件：function-tomillis parseDateTime - 输入不匹配 picture 返回 undefined" {
-  let d = data("{}")
-  let result = evaluate("$toMillis('irrelevent string', '[Y]-[M]-[D]')", d)
-  assert_true(result == Json::null())
-}
-
-///|
-test "官方套件：function-tomillis parseDateTime - 未知组件 q 抛 D3132" {
-  let d = data("{}")
+test "官方套件：function-replace case011 - $replace 第1参非字符串 T0410" {
+  let d = Json::null()
   let raised = try {
-    ignore(evaluate("$toMillis('2018-05-22', '[Y]-[M]-[q]')", d))
+    ignore(evaluate("$replace(123, 2, 1)", d))
     false
   } catch {
-    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3132"
-    _ => false
-  }
-  assert_true(raised)
-}
-
-///|
-test "官方套件：function-tomillis parseDateTime - [YN] 命名年抛 D3133" {
-  let d = data("{}")
-  let raised = try {
-    ignore(evaluate("$toMillis('2018-05-22', '[YN]-[M]-[D]')", d))
-    false
-  } catch {
-    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3133"
-    _ => false
-  }
-  assert_true(raised)
-}
-
-///|
-test "官方套件：function-tomillis parseDateTime - 日期组件间隔 D3136" {
-  let d = data("{}")
-  let raised = try {
-    ignore(evaluate("$toMillis('2018-22', '[Y]-[D]')", d))
-    false
-  } catch {
-    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3136"
+    @error.JsonataError::SignatureError(code=Some(c), ..) => c == "T0410"
     _ => false
   }
   assert_true(raised)

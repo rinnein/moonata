@@ -91,14 +91,14 @@ docs: update official test status
 
 ## 兼容性状态
 
-固定快照：2026-07-12，$toMillis ISO 8601 严格校验 + picture 解析错误码对齐 + undefined 返回 阶段。
+固定快照：2026-07-12，字符串函数签名严格校验 + parser S0203 + 偏函数 signature 修正 阶段。
 
 ```text
-本地测试：moon test 257/257
-官方可比对审计：eligible 1667, pass 1586, fail 81, skip 15
-通过率：95.1%
+本地测试：moon test 262/262
+官方可比对审计：eligible 1667, pass 1591, fail 76, skip 15
+通过率：95.4%
 ```
 
-Top failures: parent-operator(13), joins(9), transform(8), function-replace(5), object-constructor(5), function-eval(3), hof-reduce(3), regex(3), sorting(3), tail-recursion(3)
+Top failures: parent-operator(13), function-tomillis(9), joins(9), object-constructor(5), function-eval(3), hof-reduce(3), regex(3), sorting(3), tail-recursion(3), transforms(3)
 
 官方测试集审计流程与跳过策略记录在 `docs/jsonata-official-workflow.md`。

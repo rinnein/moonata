@@ -128,6 +128,7 @@ fn parse_function_signature(
             if p.context {
               raise @error.signature_error(
                 "S0401: 重复的上下文修饰符 '-' in signature: \{sig}",
+                code=Some("S0401"),
               )
             } else {
               p.context = true
@@ -136,6 +137,7 @@ fn parse_function_signature(
           None =>
             raise @error.signature_error(
               "S0401: 上下文修饰符 '-' 缺少前驱参数 in signature: \{sig}",
+              code=Some("S0401"),
             )
         }
       '?' =>
@@ -144,6 +146,7 @@ fn parse_function_signature(
           None =>
             raise @error.signature_error(
               "S0401: 可选修饰符 '?' 缺少前驱参数 in signature: \{sig}",
+              code=Some("S0401"),
             )
         }
       '+' =>
@@ -152,6 +155,7 @@ fn parse_function_signature(
           None =>
             raise @error.signature_error(
               "S0401: 可变修饰符 '+' 缺少前驱参数 in signature: \{sig}",
+              code=Some("S0401"),
             )
         }
       '(' => {
@@ -174,6 +178,7 @@ fn parse_function_signature(
         if !found {
           raise @error.signature_error(
             "S0401: 未闭合的 '(' in signature: \{sig}",
+            code=Some("S0401"),
           )
         }
         // 提取 (...) 内的字符
@@ -187,6 +192,7 @@ fn parse_function_signature(
         if choice_str.contains("<") {
           raise @error.signature_error(
             "S0402: 选择类型内不支持参数化类型 '<...>' in signature: \{sig}",
+            code=Some("S0402"),
           )
         }
         let p = SigParam::new("(\{choice_str})", "[\{choice_str}m]")
@@ -217,6 +223,7 @@ fn parse_function_signature(
             if !found {
               raise @error.signature_error(
                 "S0401: 未闭合的 '<' in signature: \{sig}",
+                code=Some("S0401"),
               )
             }
             let sub = StringBuilder::new()
@@ -230,12 +237,14 @@ fn parse_function_signature(
           _ =>
             raise @error.signature_error(
               "S0401: 类型参数 '<...>' 只能跟在 'a' 或 'f' 之后 in signature: \{sig}",
+              code=Some("S0401"),
             )
         }
       ' ' | '\t' | '\n' | '\r' => () // 忽略空白
       _ =>
         raise @error.signature_error(
           "S0401: 无法识别的签名符号 '\{c}' in signature: \{sig}",
+          code=Some("S0401"),
         )
     }
     i += 1
@@ -317,6 +326,7 @@ fn validate_array_arg(
         if item_sym != expected_char {
           raise @error.signature_error(
             "T0412: Argument has wrong type. Expected array of \{subtype}, got \{item_sym}",
+            code=Some("T0412"),
           )
         }
       }
@@ -327,6 +337,7 @@ fn validate_array_arg(
       if sym != expected_char {
         raise @error.signature_error(
           "T0412: Argument has wrong type. Expected array of \{subtype}, got \{sym}",
+          code=Some("T0412"),
         )
       }
       // 包装为单元素数组
@@ -360,7 +371,10 @@ fn FunctionSignature::validate(
   }
   // 回溯匹配：尝试为每个参数分配 [0..n_args] 个匹配实参，使总和等于 n_args
   if !backtrack_match(self.params, args, 0, 0, counts) {
-    raise @error.signature_error("T0410: Arguments are not of expected type")
+    raise @error.signature_error(
+      "T0410: Arguments are not of expected type",
+      code=Some("T0410"),
+    )
   }
   // 按分配结果生成 validated args
   let validated : Array[JsonataValue] = []
@@ -376,6 +390,7 @@ fn FunctionSignature::validate(
         if !symbol_in_class(ctx_sym, param.regex) {
           raise @error.signature_error(
             "T0411: Context value not compatible with argument \{p_idx + 1}",
+            code=Some("T0411"),
           )
         }
         validated.push(context)
@@ -501,6 +516,7 @@ pub fn validate_function_args(
       if !symbol_matches_simple(sym, expected) {
         raise @error.signature_error(
           "T0410: Arguments are not of expected type",
+          code=Some("T0410"),
         )
       }
     }

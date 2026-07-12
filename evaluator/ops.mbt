@@ -805,7 +805,10 @@ fn make_partial_apply(
   @value.JsonataValue::Func(
     @value.JsonataFunc::new(
       arity=placeholder_count,
-      signature=f.signature,
+      // 偏函数捕获了部分参数，原始签名已不能正确描述剩余所需参数的
+      // 数量与位置。设为 None 跳过 validate_args 严格校验，
+      // 让偏函数的 invoke 闭包自行组装完整参数列表后直接调用原函数。
+      signature=None,
       invoke~,
     ),
   )

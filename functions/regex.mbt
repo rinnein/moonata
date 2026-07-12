@@ -108,24 +108,51 @@ fn register_regex_functions(ctx : @value.EvalContext) -> Unit {
   ) -> @value.JsonataValue raise @error.JsonataError {
     replace_regex(args, ctx)
   })
-  register(ctx, "replace", arity=3, invoke=(args, ctx) => {
+  // $replace(str, pattern, replacement, limit?)
+  // JSONata 签名 <s-(sf)(sf)n?:s>：首参字符串，2/3 参为字符串或函数，4 参可选整数。
+  // 由于 apply_context_argument 已在 args.length<arity 时前置上下文作为首参，
+  // 签名使用 "s(sf)(sf)n?"（不含 `-`）以避免上下文双重替换；
+  // 复杂签名启用严格参数数量与类型校验（T0410）。
+  // invoke 内额外校验空 pattern (D3010) 与负 limit (D3011)，对齐 JSONata-js。
+  register(ctx, "replace", arity=3, signature=Some("s(sf)(sf)n?"), invoke=(
+    args,
+    ctx,
+  ) => {
     if args[0].is_undefined() {
       return @value.JsonataValue::Undefined
     }
-    // Validate 4th arg (limit): must be number, not null, not negative
+    // 空 pattern 校验 (D3010)：仅对字符串 pattern 生效（regex pattern 由 regexp 库处理）
+    match args[1] {
+      @value.JsonataValue::Json(Json::String(p)) =>
+        if p == "" {
+          raise @error.runtime_error(
+            "D3010: Second argument of replace function cannot be an empty string",
+            code=Some("D3010"),
+          )
+        }
+      _ => ()
+    }
+    // Validate 4th arg (limit): must be number, not null, not negative.
+    // 注意：validate_args 会为可选参数 (n?) 在缺省时追加 Undefined，需跳过。
     if args.length() > 3 {
       match args[3] {
+        @value.JsonataValue::Undefined => ()
         @value.JsonataValue::Json(Json::Null) =>
           raise @error.runtime_error(
             "T0410: Arguments are not of expected type",
+            code=Some("T0410"),
           )
         @value.JsonataValue::Json(Json::Number(n, ..)) =>
           if n < 0.0 {
-            raise @error.runtime_error("D3011: Negative limit")
+            raise @error.runtime_error(
+              "D3011: Fourth argument of replace function must evaluate to a positive number",
+              code=Some("D3011"),
+            )
           }
         _ =>
           raise @error.runtime_error(
             "T0410: Arguments are not of expected type",
+            code=Some("T0410"),
           )
       }
     }
@@ -221,7 +248,15 @@ fn replace_regex(
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
   let s = value_to_str(args[0])
-  let limit = if args.length() > 3 { value_to_int(args[3]) } else { -1 }
+  // 注意：可选参数 (n?) 缺省时 validate_args 会追加 Undefined，需视为未提供（limit=-1）。
+  let limit = if args.length() > 3 {
+    match args[3] {
+      @value.JsonataValue::Undefined => -1
+      _ => value_to_int(args[3])
+    }
+  } else {
+    -1
+  }
   if limit == 0 {
     return @value.JsonataValue::Json(Json::string(s))
   }

@@ -88,11 +88,15 @@ fn Parser::expect(
   what~ : String,
 ) -> Unit raise @error.JsonataError {
   if not(self.match_kind(kind)) {
+    // 对齐 JSONata-js parser: 期望 token 未匹配时，
+    // 若当前已到输入末尾，抛 S0203 (Expected ... before end of expression)；
+    // 否则抛 S0202 (Expected ..., got ...)。
+    let code = if self.at_end() { "S0203" } else { "S0202" }
     raise @error.syntax_error(
       "期望 \{what}，得到 \{debug_tok(self.peek())}",
       position=Some(self.peek().pos),
       token=Some(debug_tok(self.peek())),
-      code=Some("S0202"),
+      code=Some(code),
     )
   }
 }

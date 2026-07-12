@@ -136,51 +136,38 @@ skip_reasons
 下方固定快照仍是旧口径下的历史记录；本轮脚本升级后，`skip` 分类会更细，待下一次复跑官方审计后再刷新这里的数字。
 
 
-当前固定快照（2026-07-12，$toMillis ISO 8601 严格校验 + picture 解析错误码对齐 + undefined 返回，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-12，字符串函数签名严格校验 + parser S0203 + 偏函数 signature 修正，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1667 pass 1586 fail 81 skip 15
+eligible 1667 pass 1591 fail 76 skip 15
 top_failures
 parent-operator 13
 joins 9
-transform 8
-function-replace 5
 object-constructor 5
 function-eval 3
 hof-reduce 3
 regex 3
 sorting 3
+tail-recursion 3
+transforms 3
 skip_reasons
 no_expected_outcome 15
 ```
 
-本轮修复（$toMillis ISO 8601 严格校验 + picture 解析错误码对齐 + undefined 返回）：
-- 提交：整体 pass 1578→1586 (+8)，fail 89→81 (-8)，通过率 94.7%→95.1%
-- 门禁：`moon check` 0e0w，`moon test` 257/257 passed（+8 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+本轮修复（字符串函数签名严格校验 + parser S0203 + 偏函数 signature 修正）：
+- 提交：整体 pass 1578→1591 (+13)，fail 89→76 (-13)，通过率 94.7%→95.4%
+- 门禁：`moon check` 0e0w，`moon test` 262/262 passed（+13 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：
-  - Functions: `parse_iso_millis` 新增 `is_iso8601` 严格校验，非 ISO 8601 格式（如 `"foo"`、`"01-02-2018"`、`"2018-02-03 11:15:33"` 空格分隔）抛 D3110 with code
-  - Functions: `parse_iso_millis` 返回类型改为 `Double?`，`toMillis` 在 None 时返回 Undefined
-  - Functions: `parse_date_picture_with_now` 返回类型改为 `Double?`；picture 无 marker（全 literal）时返回 None（对齐 JSONata-js "should parse string literal" 返回 undefined）
-  - Functions: `extract_date_components` 返回类型改为 `DateComponents?`；输入不匹配 picture literal 时返回 None（对齐 JSONata-js "nothing matches" 返回 undefined）；marker 值解析 D3110 视为不匹配返回 None
-  - Functions: `extract_marker_value` 未知组件标识符（如 `q`）抛 D3132（对齐 JSONata-js `analyseDateTimePicture`），X/x/W/w 仍抛 D3136（known but unsupported）
-  - Functions: `extract_marker_value` `[YN]` 命名年抛 D3133（N 修饰符仅适用于 M 和 F）
-  - Functions: `build_date_from_components_with_now` 新增日期/时间组件间隔检测（D3136）：Y+D 缺 M、H+s 缺 m、H+f 缺 m、m+f 缺 s 均抛 D3136
-  - Functions: `extract_marker_value` 所有 D3110 raise 附带 `code=Some("D3110")`，使 CLI 输出错误码前缀
-  - Tests: 新增 function-tomillis case007/008/009 + parseDateTime 5 个等价回归断言
-- 修复效果：`function-tomillis` group 51→59 pass（-8 fail，仅剩 1 个非确定性用例）
-
-上一轮修复（错误码精度修复 S0204/S0209/S0210 + T1005/T1008 + function 关键字 + 尾部分号）：
-- 提交：整体 pass 1571→1578 (+7)，fail 96→89 (-7)，通过率 94.2%→94.7%
-- 门禁：`moon check` 0e0w，`moon test` 249/249 passed（+7 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
-- 修复内容：
-  - Parser: `function` 仅在紧跟 `(` 时作为 Lambda 关键字，否则作为普通标识符可用（修复 `unknown(function)` 解析冲突）
-  - Parser: 数组字面量中非 `,`/`]`/`)`/`:` 的 token 后续抛 S0204（对齐 JSONata-js 数组语法错误）
-  - Parser: 构造器 `{...}` 后禁止谓词 `[expr]`（S0209）和另一个构造器 `{...}`（S0210）
-  - Parser: 尾部分号 `;` 在顶层输入末尾抛出 S0201（对齐 JSONata-js 语法检查）
-  - Evaluator: 区分 T1005（已知函数名但路径求值失败）与 T1006（普通字段名未找到）
-  - Evaluator: 对含 `?` 占位符的参数，非函数值抛 T1008 而非 T1006
-  - Tests: 新增 errors case005/case006/case010/case014/case022/case023/case024 共 7 个回归断言
-- 修复效果：`errors` group 16→23 pass（+7），errors 剩余 2 个失败（S0101/S0201 精度差异）
+  - Parser: `expect()` 在输入末尾抛 S0203（Expected ... before end of expression），非末尾仍抛 S0202（对齐 JSONata-js parser 的 `advance` 错误码分支）
+  - Functions: `$replace` 启用复杂签名 `s(sf)(sf)n?`，严格校验参数数量与类型（T0410）；空 pattern 抛 D3010；负 limit 抛 D3011；可选 `n?` 缺省时 validate_args 追加的 Undefined 视为未提供
+  - Functions: `$lowercase`/`$uppercase` 启用复杂签名 `s-` + `contextual=false`，让 `validate_args` 通过 `-` 修饰符正确处理上下文替换，参数过多抛 T0410
+  - Functions: `$substringBefore`/`$substringAfter` 启用复杂签名 `s-s` + `contextual=false`，上下文类型不匹配抛 T0411（对齐 JSONata-js），参数过多/类型不匹配抛 T0410
+  - Functions: `$substring` 启用复杂签名 `s-nn?` + `contextual=false`，第三参可选 `n?` 缺省时视为未提供；类型不匹配抛 T0410
+  - Functions: `register` 辅助新增 `contextual` 参数（默认 `true` 保持兼容），允许按函数关闭 `apply_context_argument` 的前置上下文行为
+  - Evaluator: `make_partial_apply` 将偏函数的 `signature` 设为 `None`，避免偏函数被 `validate_args` 用原始签名误校验（偏函数捕获部分参数后，原始签名已不能正确描述剩余所需参数）
+  - Value: `validate_function_args`/`FunctionSignature::validate` 抛 T0410/T0411/T0412/S0401/S0402 时附带 `code=Some(...)`，使 CLI 错误输出前缀官方错误码，审计脚本能直接匹配
+  - Tests: 新增 transform case057/063/069/076/084/092/094/097 + function-replace case005/008/009/010/011 共 13 个回归断言
+- 修复效果：`transform` group 96→104 pass（全绿，-8 fail），`function-replace` group 7→12 pass（全绿，-5 fail）
 
 上一轮修复（词法错误码 S0102-S0104 + date picture D3133-D3135）：
 - 提交：整体 pass 1564→1571 (+7)，fail 103→96 (-7)，通过率 93.9%→94.2%

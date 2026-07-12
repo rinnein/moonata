@@ -23,18 +23,20 @@
 | P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | ✅ 可比对官方用例全通过（1251/1251） |
 | 合计 | | | **26** | **66** | |
 
-> 当前固定快照（2026-07-12，$toMillis ISO 8601 严格校验 + picture 解析错误码对齐 + undefined 返回，使用 `scripts/jsonata_official_audit.py` 审计）：
+> 当前固定快照（2026-07-12，字符串函数签名严格校验 + parser S0203 + 偏函数 signature 修正，使用 `scripts/jsonata_official_audit.py` 审计）：
 >
-> - `moon test` 为 257/257 通过（+8 新增回归断言）；`moon check` 0e0w；`moon info` 通过；`moon fmt` 已执行。
-> - JSONata 官方可比对审计为 `eligible 1667 / pass 1586 / fail 81 / skip 15`（通过率 95.1%）。
+> - `moon test` 为 262/262 通过（+13 新增回归断言）；`moon check` 0e0w；`moon info` 通过；`moon fmt` 已执行。
+> - JSONata 官方可比对审计为 `eligible 1667 / pass 1591 / fail 76 / skip 15`（通过率 95.4%）。
 > - 修复内容：
->   - Functions: `parse_iso_millis` 新增 `is_iso8601` 严格校验，非 ISO 8601 格式抛 D3110 with code
->   - Functions: `parse_iso_millis`/`parse_date_picture_with_now` 返回 `Double?`，`toMillis` 在 None 时返回 Undefined
->   - Functions: `extract_date_components` 返回 `DateComponents?`；输入不匹配 picture 或 marker 值解析 D3110 时返回 None（对齐 JSONata-js 返回 undefined）
->   - Functions: `extract_marker_value` 未知组件标识符抛 D3132，`[YN]` 命名年抛 D3133，X/x/W/w 仍抛 D3136
->   - Functions: `build_date_from_components_with_now` 新增日期/时间组件间隔检测（D3136）
->   - Functions: 所有 D3110 raise 附带 `code=Some("D3110")`
-> - Tests: 新增 function-tomillis case007/008/009 + parseDateTime 5 个等价回归断言
+>   - Parser: `expect()` 在输入末尾抛 S0203（Expected ... before end of expression），非末尾仍抛 S0202（对齐 JSONata-js parser 的 `advance` 错误码分支）
+>   - Functions: `$replace` 启用复杂签名 `s(sf)(sf)n?`，严格校验参数数量与类型（T0410）；空 pattern 抛 D3010；负 limit 抛 D3011；可选 `n?` 缺省时 validate_args 追加的 Undefined 视为未提供
+>   - Functions: `$lowercase`/`$uppercase` 启用复杂签名 `s-` + `contextual=false`，让 `validate_args` 通过 `-` 修饰符正确处理上下文替换，参数过多抛 T0410
+>   - Functions: `$substringBefore`/`$substringAfter` 启用复杂签名 `s-s` + `contextual=false`，上下文类型不匹配抛 T0411（对齐 JSONata-js），参数过多/类型不匹配抛 T0410
+>   - Functions: `$substring` 启用复杂签名 `s-nn?` + `contextual=false`，第三参可选 `n?` 缺省时视为未提供；类型不匹配抛 T0410
+>   - Functions: `register` 辅助新增 `contextual` 参数（默认 `true` 保持兼容），允许按函数关闭 `apply_context_argument` 的前置上下文行为
+>   - Evaluator: `make_partial_apply` 将偏函数的 `signature` 设为 `None`，避免偏函数被 `validate_args` 用原始签名误校验
+>   - Value: `validate_function_args`/`FunctionSignature::validate` 抛 T0410/T0411/T0412/S0401/S0402 时附带 `code=Some(...)`，使 CLI 错误输出前缀官方错误码
+> - Tests: 新增 transform case057/063/069/076/084/092/094/097 + function-replace case005/008/009/010/011 共 13 个回归断言
 
 ### 1.1 当前暂停边界
 
@@ -43,15 +45,15 @@ P11 已完成日期时间 picture 修复、Lambda 签名语法与范围表达式
 | 排名 | 官方 group | 失败数 |
 | --- | --- | --- |
 | 1 | `parent-operator` | 13 |
-| 2 | `joins` | 9 |
-| 3 | `transform` | 8 |
-| 4 | `function-replace` | 5 |
-| 5 | `object-constructor` | 5 |
-| 6 | `function-eval` | 3 |
-| 7 | `hof-reduce` | 3 |
-| 8 | `regex` | 3 |
-| 9 | `sorting` | 3 |
-| 10 | `tail-recursion` | 3 |
+| 2 | `function-tomillis` | 9 |
+| 3 | `joins` | 9 |
+| 4 | `object-constructor` | 5 |
+| 5 | `function-eval` | 3 |
+| 6 | `hof-reduce` | 3 |
+| 7 | `regex` | 3 |
+| 8 | `sorting` | 3 |
+| 9 | `tail-recursion` | 3 |
+| 10 | `transforms` | 3 |
 
 跳过项仅表示当前 CLI 审计 harness 无法直接比较，不表示通过或失败：`no_expected_outcome 15`。
 
