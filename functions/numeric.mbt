@@ -244,6 +244,7 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
     }
     let n = value_to_double(args[0])
     let picture = value_to_str(args[1])
+    validate_integer_picture(picture)
     @value.JsonataValue::Json(Json::string(format_integer(n, picture)))
   })
   // $parseInteger(string, picture)
@@ -253,6 +254,7 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
     }
     let s = value_to_str(args[0])
     let picture = value_to_str(args[1])
+    validate_integer_picture(picture)
     @value.JsonataValue::Json(Json::number(parse_integer(s, picture)))
   })
 }
@@ -1208,6 +1210,59 @@ fn parse_integer(s : String, picture : String) -> Double {
   }
   @strconv.from_str(buf.to_string()) catch {
     _ => 0.0
+  }
+}
+
+///|
+/// 验证整数 picture。JSONata 对无法识别的序列 picture 抛 D3130，
+/// 同一 picture 混用不同 Unicode 十进制数字族时抛 D3131。
+fn validate_integer_picture(picture : String) -> Unit raise @error.JsonataError {
+  let pic = base_picture(picture)
+  if pic == "I" ||
+    pic == "i" ||
+    pic == "A" ||
+    pic == "a" ||
+    pic == "w" ||
+    pic == "W" ||
+    pic == "Ww" {
+    return
+  }
+  let mut has_mandatory_digit = false
+  let mut group : Int? = None
+  for _, c in pic {
+    let digit_group : Int? = if c >= '0' && c <= '9' {
+      Some(0)
+    } else if c >= '٠' && c <= '٩' {
+      Some(1)
+    } else if c >= '０' && c <= '９' {
+      Some(2)
+    } else {
+      None
+    }
+    match digit_group {
+      Some(g) => {
+        if c != '#' {
+          has_mandatory_digit = true
+        }
+        match group {
+          None => group = Some(g)
+          Some(previous) =>
+            if previous != g {
+              raise @error.runtime_error(
+                "D3131: Invalid integer picture",
+                code=Some("D3131"),
+              )
+            }
+        }
+      }
+      None => ()
+    }
+  }
+  if !has_mandatory_digit {
+    raise @error.runtime_error(
+      "D3130: Invalid integer picture",
+      code=Some("D3130"),
+    )
   }
 }
 

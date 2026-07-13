@@ -136,24 +136,39 @@ skip_reasons
 下方固定快照仍是旧口径下的历史记录；本轮脚本升级后，`skip` 分类会更细，待下一次复跑官方审计后再刷新这里的数字。
 
 
-当前固定快照（2026-07-13，排序类型验证 T2007/T2008 + $sort D3070，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-14，tuple-stream focus/position lineage 与 parent ancestor 链修复后，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1667 pass 1603 fail 64 skip 15
+eligible 1667 pass 1634 fail 33 skip 15
 top_failures
-parent-operator 13
-joins 9
 object-constructor 5
-function-eval 3
 hof-reduce 3
 regex 3
 tail-recursion 3
 transforms 3
-errors 2
-function-formatInteger 2
+hof-map 2
+joins 2
+matchers 2
+partial-application 2
+token-conversion 2
 skip_reasons
 no_expected_outcome 15
 ```
+
+本轮复核结果：官方可比对用例 1667 个，1634 个通过、33 个失败、15 个跳过；`parent-operator` 已全绿，`joins` 剩余 2 个位置绑定/索引边界用例。机器可读报告写入 `/tmp/moonata-jsonata-audit.json`。
+
+本轮修复（动态 eval、整数 picture、函数链与注释错误码）：
+- 提交：整体 pass 1603→1614 (+11)，fail 64→53 (-11)，通过率 96.2%→96.8%
+- 门禁：`moon check` 0e0w，`moon test` 268/268 passed（新增 2 个回归测试），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Lexer: 未闭合块注释抛 S0106
+  - Evaluator: 函数链遇到非函数值抛 T2006
+  - Functions: `$eval(nothing)` 传播 undefined；动态表达式语法/求值错误分别映射 D3120/D3121
+  - Functions: `$exists()` 严格参数数量校验并附 T0410；`$boolean(2,3)` 保留 HOF 三参数回调兼容，同时拒绝普通双参数调用
+  - Functions: `$formatInteger`/`$parseInteger` 校验整数 picture，非法序列抛 D3130，混用 Unicode 数字族抛 D3131
+  - Parser: `@ bar` 识别为 S0211
+  - Tests: 新增注释、函数链、整数 picture、动态 eval、exists/boolean 错误码回归断言
+- 剩余重点：`parent-operator` 13、`joins` 9、`object-constructor` 5；`errors` 仅剩畸形引号 case009 的 S0202/S0101 边界差异
 
 本轮修复（排序类型验证 T2007/T2008 + $sort D3070）：
 - 提交：sorting 18→21 pass（全绿），function-sort 9→10 pass，整体 pass 1599→1603 (+4)，fail 68→64 (-4)，通过率 95.9%→96.2%

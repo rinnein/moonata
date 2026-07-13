@@ -524,7 +524,11 @@ fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
           }
           @lexer.TokenKind::LParen => {
             ignore(self.advance())
-            let mapped = self.parse_block()
+            let mapped = if self.peek_kind() == @lexer.TokenKind::RParen {
+              @ast.Ast::Block([])
+            } else {
+              self.parse_block()
+            }
             self.expect(@lexer.TokenKind::RParen, what="')'")
             expr = append_step(expr, @ast.map_step(mapped))
           }
@@ -635,6 +639,33 @@ fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
       }
       @lexer.TokenKind::At => {
         ignore(self.advance())
+        // 与 jsonata-js processAST 一致：focus 绑定不能附着在已有
+        // predicate/index 阶段之后；排序阶段使用独立的 S0216。
+        match expr {
+          @ast.Ast::Sort(..) =>
+            raise @error.syntax_error(
+              "focus 绑定不能应用于排序结果",
+              position=Some(self.peek().pos),
+              token=Some("@"),
+              code=Some("S0216"),
+            )
+          @ast.Ast::Path(steps) if steps.length() > 0 => {
+            let last = steps[steps.length() - 1]
+            match last.kind {
+              @ast.StepKind::Index(_)
+              | @ast.StepKind::Slice(_, _)
+              | @ast.StepKind::Filter(_) =>
+                raise @error.syntax_error(
+                  "focus 绑定不能应用于已有谓词阶段",
+                  position=Some(self.peek().pos),
+                  token=Some("@"),
+                  code=Some("S0215"),
+                )
+              _ => ()
+            }
+          }
+          _ => ()
+        }
         let var_name = match self.peek_kind() {
           @lexer.TokenKind::Var(name) => {
             ignore(self.advance())
@@ -649,6 +680,7 @@ fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
               "@ 后期望 $name 或 $$",
               position=Some(self.peek().pos),
               token=Some(debug_tok(self.peek())),
+              code=Some("S0214"),
             )
         }
         // 标注当前路径的最后一个步，而非新增 BindVar 步
@@ -677,6 +709,7 @@ fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
               "# 后期望 $name",
               position=Some(self.peek().pos),
               token=Some(debug_tok(self.peek())),
+              code=Some("S0214"),
             )
         }
         // 标注当前路径最后一个步的 pos_var（位置索引绑定）

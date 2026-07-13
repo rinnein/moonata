@@ -891,6 +891,7 @@ fn eval_chain(
           "链中非函数值",
           expected=Some("function"),
           actual=None,
+          code=Some("T2006"),
         )
     }
   }
@@ -913,6 +914,7 @@ fn eval_chain_apply_stage(
         "链中非函数值",
         expected=Some("function"),
         actual=None,
+        code=Some("T2006"),
       )
   }
   let captured : Array[@value.JsonataValue] = []

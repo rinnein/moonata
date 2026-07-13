@@ -32,7 +32,52 @@ pub fn parse(
       code=Some("S0201"),
     )
   }
+  // 与 jsonata-js 的 processAST 一致：当整个顶层表达式仍在尝试
+  // 推导祖先时，父级操作没有可用的运行时上下文，应报 S0217。
+  // 嵌套在 map/group/object constructor 内的 `%` 不在此处拒绝，
+  // 它们会在对应元素求值时解析祖先链。
+  if ast_seeks_parent_at_top(result) {
+    raise @error.syntax_error(
+      "无法在顶层表达式中推导父级",
+      position=None,
+      token=Some("%"),
+      code=Some("S0217"),
+    )
+  }
   result
+}
+
+///|
+/// 顶层祖先推导失败检测（对应官方 parser 的 seekingParent 检查）。
+fn ast_seeks_parent_at_top(ast : @ast.Ast) -> Bool {
+  match ast {
+    @ast.Ast::Path(steps) => {
+      if steps.length() == 1 && steps[0].kind == @ast.StepKind::Parent {
+        return true
+      }
+      // 只有路径末尾仍在直接推导祖先时才是 S0217；中间的 `%`
+      // 可能被后续路径步骤消费（例如 `Price.%[...].SKU`）。
+      if steps.length() > 0 &&
+        steps[steps.length() - 1].kind == @ast.StepKind::Parent {
+        for i in 0..<(steps.length() - 1) {
+          match steps[i].kind {
+            // 空 map 的结果没有元素，运行时应得到 undefined/null，
+            // 不应在解析阶段报 S0217（Account.Order.().%）。
+            @ast.StepKind::Map(@ast.Ast::Block(exprs)) if exprs.length() == 0 =>
+              return false
+            _ => ()
+          }
+        }
+        return true
+      }
+      false
+    }
+    @ast.Ast::Block(exprs) if exprs.length() == 1 =>
+      ast_seeks_parent_at_top(exprs[0])
+    @ast.Ast::Binary(op~, lhs~, rhs~) if op == "%" =>
+      ast_seeks_parent_at_top(lhs) || ast_seeks_parent_at_top(rhs)
+    _ => false
+  }
 }
 
 ///|

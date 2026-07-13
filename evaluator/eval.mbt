@@ -458,6 +458,28 @@ fn eval_path_frames(
     match step.pos_var {
       Some(pos_name) => {
         name_was_grouped = false
+        match step.focus {
+          Some(focus_name) => {
+            let bound : Array[PathFrame] = []
+            for base_frame in frames {
+              let step_frames = eval_step_frames(
+                step,
+                [base_frame],
+                ctx,
+                grouped=false,
+              )
+              for j, out in step_frames {
+                let with_focus = bind_frame(base_frame, focus_name, out.value)
+                bound.push(bind_frame_index(with_focus, pos_name, j))
+              }
+            }
+            frames = bound
+            map_was_grouped = false
+            i = i + 1
+            continue
+          }
+          None => ()
+        }
         match step.kind {
           @ast.StepKind::Map(expr) => {
             let mapped : Array[PathFrame] = []
@@ -465,17 +487,36 @@ fn eval_path_frames(
               let local_frames : Array[PathFrame] = []
               access_map_frames([frame], expr, ctx, local_frames)
               for j, out in local_frames {
-                mapped.push(bind_frame_index(out, pos_name, j))
+                let indexed = bind_frame_index(out, pos_name, j)
+                match step.focus {
+                  Some(focus_name) =>
+                    mapped.push(bind_frame(indexed, focus_name, out.value))
+                  None => mapped.push(indexed)
+                }
               }
             }
             frames = mapped
             map_was_grouped = true
           }
           _ => {
-            frames = eval_step_frames(step, frames, ctx, grouped=false)
-            for j, frame in frames {
-              frames[j] = bind_frame_index(frame, pos_name, j)
+            let indexed_frames : Array[PathFrame] = []
+            let global_index = i > start &&
+              steps[i - 1].kind is @ast.StepKind::Filter(_)
+            let mut offset = 0
+            for base_frame in frames {
+              let step_frames = eval_step_frames(
+                step,
+                [base_frame],
+                ctx,
+                grouped=false,
+              )
+              for j, frame in step_frames {
+                let index = if global_index { offset + j } else { j }
+                indexed_frames.push(bind_frame_index(frame, pos_name, index))
+              }
+              offset = offset + step_frames.length()
             }
+            frames = indexed_frames
             map_was_grouped = false
           }
         }
@@ -485,7 +526,6 @@ fn eval_path_frames(
         match step.focus {
           Some(name) => {
             name_was_grouped = false
-            let step_frames = eval_step_frames(step, frames, ctx, grouped=false)
             let has_group = stop_at > i + 1 &&
               is_aggregate_step(steps[stop_at - 1])
             if has_group {
@@ -495,55 +535,56 @@ fn eval_path_frames(
               // but @ (current) stays as the original input.
               // The final GroupAggregate step will reduce frames with same key.
               let bound_frames : Array[PathFrame] = []
-              for frame in step_frames {
-                // frame.value is the focus result (e.g. Employee[i])
-                // We bind $name to it, but set the frame's value back to the
-                // original input so subsequent path steps access @ correctly
-                let input_frame = path_frame_with_bindings(
-                  ctx.current(),
-                  frame.ancestors,
-                  bind_frame(frame, name, frame.value).bindings,
+              for base_frame in frames {
+                let step_frames = eval_step_frames(
+                  step,
+                  [base_frame],
+                  ctx,
+                  grouped=false,
                 )
-                bound_frames.push(input_frame)
+                for frame in step_frames {
+                  // frame.value is the focus result (e.g. Employee[i])
+                  // We bind $name to it, but set the frame's value back to the
+                  // original input so subsequent path steps access @ correctly
+                  bound_frames.push(
+                    bind_frame(
+                      path_frame_with_bindings(
+                        base_frame.value,
+                        frame.ancestors,
+                        base_frame.bindings,
+                      ),
+                      name,
+                      frame.value,
+                    ),
+                  )
+                }
               }
               frames = bound_frames
               i = i + 1
             } else {
-              let results : Array[PathFrame] = []
-              for frame in step_frames {
-                // Propagate focus binding to result frames so subsequent steps
-                // (sort, filter, map) can access the bound variable
-                let bound_frame = bind_frame(frame, name, frame.value)
-                // JSONata-js tuple stream: after a focus step, @ stays as the
-                // input to that step (not the focused item, not the original root).
-                // Use step_frame's ancestors for correct % parent resolution
-                // through focus/tuple-stream chains (e.g. $keys(%) in multi-focus
-                // paths), while keeping the pre-focus frame's value for @.
-                let input_frame = path_frame_with_bindings(
-                  frames[0].value,
-                  frame.ancestors,
-                  bound_frame.bindings,
+              let bound_frames : Array[PathFrame] = []
+              for base_frame in frames {
+                let step_frames = eval_step_frames(
+                  step,
+                  [base_frame],
+                  ctx,
+                  grouped=false,
                 )
-                let r = ctx.with_binding(name, frame.value, fn() -> @value.JsonataValue raise @error.JsonataError {
-                  frames_to_value(
-                    eval_path_frames([input_frame], steps, i + 1, ctx, stop_at),
+                for frame in step_frames {
+                  bound_frames.push(
+                    bind_frame(
+                      path_frame_with_bindings(
+                        base_frame.value,
+                        frame.ancestors,
+                        base_frame.bindings,
+                      ),
+                      name,
+                      frame.value,
+                    ),
                   )
-                })
-                match r {
-                  @value.JsonataValue::Undefined => continue
-                  _ =>
-                    for
-                      out in value_to_frames_with_bindings(
-                        r,
-                        bound_frame.value,
-                        bound_frame.ancestors,
-                        bound_frame.bindings,
-                      ) {
-                      results.push(out)
-                    }
                 }
               }
-              return results
+              return eval_path_frames(bound_frames, steps, i + 1, ctx, stop_at)
             }
           }
           None => {
@@ -1994,50 +2035,83 @@ fn access_map_frames(
     _ => None
   }
   for i, frame in frames {
-    let r = ctx.with_lineage(current=frame.value, ancestors=frame.ancestors, fn() -> @value.JsonataValue raise @error.JsonataError {
-      with_frame_bindings(ctx, frame.bindings, fn() -> @value.JsonataValue raise @error.JsonataError {
-        match pos_var {
-          Some(name) =>
-            ctx.bind(
-              name,
-              @value.JsonataValue::Json(Json::number(i.to_double())),
-            )
-          None => ()
-        }
-        ctx.with_depth(() => eval(expr, ctx))
-      })
-    })
-    match r {
-      @value.JsonataValue::Undefined => continue
-      @value.JsonataValue::Sequence(arr) =>
-        for v in arr {
-          for
-            out in value_to_frames_with_bindings(
-              v,
-              frame.value,
-              frame.ancestors,
-              frame.bindings,
-            ) {
-            results.push(out)
-          }
-        }
-      // Parent-aware map (tuple stream mode): always flatten arrays,
-      // matching JSONata-js `evaluateTupleStep` which iterates array
-      // elements into individual tuples (no `cons` preservation).
-      @value.JsonataValue::Json(Json::Array(arr)) =>
-        for v in arr {
-          results.push(
-            path_frame_with_bindings(
-              @value.JsonataValue::Json(v),
-              frame.ancestors,
-              frame.bindings,
-            ),
-          )
-        }
-      _ =>
-        results.push(
-          path_frame_with_bindings(r, frame.ancestors, frame.bindings),
+    let inner_path_steps : Array[@ast.Step]? = match expr {
+      @ast.Ast::Path(steps) => Some(steps)
+      @ast.Ast::Block([@ast.Ast::Path(steps)]) => Some(steps)
+      _ => None
+    }
+    match inner_path_steps {
+      Some(steps) => {
+        let inner_frames = ctx.with_lineage(
+          current=frame.value,
+          ancestors=frame.ancestors,
+          fn() -> Array[PathFrame] raise @error.JsonataError {
+            with_frame_bindings(ctx, frame.bindings, fn() -> Array[PathFrame] raise @error.JsonataError {
+              eval_path_frames([frame], steps, 0, ctx, steps.length())
+            })
+          },
         )
+        for inner_frame in inner_frames {
+          results.push(inner_frame)
+        }
+      }
+      None => {
+        let r = ctx.with_lineage(
+          current=frame.value,
+          ancestors=frame.ancestors,
+          fn() -> @value.JsonataValue raise @error.JsonataError {
+            with_frame_bindings(ctx, frame.bindings, fn() -> @value.JsonataValue raise @error.JsonataError {
+              match pos_var {
+                Some(name) =>
+                  ctx.bind(
+                    name,
+                    @value.JsonataValue::Json(Json::number(i.to_double())),
+                  )
+                None => ()
+              }
+              ctx.with_depth(() => eval(expr, ctx))
+            })
+          },
+        )
+        match r {
+          @value.JsonataValue::Undefined => continue
+          @value.JsonataValue::Sequence(arr) =>
+            for v in arr {
+              for
+                out in value_to_frames_with_bindings(
+                  v,
+                  frame.value,
+                  frame.ancestors,
+                  frame.bindings,
+                ) {
+                results.push(out)
+              }
+            }
+          // Parent-aware map (tuple stream mode): always flatten arrays,
+          // matching JSONata-js `evaluateTupleStep` which iterates array
+          // elements into individual tuples (no `cons` preservation).
+          @value.JsonataValue::Json(Json::Array(arr)) => {
+            let lineage = prepend_ancestor(frame.value, frame.ancestors)
+            for v in arr {
+              results.push(
+                path_frame_with_bindings(
+                  @value.JsonataValue::Json(v),
+                  lineage,
+                  frame.bindings,
+                ),
+              )
+            }
+          }
+          _ =>
+            results.push(
+              path_frame_with_bindings(
+                r,
+                prepend_ancestor(frame.value, frame.ancestors),
+                frame.bindings,
+              ),
+            )
+        }
+      }
     }
   }
 }

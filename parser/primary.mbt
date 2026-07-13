@@ -58,6 +58,14 @@ fn Parser::parse_primary(self : Parser) -> @ast.Ast raise @error.JsonataError {
     }
     @lexer.TokenKind::At => {
       ignore(self.advance())
+      if self.peek_kind() is @lexer.TokenKind::Ident(_) {
+        raise @error.syntax_error(
+          "意外的 token",
+          position=Some(self.peek().pos),
+          token=Some(debug_tok(self.peek())),
+          code=Some("S0211"),
+        )
+      }
       @ast.Ast::Var("@")
     }
     @lexer.TokenKind::Hash => {

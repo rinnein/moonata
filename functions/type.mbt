@@ -10,7 +10,7 @@ fn register_type_functions(ctx : @value.EvalContext) -> Unit {
       )
     }
     // 第二参数（若提供）必须是布尔值
-    if args.length() == 2 {
+    if args.length() > 1 && args.length() != 3 {
       match args[1] {
         @value.JsonataValue::Json(Json::True) => ()
         @value.JsonataValue::Json(Json::False) => ()
@@ -66,8 +66,15 @@ fn register_type_functions(ctx : @value.EvalContext) -> Unit {
       _ => @value.JsonataValue::Undefined
     }
   })
-  // $boolean — no extra-arg check: used as HOF callback with (item, index, array)
+  // $boolean allows the three-argument HOF callback convention, but rejects
+  // the ordinary two-argument invocation.
   register(ctx, "boolean", arity=1, invoke=(args, _ctx) => {
+    if args.length() == 2 {
+      raise @error.runtime_error(
+        "T0410: Arguments are not of expected type",
+        code=Some("T0410"),
+      )
+    }
     match args[0] {
       @value.JsonataValue::Undefined => @value.JsonataValue::Undefined
       _ => @value.JsonataValue::Json(Json::boolean(value_to_bool(args[0])))
@@ -333,22 +340,48 @@ fn register_higher_order_functions(ctx : @value.EvalContext) -> Unit {
     args : Array[@value.JsonataValue],
     ctx : @value.EvalContext,
   ) -> @value.JsonataValue raise @error.JsonataError {
+    if args.length() > 0 && args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     let expr_str = value_to_str(args[0])
-    let tokens = @lexer.lex(expr_str)
-    let ast = @parser.parse(tokens)
+    let tokens = @lexer.lex(expr_str) catch {
+      _ =>
+        raise @error.runtime_error(
+          "D3120: Syntax error in expression passed to function eval",
+          code=Some("D3120"),
+        )
+    }
+    let ast = @parser.parse(tokens) catch {
+      _ =>
+        raise @error.runtime_error(
+          "D3120: Syntax error in expression passed to function eval",
+          code=Some("D3120"),
+        )
+    }
     // 第二参数作为求值上下文的数据根；无第二参数时使用当前上下文
-    if args.length() > 1 && !args[1].is_undefined() {
-      let eval_ctx = @value.EvalContext::new(args[1])
-      eval_ctx.inherit_missing_bindings_from(ctx)
-      @evaluator.eval(ast, eval_ctx)
-    } else {
-      @evaluator.eval(ast, ctx)
+    try {
+      if args.length() > 1 && !args[1].is_undefined() {
+        let eval_ctx = @value.EvalContext::new(args[1])
+        eval_ctx.inherit_missing_bindings_from(ctx)
+        @evaluator.eval(ast, eval_ctx)
+      } else {
+        @evaluator.eval(ast, ctx)
+      }
+    } catch {
+      _ =>
+        raise @error.runtime_error(
+          "D3121: Dynamic error evaluating the expression passed to function eval",
+          code=Some("D3121"),
+        )
     }
   })
   // $exists
-  register(ctx, "exists", arity=1, invoke=(args, _ctx) => {
-    if args.length() > 1 {
-      raise @error.runtime_error("T0410: Arguments are not of expected type")
+  register(ctx, "exists", arity=1, contextual=false, invoke=(args, _ctx) => {
+    if args.length() == 0 || args.length() > 1 {
+      raise @error.runtime_error(
+        "T0410: Arguments are not of expected type",
+        code=Some("T0410"),
+      )
     }
     let exists = match args[0] {
       @value.JsonataValue::Undefined => false

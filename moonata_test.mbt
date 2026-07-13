@@ -1504,6 +1504,73 @@ test "官方套件：errors case016 - S0208 Lambda 参数必须 $name" {
 }
 
 ///|
+test "官方兼容：注释、函数链与整数 picture 错误码" {
+  let d = Json::null()
+  let unterminated_comment = try {
+    ignore(evaluate("1 /* unterminated", d))
+    false
+  } catch {
+    @error.JsonataError::SyntaxError(code=Some(c), ..) => c == "S0106"
+    _ => false
+  }
+  assert_true(unterminated_comment)
+  let bad_chain = try {
+    ignore(evaluate("42 ~> \"hello\"", d))
+    false
+  } catch {
+    @error.JsonataError::TypeError(code=Some(c), ..) => c == "T2006"
+    _ => false
+  }
+  assert_true(bad_chain)
+  let mixed_digits = try {
+    ignore(evaluate("$formatInteger(12340, \"##0０\")", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3131"
+    _ => false
+  }
+  assert_true(mixed_digits)
+  let invalid_picture = try {
+    ignore(evaluate("$parseInteger(\"50\", \"#\")", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3130"
+    _ => false
+  }
+  assert_true(invalid_picture)
+}
+
+///|
+test "官方兼容：动态 eval 与无参函数参数错误码" {
+  let d = Json::null()
+  assert_true(evaluate("$eval(nothing)", d) == Json::null())
+  let dynamic_error = try {
+    ignore(evaluate("$eval(\"unknown(1)\")", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3121"
+    _ => false
+  }
+  assert_true(dynamic_error)
+  let exists_error = try {
+    ignore(evaluate("$exists()", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "T0410"
+    _ => false
+  }
+  assert_true(exists_error)
+  let boolean_error = try {
+    ignore(evaluate("$boolean(2, 3)", d))
+    false
+  } catch {
+    @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "T0410"
+    _ => false
+  }
+  assert_true(boolean_error)
+}
+
+///|
 test "官方套件：errors case017/018 - S0212 := 左侧必须 $name" {
   let d = Json::null()
   // x:=1 → S0212

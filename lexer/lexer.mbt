@@ -152,7 +152,7 @@ fn Lexer::advance(self : Lexer) -> UInt16 {
 }
 
 ///|
-fn Lexer::skip_ws_and_comments(self : Lexer) -> Unit {
+fn Lexer::skip_ws_and_comments(self : Lexer) -> Unit raise @error.JsonataError {
   for ;; {
     if self.pos >= self.len {
       break
@@ -169,12 +169,21 @@ fn Lexer::skip_ws_and_comments(self : Lexer) -> Unit {
     } else if c == '/' && self.peek_at(1) == '*' {
       // 块注释
       self.pos = self.pos + 2
+      let mut closed = false
       while self.pos < self.len {
         if self.peek() == '*' && self.peek_at(1) == '/' {
           self.pos = self.pos + 2
+          closed = true
           break
         }
         self.pos = self.pos + 1
+      }
+      if !closed {
+        raise @error.syntax_error(
+          "S0106: Unterminated comment",
+          position=Some(self.pos),
+          code=Some("S0106"),
+        )
       }
     } else {
       break
