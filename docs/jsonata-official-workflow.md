@@ -136,10 +136,10 @@ skip_reasons
 下方固定快照仍是旧口径下的历史记录；本轮脚本升级后，`skip` 分类会更细，待下一次复跑官方审计后再刷新这里的数字。
 
 
-当前固定快照（2026-07-12，字符串函数签名严格校验 + parser S0203 + 偏函数 signature 修正，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-13，排序类型验证 T2007/T2008 + $sort D3070，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1667 pass 1591 fail 76 skip 15
+eligible 1667 pass 1603 fail 64 skip 15
 top_failures
 parent-operator 13
 joins 9
@@ -147,12 +147,25 @@ object-constructor 5
 function-eval 3
 hof-reduce 3
 regex 3
-sorting 3
 tail-recursion 3
 transforms 3
+errors 2
+function-formatInteger 2
 skip_reasons
 no_expected_outcome 15
 ```
+
+本轮修复（排序类型验证 T2007/T2008 + $sort D3070）：
+- 提交：sorting 18→21 pass（全绿），function-sort 9→10 pass，整体 pass 1599→1603 (+4)，fail 68→64 (-4)，通过率 95.9%→96.2%
+- 门禁：`moon check` 0e0w，`moon test` 266/266 passed（+4 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Evaluator: 新增 `validate_sort_key_types` / `validate_sort_key_types_frames` 函数，在排序前预验证所有排序键类型一致性
+  - Evaluator: 排序键为非 number/string/undefined 时抛 T2008（The sort expression doesn't evaluate to a comparable value）
+  - Evaluator: 排序键混合 number 与 string 时抛 T2007（Values of different types found in the sort expression result）
+  - Functions: `$sort` 自然排序新增 D3070 校验，对对象数组无比较器排序抛错
+  - Functions: `$sort` 自然排序新增 `validate_natural_sort_types`，boolean/null 值抛 T2008
+  - Tests: 新增 sort T2007/T2008 + $sort D3070 共 4 个回归断言
+- 修复效果：`sorting` group 18→21 pass（全绿，-3 fail），`function-sort` group 9→10 pass（-1 fail）
 
 本轮修复（字符串函数签名严格校验 + parser S0203 + 偏函数 signature 修正）：
 - 提交：整体 pass 1578→1591 (+13)，fail 89→76 (-13)，通过率 94.7%→95.4%

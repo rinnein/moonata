@@ -1550,6 +1550,8 @@ fn eval_sort(
     }
     keyed.push((keys, i, item))
   }
+  // T2007/T2008: 验证排序键类型一致性
+  validate_sort_key_types(keyed, terms.length())
   keyed.sort_by(fn(a, b) {
     let (ka, ia, _) = a
     let (kb, ib, _) = b
@@ -1647,6 +1649,8 @@ fn sort_frames_by_terms(
     }
     keyed.push((keys, i, frame))
   }
+  // T2007/T2008: 验证排序键类型一致性
+  validate_sort_key_types_frames(keyed, terms.length())
   keyed.sort_by(fn(a, b) {
     let (ka, ia, _) = a
     let (kb, ib, _) = b
@@ -1663,6 +1667,89 @@ fn sort_frames_by_terms(
     sorted.push(frame)
   }
   sorted
+}
+
+///|
+/// 排序键类型验证：对齐 JSONata-js sort 类型检查。
+/// T2008: 排序表达式求值为不可比较的值（非 number/string/undefined）。
+/// T2007: 排序值类型不一致（number 与 string 混合）。
+fn validate_sort_key_types(
+  keyed : Array[(Array[@value.JsonataValue], Int, @value.JsonataValue)],
+  num_terms : Int,
+) -> Unit raise @error.JsonataError {
+  for j = 0; j < num_terms; j = j + 1 {
+    // 记录第一个非 undefined 值的类型：0=number, 1=string
+    let mut first_type : Int = -1
+    for i = 0; i < keyed.length(); i = i + 1 {
+      let key = keyed[i].0[j]
+      match key {
+        @value.JsonataValue::Undefined => ()
+        @value.JsonataValue::Json(Json::Number(_)) =>
+          if first_type == -1 {
+            first_type = 0
+          } else if first_type == 1 {
+            raise @error.runtime_error(
+              "T2007: Values of different types found in the sort expression result",
+              code=Some("T2007"),
+            )
+          }
+        @value.JsonataValue::Json(Json::String(_)) =>
+          if first_type == -1 {
+            first_type = 1
+          } else if first_type == 0 {
+            raise @error.runtime_error(
+              "T2007: Values of different types found in the sort expression result",
+              code=Some("T2007"),
+            )
+          }
+        _ =>
+          raise @error.runtime_error(
+            "T2008: The sort expression doesn't evaluate to a comparable value",
+            code=Some("T2008"),
+          )
+      }
+    }
+  }
+}
+
+///|
+/// validate_sort_key_types 的 PathFrame 版本。
+fn validate_sort_key_types_frames(
+  keyed : Array[(Array[@value.JsonataValue], Int, PathFrame)],
+  num_terms : Int,
+) -> Unit raise @error.JsonataError {
+  for j = 0; j < num_terms; j = j + 1 {
+    let mut first_type : Int = -1
+    for i = 0; i < keyed.length(); i = i + 1 {
+      let key = keyed[i].0[j]
+      match key {
+        @value.JsonataValue::Undefined => ()
+        @value.JsonataValue::Json(Json::Number(_)) =>
+          if first_type == -1 {
+            first_type = 0
+          } else if first_type == 1 {
+            raise @error.runtime_error(
+              "T2007: Values of different types found in the sort expression result",
+              code=Some("T2007"),
+            )
+          }
+        @value.JsonataValue::Json(Json::String(_)) =>
+          if first_type == -1 {
+            first_type = 1
+          } else if first_type == 0 {
+            raise @error.runtime_error(
+              "T2007: Values of different types found in the sort expression result",
+              code=Some("T2007"),
+            )
+          }
+        _ =>
+          raise @error.runtime_error(
+            "T2008: The sort expression doesn't evaluate to a comparable value",
+            code=Some("T2008"),
+          )
+      }
+    }
+  }
 }
 
 ///|

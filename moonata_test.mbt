@@ -2282,3 +2282,71 @@ test "官方套件：function-replace case011 - $replace 第1参非字符串 T04
   }
   assert_true(raised)
 }
+
+///|
+test "官方套件：sort T2007 混合类型排序值（string + number）" {
+  // dataset15: Price 字段混合 "foo"（string）与 21.67（number），^(Price) 应抛 T2007
+  let d = data("{\"items\":[{\"Price\":\"foo\"},{\"Price\":21.67}]}")
+  let raised = try {
+    ignore(evaluate("items^(Price)", d))
+    false
+  } catch {
+    _e =>
+      match _e {
+        @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "T2007"
+        _ => false
+      }
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：sort T2008 不可比较排序值（boolean）" {
+  // dataset16: Price 字段混合 true（boolean）与 21.67（number），^(Price) 应抛 T2008
+  let d = data("{\"items\":[{\"Price\":true},{\"Price\":21.67}]}")
+  let raised = try {
+    ignore(evaluate("items^(Price)", d))
+    false
+  } catch {
+    _e =>
+      match _e {
+        @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "T2008"
+        _ => false
+      }
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：sort T2008 不可比较排序值（null）" {
+  // dataset17: Price 字段混合 null 与 21.67（number），^(Price) 应抛 T2008
+  let d = data("{\"items\":[{\"Price\":null},{\"Price\":21.67}]}")
+  let raised = try {
+    ignore(evaluate("items^(Price)", d))
+    false
+  } catch {
+    _e =>
+      match _e {
+        @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "T2008"
+        _ => false
+      }
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：$sort D3070 对象无比较器" {
+  // $sort(objects) without comparator should throw D3070
+  let d = data("{\"items\":[{\"a\":1},{\"b\":2}]}")
+  let raised = try {
+    ignore(evaluate("$sort(items)", d))
+    false
+  } catch {
+    _e =>
+      match _e {
+        @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3070"
+        _ => false
+      }
+  }
+  assert_true(raised)
+}

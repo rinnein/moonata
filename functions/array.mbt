@@ -153,6 +153,19 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
       return @value.JsonataValue::Sequence(sorted)
     }
     // Natural sort: compare values directly
+    // D3070: $sort on objects without comparator is not supported
+    for item in items {
+      match item {
+        @value.JsonataValue::Json(Json::Object(_)) =>
+          raise @error.runtime_error(
+            "D3070: $sort cannot be used to sort an array of objects without a comparator function",
+            code=Some("D3070"),
+          )
+        _ => ()
+      }
+    }
+    // T2007/T2008: 验证值类型一致性
+    validate_natural_sort_types(items)
     let indexed : Array[(Int, @value.JsonataValue)] = []
     for i = 0; i < items.length(); i = i + 1 {
       indexed.push((i, items[i]))
@@ -368,6 +381,48 @@ fn compare_natural(a : @value.JsonataValue, b : @value.JsonataValue) -> Int {
       let sa = value_to_str(a)
       let sb = value_to_str(b)
       str_cmp(sa, sb)
+    }
+  }
+}
+
+///|
+/// 自然排序类型验证：$sort 无比较器时检查值类型一致性。
+/// T2008: 值不可比较（非 number/string/undefined/array-of-primitives）。
+/// T2007: 类型不一致（number 与 string 混合）。
+fn validate_natural_sort_types(
+  items : Array[@value.JsonataValue],
+) -> Unit raise @error.JsonataError {
+  let mut first_type : Int = -1
+  for item in items {
+    match item {
+      @value.JsonataValue::Undefined => ()
+      @value.JsonataValue::Json(Json::Number(_)) =>
+        if first_type == -1 {
+          first_type = 0
+        } else if first_type == 1 {
+          raise @error.runtime_error(
+            "T2007: Values of different types found in the array being sorted",
+            code=Some("T2007"),
+          )
+        }
+      @value.JsonataValue::Json(Json::String(_)) =>
+        if first_type == -1 {
+          first_type = 1
+        } else if first_type == 0 {
+          raise @error.runtime_error(
+            "T2007: Values of different types found in the array being sorted",
+            code=Some("T2007"),
+          )
+        }
+      @value.JsonataValue::Json(Json::True)
+      | @value.JsonataValue::Json(Json::False)
+      | @value.JsonataValue::Json(Json::Null) =>
+        raise @error.runtime_error(
+          "T2008: The value being sorted is not comparable",
+          code=Some("T2008"),
+        )
+      // Array / Object / Regex / Func / Sequence: 不参与自然排序类型检查
+      _ => ()
     }
   }
 }
