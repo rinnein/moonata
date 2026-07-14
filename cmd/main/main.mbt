@@ -5,6 +5,7 @@
 ///   moonata '<expr>'                    # 对 null 求值
 ///   moonata '<expr>' --data '<json>'   # 对指定 JSON 数据求值
 ///   moonata '<expr>' --file '<file>'   # 对指定 JSON 文件求值
+///   moonata '<expr>' --no-data         # 对 undefined 上下文求值
 ///   moonata --help                      # 显示帮助
 async fn main {
   let args = @env.args()
@@ -15,6 +16,7 @@ async fn main {
   // 解析参数
   let mut expr = ""
   let mut data_str = ""
+  let mut use_undefined = false
   let mut i = 1
   while i < args.length() {
     let arg = args[i]
@@ -42,6 +44,9 @@ async fn main {
           data_str = file_content.text()
         }
       }
+      "--no-data" =>
+        // 对 undefined 上下文求值（对齐 jsonata-js `dataset: null` → undefined 语义）
+        use_undefined = true
       _ => if expr == "" { expr = arg }
     }
     i += 1
@@ -51,18 +56,22 @@ async fn main {
     print_usage()
     return
   }
-  // 获取数据
-  let data = if data_str != "" { data_str } else { "null" }
-  // 解析 JSON 数据
-  let json_data = @json.parse(data) catch {
-    _ => {
-      println("错误: 无效的 JSON 数据")
-      return
-    }
-  }
   // 求值
   try {
-    let result = @moonata.evaluate(expr, json_data)
+    let result = if use_undefined {
+      @moonata.evaluate_undefined(expr)
+    } else {
+      // 获取数据
+      let data = if data_str != "" { data_str } else { "null" }
+      // 解析 JSON 数据
+      let json_data = @json.parse(data) catch {
+        _ => {
+          println("错误: 无效的 JSON 数据")
+          return
+        }
+      }
+      @moonata.evaluate(expr, json_data)
+    }
     println(result.stringify(indent=2))
   } catch {
     e => {
@@ -84,6 +93,7 @@ fn print_usage() -> Unit {
   println("  moonata '<expr>'                    对 null 求值表达式")
   println("  moonata '<expr>' --data '<json>'    对指定 JSON 数据求值")
   println("  moonata '<expr>' --file '<file>'    对指定 JSON 文件求值")
+  println("  moonata '<expr>' --no-data          对 undefined 上下文求值")
   println("  moonata --help                      显示此帮助")
   println("")
   println("示例:")

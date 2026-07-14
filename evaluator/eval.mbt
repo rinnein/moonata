@@ -2152,27 +2152,47 @@ fn access_group_aggregate(
     return @value.JsonataValue::Json(Json::empty_object())
   }
   // 第 1 阶段：按 key 分组，每组的输入项收集为原始数组
-  let groups : Map[String, Array[@value.JsonataValue]] = Map([])
+  // 对齐 jsonata-js evaluateGroupExpression：groups 字典共享跨所有 item，
+  // 同一 key 被不同 pair 表达式产生时抛 D1009；key 非字符串（且非 undefined）抛 T1003。
+  let groups : Map[String, (Int, Array[@value.JsonataValue])] = Map([])
   for item in items {
-    // 对每组 key/value pair 求值 key
-    for kv in pairs {
+    for pair_idx, kv in pairs {
       let (key_ast, _val_ast) = kv
       let key_val = ctx.with_context(current=item, parent=input, fn() -> @value.JsonataValue raise @error.JsonataError {
         ctx.with_depth(() => eval(key_ast, ctx))
       })
+      // undefined key 跳过（对齐 jsonata-js）
+      if key_val.is_undefined() {
+        continue
+      }
+      // T1003: key 必须为字符串
       let key_str = match key_val {
         @value.JsonataValue::Json(Json::String(s)) => s
-        _ => to_str(key_val)
+        _ =>
+          raise @error.type_error(
+            "T1003: Key in object structure must evaluate to a string; got: \{to_str(key_val)}",
+            code=Some("T1003"),
+          )
       }
+      // D1009: 同一 key 被不同 pair 表达式产生
       match groups.get(key_str) {
-        Some(arr) => arr.push(item)
-        None => groups.set(key_str, [item])
+        Some((existing_idx, arr)) =>
+          if existing_idx == pair_idx {
+            arr.push(item)
+          } else {
+            raise @error.runtime_error(
+              "D1009: Multiple key definitions evaluate to same key: \{key_str}",
+              code=Some("D1009"),
+            )
+          }
+        None => groups.set(key_str, (pair_idx, [item]))
       }
     }
   }
   // 第 2 阶段：对每组求值 value-expression，合并结果
   let merged : Map[String, Array[Json]] = Map([])
-  for key_str, group_items in groups {
+  for key_str, group_entry in groups {
+    let (_, group_items) = group_entry
     let group_input = @value.JsonataValue::sequence(group_items)
     for kv in pairs {
       let (key_ast, val_ast) = kv

@@ -1525,17 +1525,40 @@ fn eval_group(
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
   let map : Map[String, Json] = Map([])
-  for kv in pairs {
+  // 对齐 jsonata-js evaluateGroupExpression：记录每个 key 由哪个 pair 产生，
+  // 同一 key 被不同 pair 表达式产生时抛 D1009。
+  let key_pair_index : Map[String, Int] = Map([])
+  for pair_idx, kv in pairs {
     let (key_ast, val_ast) = kv
     let key = eval(key_ast, ctx)
+    // 跳过 undefined key（对齐 jsonata-js：undefined key 不产生 entry）
+    if key.is_undefined() {
+      continue
+    }
+    // T1003: key 必须为字符串（或 undefined）
+    let key_str = match key {
+      @value.JsonataValue::Json(Json::String(s)) => s
+      _ =>
+        raise @error.type_error(
+          "T1003: Key in object structure must evaluate to a string; got: \{to_str(key)}",
+          code=Some("T1003"),
+        )
+    }
+    // D1009: 同一 key 被不同 pair 表达式产生
+    match key_pair_index.get(key_str) {
+      Some(existing_idx) =>
+        if existing_idx != pair_idx {
+          raise @error.runtime_error(
+            "D1009: Multiple key definitions evaluate to same key: \{key_str}",
+            code=Some("D1009"),
+          )
+        }
+      None => key_pair_index[key_str] = pair_idx
+    }
     let val = eval(val_ast, ctx)
     // 跳过 undefined 值（匹配 JSONata：undefined 字段不出现在对象中）
     if val.is_undefined() {
       continue
-    }
-    let key_str = match key {
-      @value.JsonataValue::Json(Json::String(s)) => s
-      _ => to_str(key)
     }
     map[key_str] = json_for_constructor(val)
   }

@@ -136,23 +136,32 @@ skip_reasons
 下方固定快照仍是旧口径下的历史记录；本轮脚本升级后，`skip` 分类会更细，待下一次复跑官方审计后再刷新这里的数字。
 
 
-当前固定快照（2026-07-14，transforms T2011/T2012 + token-conversion S0201/S0213 + hof T0410/D3050 + partial-application T1007/T1008 + sort 单例提升，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-15，object-constructor T1003/D1009 + variables S0212 + $sum T0410 + $toMillis D3136 gap detection，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1667 pass 1653 fail 14 skip 15
+eligible 1667 pass 1661 fail 6 skip 15
 top_failures
-object-constructor 5
 tail-recursion 3
 matchers 2
 function-string 1
-function-sum 1
-function-tomillis 1
-variables 1
 skip_reasons
 no_expected_outcome 15
 ```
 
-本轮修复（transforms T2011/T2012 + token-conversion S0201/S0213 + hof T0410/D3050 + partial-application T1007/T1008 + sort 单例提升）：
+本轮修复（object-constructor T1003/D1009 + variables S0212 + $sum T0410 + $toMillis D3136 gap detection）：
+- 提交：整体 pass 1653→1661 (+8)，fail 14→6 (-8)，通过率 99.2%→99.6%
+- 门禁：`moon check` 0e0w，`moon test` 278→285 passed（+7 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Evaluator: `eval_group`（standalone `{...}`）校验 key 必须为字符串（非字符串且非 undefined 抛 T1003），同一 key 被不同 pair 表达式产生抛 D1009，对齐 jsonata-js `evaluateGroupExpression`
+  - Evaluator: `access_group_aggregate`（`foo{...}` 无前置 `.`）同步加入 T1003（非字符串 key）与 D1009（跨 item 共享 groups 字典，不同 pair 产生同 key）校验
+  - Parser: `parse_bind` 在 `parse_conditional` 返回后检测残留的 `:=` token，非变量表达式后的 `:=` 抛 S0212（对齐 jsonata-js parser 的 infix `:=` LHS 类型检查），修复 `$a[1]:=3` 被错误抛 S0202 的问题
+  - Functions: `$sum` 启用复杂签名 `a<n>:n` 并关闭 contextual，让 `validate_args` 对 0 参抛 T0410（对齐 jsonata-js `<a<n>:n>` 签名），非数字数组元素仍抛 T0412
+  - Functions: `parse_date_picture_with_now` 的 D3136 间隔检测重写为 jsonata-js 的 startSpecified/endSpecified 扫描算法（按 Y M D H m s f 显著性顺序逐项扫描，指定项后遇未指定项标记 endSpecified，之后再遇指定项则抛 D3136），修复 `[M]-[D] [m]:[s]` 等缺 H 间隔的 picture
+  - Tests: 新增 T1003(数字 key)/T1003(数组 key)/D1009(同 pair)/D1009(per-item)/S0212/T0410/D3136 共 7 个回归断言
+- 修复效果：`object-constructor` group 22→27 pass（全绿，-5 fail），`function-sum` group 6→7 pass（全绿，-1 fail），`function-tomillis` group 59→60 pass（全绿，-1 fail），`variables` group 12→13 pass（全绿，-1 fail）
+- 剩余重点：`tail-recursion` 3（U1001 栈溢出检测）、`matchers` 2（T1010 matcher 函数结构校验 + 复杂闭包）、`function-string` 1（`$string()` + `dataset: null` 需区分 undefined vs null 上下文）
+
+上一轮修复（transforms T2011/T2012 + token S0201/S0213 + hof T0410/D3050 + partial-app T1007/T1008 + sort 单例提升，+13 pass）：
 - 提交：整体 pass 1640→1653 (+13)，fail 27→14 (-13)，通过率 98.4%→99.2%
 - 门禁：`moon check` 0e0w，`moon test` 271→278 passed（+7 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：

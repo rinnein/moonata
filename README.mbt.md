@@ -91,14 +91,14 @@ docs: update official test status
 
 ## 兼容性状态
 
-固定快照：2026-07-14，transforms T2011/T2012 + token-conversion S0201/S0213 + hof T0410/D3050 + partial-application T1007/T1008 + sort 单例提升阶段。
+固定快照：2026-07-15，object-constructor T1003/D1009 + variables S0212 + $sum T0410 + $toMillis D3136 gap detection 阶段。
 
 ```text
-本地测试：moon test 278/278
-官方可比对审计：eligible 1667, pass 1653, fail 14, skip 15
-通过率：99.2%
+本地测试：moon test 285/285
+官方可比对审计：eligible 1667, pass 1661, fail 6, skip 15
+通过率：99.6%
 ```
 
-Top failures: object-constructor(5), tail-recursion(3), matchers(2), function-string(1), function-sum(1), function-tomillis(1), variables(1)
+Top failures: tail-recursion(3), matchers(2), function-string(1)
 
 官方测试集审计流程与跳过策略记录在 `docs/jsonata-official-workflow.md`。

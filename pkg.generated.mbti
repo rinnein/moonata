@@ -11,6 +11,8 @@ pub fn compile(String) -> Compiled raise @error.JsonataError
 
 pub fn evaluate(String, Json) -> Json raise @error.JsonataError
 
+pub fn evaluate_undefined(String) -> Json raise @error.JsonataError
+
 // Errors
 
 // Types and methods

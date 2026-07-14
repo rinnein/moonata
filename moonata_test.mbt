@@ -2417,3 +2417,140 @@ test "官方套件：$sort D3070 对象无比较器" {
   }
   assert_true(raised)
 }
+
+///|
+test "官方套件：object-constructor T1003 非字符串 key（数字）" {
+  // case013: Account.Order.Product{ProductID: "Product Name"} — ProductID 为数字，应抛 T1003
+  let d = data(
+    (
+      #|{"Account":{"Order":[{"OrderID":"order103","Product":[{"Product Name":"Bowler Hat","ProductID":858383,"Price":34.45}]}]}}
+    ),
+  )
+  let raised = try {
+    ignore(evaluate("Account.Order.Product{ProductID: \"Product Name\"}", d))
+    false
+  } catch {
+    _e =>
+      match _e {
+        @error.JsonataError::TypeError(code=Some(c), ..) => c == "T1003"
+        _ => false
+      }
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：object-constructor T1003 非字符串 key（数组）" {
+  // case024: { type: value } — type 求值为数组，应抛 T1003
+  let d = data(
+    (
+      #|[{"type":"a","kind":"a","value":0},{"type":"b","kind":"b","value":1}]
+    ),
+  )
+  let raised = try {
+    ignore(evaluate("{ type: value, kind: value }", d))
+    false
+  } catch {
+    _e =>
+      match _e {
+        @error.JsonataError::TypeError(code=Some(c), ..) => c == "T1003"
+        _ => false
+      }
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：object-constructor D1009 同一 key 来自不同 pair 表达式" {
+  // case017: 两个 $."Product Name" pair 产生相同 key，应抛 D1009
+  let d = data(
+    (
+      #|{"Account":{"Order":[{"Product":[{"Product Name":"Bowler Hat","Price":34.45}]}]}}
+    ),
+  )
+  let raised = try {
+    ignore(
+      evaluate(
+        "Account.Order.Product{$.\"Product Name\": Price, $.\"Product Name\": Price}",
+        d,
+      ),
+    )
+    false
+  } catch {
+    _e =>
+      match _e {
+        @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D1009"
+        _ => false
+      }
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：$.{...} D1009 同一 key 来自不同 pair（per-item）" {
+  // case023: $.{ type: ..., kind: ... } — item 0 的 type 和 kind 都为 'a'，应抛 D1009
+  let d = data(
+    (
+      #|[{"type":"a","kind":"a","value":0},{"type":"b","kind":"b","value":1}]
+    ),
+  )
+  let raised = try {
+    ignore(evaluate("$.{ type: value, kind: value }", d))
+    false
+  } catch {
+    _e =>
+      match _e {
+        @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D1009"
+        _ => false
+      }
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：variables S0212 $a[1]:=3 赋值左侧非变量" {
+  // case012: $a[1]:=3 — 左侧为路径而非 $name，应抛 S0212
+  let raised = try {
+    ignore(evaluate("($a := [1,2]; $a[1]:=3; $a)", data("null")))
+    false
+  } catch {
+    _e =>
+      match _e {
+        @error.JsonataError::SyntaxError(code=Some(c), ..) => c == "S0212"
+        _ => false
+      }
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：$sum() T0410 缺参签名校验" {
+  // case003: $sum() 无参应抛 T0410（签名 a<n>:n 要求 1 个数组参数）
+  let raised = try {
+    ignore(evaluate("$sum()", data("null")))
+    false
+  } catch {
+    _e =>
+      match _e {
+        @error.JsonataError::SignatureError(code=Some(c), ..) => c == "T0410"
+        _ => false
+      }
+  }
+  assert_true(raised)
+}
+
+///|
+test "官方套件：$toMillis D3136 picture 组件间隔缺失" {
+  // parseDateTime: [M]-[D] [m]:[s] — M/D 与 m/s 之间缺 H，应抛 D3136
+  let raised = try {
+    ignore(evaluate("$toMillis('5-22 23:59', '[M]-[D] [m]:[s]')", data("null")))
+    false
+  } catch {
+    _e =>
+      match _e {
+        @error.JsonataError::RuntimeError(code=Some(c), ..) => c == "D3136"
+        _ => false
+      }
+  }
+  assert_true(raised)
+}

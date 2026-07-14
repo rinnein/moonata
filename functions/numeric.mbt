@@ -1,7 +1,12 @@
 ///|
 fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
   // $sum
-  register(ctx, "sum", arity=1, invoke=(args, _ctx) => {
+  // 对齐 jsonata-js `<a<n>:n>` 签名：首参必须为数字数组，0 参抛 T0410，
+  // 非数组元素抛 T0412。关闭 contextual，让 validate_args 严格校验参数数量。
+  register(ctx, "sum", arity=1, signature=Some("a<n>:n"), contextual=false, invoke=(
+    args,
+    _ctx,
+  ) => {
     if args[0].is_undefined() {
       return @value.JsonataValue::Undefined
     }

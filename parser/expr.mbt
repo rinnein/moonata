@@ -196,7 +196,21 @@ fn Parser::parse_bind(self : Parser) -> @ast.Ast raise @error.JsonataError {
     // 回退：不是绑定
     self.pos = saved
   }
-  self.parse_conditional()
+  let result = self.parse_conditional()
+  // 对齐 jsonata-js parser：非变量表达式后的 := 抛 S0212
+  // （parse_bind 仅在 $var 后消费 :=，非变量表达式后的 := 会作为尾部 token 残留，
+  // 在 parse 顶层检查前先在此处抛出，避免被 S0202 掩盖）
+  if self.peek_kind() == @lexer.TokenKind::Colon &&
+    self.pos + 1 < self.tokens.length() &&
+    self.tokens[self.pos + 1].kind == @lexer.TokenKind::Eq {
+    raise @error.syntax_error(
+      ":= 左侧必须是 $name",
+      position=Some(self.peek().pos),
+      token=Some(":"),
+      code=Some("S0212"),
+    )
+  }
+  result
 }
 
 ///|

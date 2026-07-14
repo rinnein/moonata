@@ -1944,50 +1944,38 @@ fn build_date_from_components_with_now(
     comps.millis is Some(_)
 
   // 间隔检测（对齐 JSONata-js parseDateTime D3136）：
-  // 日期组件顺序 Y M D（或 Y d 即 day_of_year）；
-  // 时间组件顺序 H(h) m s f。
-  // 在已指定的组件中，若 MSV 与 LSV 之间存在未指定的间隔，抛 D3136。
-  // 例如：Y 和 D 指定但 M 缺失 → D3136；H 和 s 指定但 m 缺失 → D3136。
+  // 按组件显著性顺序（Y M D H m s f）逐项扫描，跟踪 startSpecified/endSpecified。
+  // 一旦某项已指定后又遇到未指定项，标记 endSpecified；之后再遇到已指定项则抛 D3136。
   // 使用 day_of_year 时，它替代 M+D，不检查 M/D 间隔。
-  if comps.day_of_year is None {
-    // 日期间隔检测：Y → M → D
-    let y_spec = comps.year is Some(_)
-    let m_spec = comps.month is Some(_)
-    let d_spec = comps.day is Some(_)
-    // Y and D specified but M missing → gap
-    if y_spec && d_spec && !m_spec {
-      raise @error.runtime_error(
-        "D3136: The date/time picture string is missing specifiers required to parse the timestamp",
-        code=Some("D3136"),
-      )
+  let date_comps : Array[Bool] = if comps.day_of_year is Some(_) {
+    [comps.year is Some(_), true] // Y, d (day_of_year 替代 M+D)
+  } else {
+    [comps.year is Some(_), comps.month is Some(_), comps.day is Some(_)] // Y, M, D
+  }
+  let time_comps : Array[Bool] = [
+    comps.hour24 is Some(_) || comps.hour12 is Some(_), // H
+    comps.minute is Some(_), // m
+    comps.second is Some(_), // s
+    comps.millis is Some(_), // f
+  ]
+  let all_comps : Array[Bool] = date_comps + time_comps
+  let mut start_specified = false
+  let mut end_specified = false
+  for spec in all_comps {
+    if spec {
+      if end_specified {
+        raise @error.runtime_error(
+          "D3136: The date/time picture string is missing specifiers required to parse the timestamp",
+          code=Some("D3136"),
+        )
+      }
+      start_specified = true
+    } else if start_specified {
+      end_specified = true
     }
   }
-  // 时间间隔检测：H/h → m → s → f
-  let h_spec = comps.hour24 is Some(_) || comps.hour12 is Some(_)
-  let m_spec = comps.minute is Some(_)
-  let s_spec = comps.second is Some(_)
-  let f_spec = comps.millis is Some(_)
-  // H and s specified but m missing → gap
-  if h_spec && s_spec && !m_spec {
-    raise @error.runtime_error(
-      "D3136: The date/time picture string is missing specifiers required to parse the timestamp",
-      code=Some("D3136"),
-    )
-  }
-  // H and f specified but m/s missing → gap
-  if h_spec && f_spec && !m_spec {
-    raise @error.runtime_error(
-      "D3136: The date/time picture string is missing specifiers required to parse the timestamp",
-      code=Some("D3136"),
-    )
-  }
-  // m and f specified but s missing → gap
-  if m_spec && f_spec && !s_spec {
-    raise @error.runtime_error(
-      "D3136: The date/time picture string is missing specifiers required to parse the timestamp",
-      code=Some("D3136"),
-    )
-  }
+  // 对齐 jsonata-js：dateC (XxwF) 与 dateD (XWF) ISO 周日期格式未实现，抛 D3136。
+  // 当前实现仅支持 YMD 与 Yd (day_of_year) 格式，无需在此检测。
 
   // Apply defaults per JSONata rules:
   // - Before first specified: use now
