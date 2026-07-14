@@ -309,7 +309,7 @@ fn concat_or_merge(
       @value.JsonataValue::Json(Json::Object(a)),
       @value.JsonataValue::Json(Json::Object(b)),
     ) => {
-      let result : Map[String, Json] = {}
+      let result : Map[String, Json] = Map([])
       // 先复制左侧
       for k, v in a {
         result[k] = v
@@ -989,7 +989,7 @@ fn chain_regex_match(
   }
   let m = re.execute(s)
   if m.matched() {
-    let map : Map[String, Json] = {}
+    let map : Map[String, Json] = Map([])
     map["match"] = match m.get(0) {
       Some(s_) => Json::string(s_.to_owned())
       None => Json::string("")
@@ -1463,7 +1463,7 @@ fn deep_clone(value : @value.JsonataValue) -> @value.JsonataValue {
 fn deep_clone_json(json : Json) -> Json {
   match json {
     Json::Object(map) => {
-      let new_map : Map[String, Json] = {}
+      let new_map : Map[String, Json] = Map([])
       for k, v in map {
         new_map[k] = deep_clone_json(v)
       }
@@ -1486,7 +1486,7 @@ fn eval_group(
   pairs : Array[(@ast.Ast, @ast.Ast)],
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
-  let map : Map[String, Json] = {}
+  let map : Map[String, Json] = Map([])
   for kv in pairs {
     let (key_ast, val_ast) = kv
     let key = eval(key_ast, ctx)

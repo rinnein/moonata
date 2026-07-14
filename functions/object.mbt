@@ -3,7 +3,7 @@ fn register_object_functions(ctx : @value.EvalContext) -> Unit {
   // $keys
   register(ctx, "keys", arity=1, invoke=fn(args, _ctx) {
     let keys : Array[@value.JsonataValue] = []
-    let seen : Map[String, Unit] = {}
+    let seen : Map[String, Unit] = Map([])
     for item in args[0].to_array() {
       match item {
         @value.JsonataValue::Json(Json::Object(map)) =>
@@ -36,7 +36,7 @@ fn register_object_functions(ctx : @value.EvalContext) -> Unit {
     if args[0].is_undefined() {
       return @value.JsonataValue::Undefined
     }
-    let result : Map[String, Json] = {}
+    let result : Map[String, Json] = Map([])
     match args[0] {
       @value.JsonataValue::Json(Json::Array(arr)) =>
         for item in arr {
@@ -73,7 +73,7 @@ fn register_object_functions(ctx : @value.EvalContext) -> Unit {
       match item {
         @value.JsonataValue::Json(Json::Object(map)) =>
           for k, v in map {
-            let m : Map[String, Json] = {}
+            let m : Map[String, Json] = Map([])
             m[k] = v
             items.push(@value.JsonataValue::Json(Json::object(m)))
           }
@@ -163,7 +163,7 @@ fn register_object_functions(ctx : @value.EvalContext) -> Unit {
     }
     match args[0] {
       @value.JsonataValue::Json(Json::Object(map)) => {
-        let result : Map[String, Json] = {}
+        let result : Map[String, Json] = Map([])
         let object = @value.JsonataValue::Json(Json::object(map))
         for k, v in map {
           let r = (f.invoke)(
@@ -191,7 +191,7 @@ fn register_object_functions(ctx : @value.EvalContext) -> Unit {
   register(ctx, "shallow", arity=1, invoke=fn(args, _ctx) {
     match args[0] {
       @value.JsonataValue::Json(Json::Object(map)) => {
-        let result : Map[String, Json] = {}
+        let result : Map[String, Json] = Map([])
         for k, v in map {
           result[k] = v
         }

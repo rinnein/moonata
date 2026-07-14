@@ -33,7 +33,7 @@ pub struct EvalContext {
 pub fn EvalContext::new(root : JsonataValue) -> EvalContext {
   {
     root,
-    bindings: {},
+    bindings: Map([]),
     depth: 0,
     max_depth: default_max_depth,
     steps: 0,
@@ -53,7 +53,7 @@ pub fn EvalContext::new_with_limits(
 ) -> EvalContext {
   {
     root,
-    bindings: {},
+    bindings: Map([]),
     depth: 0,
     max_depth,
     steps: 0,
@@ -67,7 +67,7 @@ pub fn EvalContext::new_with_limits(
 ///|
 /// 复制求值上下文，保留当前项、父级、护栏计数与已有绑定。
 pub fn EvalContext::capture(self : EvalContext) -> EvalContext {
-  let bindings : Map[String, JsonataValue] = {}
+  let bindings : Map[String, JsonataValue] = Map([])
   for name, value in self.bindings {
     bindings[name] = value
   }
@@ -269,7 +269,7 @@ pub fn EvalContext::lookup(self : EvalContext, name : String) -> JsonataValue? {
 pub fn EvalContext::bindings_snapshot(
   self : EvalContext,
 ) -> Map[String, JsonataValue] {
-  let copy : Map[String, JsonataValue] = {}
+  let copy : Map[String, JsonataValue] = Map([])
   for name, value in self.bindings {
     copy[name] = value
   }
@@ -282,7 +282,7 @@ pub fn EvalContext::restore_bindings(
   self : EvalContext,
   snapshot : Map[String, JsonataValue],
 ) -> Unit {
-  let new_map : Map[String, JsonataValue] = {}
+  let new_map : Map[String, JsonataValue] = Map([])
   for name, value in snapshot {
     new_map[name] = value
   }

@@ -317,3 +317,27 @@ test "词法：token 位置" {
     ),
   )
 }
+
+///|
+fn lex_error_code(s : String) -> String {
+  try {
+    ignore(lex(s))
+    ""
+  } catch {
+    @error.JsonataError::SyntaxError(code~, ..) =>
+      match code {
+        Some(c) => c
+        None => ""
+      }
+    _ => ""
+  }
+}
+
+///|
+test "词法：S0101 vs S0202 unterminated string distinction" {
+  // Standalone unterminated string (operand position) -> S0101
+  assert_eq(lex_error_code("\"hello"), "S0101")
+  // Unterminated string in non-operand position (after complete string token) -> S0202
+  // "foo" completes, then expect_operand=false, so "bar is non-operand
+  assert_eq(lex_error_code("\"foo\" \"bar"), "S0202")
+}

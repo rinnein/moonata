@@ -12,7 +12,7 @@ fn register_regex_functions(ctx : @value.EvalContext) -> Unit {
     let m = re.execute(s)
     if m.matched() {
       // 构造匹配结果对象：{ match: string, groups: [...] }
-      let map : Map[String, Json] = {}
+      let map : Map[String, Json] = Map([])
       let matched_str = match m.get(0) {
         Some(s) => s.to_owned()
         None => ""
@@ -266,6 +266,7 @@ fn replace_regex(
   let out = StringBuilder::new()
   let mut remaining = s
   let mut count = 0
+  let mut last_remaining = ""
   while remaining.length() > 0 && (limit < 0 || count < limit) {
     let m = re.execute(remaining)
     if !m.matched() {
@@ -278,9 +279,15 @@ fn replace_regex(
       Some(hit) => hit.length()
       None => 0
     }
+    last_remaining = remaining
     remaining = m.after().to_owned()
-    if matched_len == 0 {
-      break
+    // D1004: if match consumed zero length and remaining didn't advance,
+    // the next iteration would loop forever
+    if matched_len == 0 && remaining == last_remaining {
+      raise @error.runtime_error(
+        "D1004: Regular expression matches zero length string",
+        code=Some("D1004"),
+      )
     }
   }
   out.write_string(remaining)
@@ -296,7 +303,14 @@ fn resolve_replacement(
   match replacement {
     @value.JsonataValue::Func(f) => {
       let result = (f.invoke)([@value.JsonataValue::Json(match_object(m))], ctx)
-      value_to_str(result)
+      match result {
+        @value.JsonataValue::Json(Json::String(s)) => s
+        _ =>
+          raise @error.runtime_error(
+            "D3012: Replacement function must return a string",
+            code=Some("D3012"),
+          )
+      }
     }
     _ => expand_replacement(value_to_str(replacement), m)
   }
@@ -304,7 +318,7 @@ fn resolve_replacement(
 
 ///|
 fn match_object(m : @regexp.MatchResult) -> Json {
-  let map : Map[String, Json] = {}
+  let map : Map[String, Json] = Map([])
   let matched_str = match m.get(0) {
     Some(s) => s.to_owned()
     None => ""

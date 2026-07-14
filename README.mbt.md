@@ -94,11 +94,11 @@ docs: update official test status
 固定快照：2026-07-14，tuple-stream 过滤后全局索引绑定修复阶段。
 
 ```text
-本地测试：moon test 268/268
-官方可比对审计：eligible 1667, pass 1636, fail 31, skip 15
-通过率：98.1%
+本地测试：moon test 271/271
+官方可比对审计：eligible 1667, pass 1640, fail 27, skip 15
+通过率：98.4%
 ```
 
-Top failures: object-constructor(5), hof-reduce(3), regex(3), tail-recursion(3), transforms(3), hof-map(2), matchers(2), partial-application(2), token-conversion(2), errors(1)
+Top failures: object-constructor(5), hof-reduce(3), tail-recursion(3), transforms(3), hof-map(2), matchers(2), partial-application(2), token-conversion(2), function-sort(1), function-string(1)
 
 官方测试集审计流程与跳过策略记录在 `docs/jsonata-official-workflow.md`。

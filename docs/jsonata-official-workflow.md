@@ -136,30 +136,37 @@ skip_reasons
 下方固定快照仍是旧口径下的历史记录；本轮脚本升级后，`skip` 分类会更细，待下一次复跑官方审计后再刷新这里的数字。
 
 
-当前固定快照（2026-07-14，tuple-stream focus/position lineage、parent ancestor 链与过滤后全局索引修复后，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-14，D3012/D1004/S0202 修复 + zero warnings，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1667 pass 1636 fail 31 skip 15
+eligible 1667 pass 1640 fail 27 skip 15
 top_failures
 object-constructor 5
 hof-reduce 3
-regex 3
 tail-recursion 3
 transforms 3
 hof-map 2
 matchers 2
 partial-application 2
 token-conversion 2
+function-sort 1
+function-string 1
 skip_reasons
 no_expected_outcome 15
 ```
 
-本轮复核结果：官方可比对用例 1667 个，1636 个通过、31 个失败、15 个跳过；`parent-operator` 与 `joins` 均已全绿。机器可读报告写入 `/tmp/moonata-jsonata-audit.json`。
+本轮修复（D3012 replace 回调非字符串 + D1004 零长度匹配 + S0202 非操作数位未终止字符串 + 34 ambiguous_braces warnings）：
+- 提交：整体 pass 1636→1640 (+4)，fail 31→27 (-4)，通过率 98.2%→98.4%
+- 门禁：`moon check` 0e0w，`moon test` 271/271 passed（+3 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Functions: `resolve_replacement` 检查函数回调返回值必须为 String，非字符串抛 D3012（regex/case035, case036）
+  - Functions: `$replace` 循环中零长度匹配导致 remaining 不推进时抛 D1004（regex/case022）
+  - Lexer: `lex_string` 新增 `expect_operand` 参数，非操作数位未终止字符串抛 S0202，操作数位仍抛 S0101（errors/case009）
+  - Global: 修复 34 个 `ambiguous_braces` 警告 — Map 空初始化 `{}` → `Map([])`，`Json::object({})` → `Json::empty_object()`（跨 evaluator/eval.mbt、evaluator/ops.mbt、functions/object.mbt、functions/regex.mbt、functions/type.mbt、value/context.mbt 共 6 文件）
+  - Tests: 新增 D3012/D1004/S0202/S0101 共 4 个回归断言
+- 修复效果：`regex` group 36→39 pass（全绿，-3 fail），`errors` group 24→25 pass（-1 fail）
 
-本轮修复（tuple-stream 过滤后的索引绑定）：
-- Evaluator: `#$pos` 附着在 Filter 步时，对完整 frame stream 执行一次过滤，避免把范围/索引谓词错误地应用到每个单元素 frame。
-- Evaluator: 过滤后的 tuple stream 按连续全局位置绑定 `#$pos`，修复官方 `joins` 中 `$[[1..4]]#$pos[$pos>=2]` 与 loan/book join 的 `#$ib2` 用例。
-- 门禁：`moon check` 0 warnings，`moon test` 268/268 passed，`moon info`、`moon fmt` 与 `moon build cmd/main --target native` 均通过。
+上一轮修复（tuple-stream 过滤后的索引绑定）：
 
 本轮修复（动态 eval、整数 picture、函数链与注释错误码）：
 - 提交：整体 pass 1603→1614 (+11)，fail 64→53 (-11)，通过率 96.2%→96.8%

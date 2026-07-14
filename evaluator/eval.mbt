@@ -11,7 +11,7 @@ fn path_frame(
   value : @value.JsonataValue,
   ancestors : Array[@value.JsonataValue],
 ) -> PathFrame {
-  { value, ancestors, bindings: {} }
+  { value, ancestors, bindings: Map([]) }
 }
 
 ///|
@@ -27,7 +27,7 @@ fn path_frame_with_bindings(
 fn copy_frame_bindings(
   bindings : Map[String, @value.JsonataValue],
 ) -> Map[String, @value.JsonataValue] {
-  let out : Map[String, @value.JsonataValue] = {}
+  let out : Map[String, @value.JsonataValue] = Map([])
   for name, value in bindings {
     out[name] = value
   }
@@ -737,7 +737,7 @@ fn eval_path_from(
             let has_group = stop_at > i + 1 &&
               is_aggregate_step(steps[stop_at - 1])
             if has_group {
-              let merged : Map[String, Array[Json]] = {}
+              let merged : Map[String, Array[Json]] = Map([])
               for item in step_result.to_array() {
                 let r = ctx.with_binding(name, item, fn() -> @value.JsonataValue raise @error.JsonataError {
                   eval_path_from(current, steps, i + 1, ctx, stop_at)
@@ -900,7 +900,7 @@ fn value_to_frames(
   parent : @value.JsonataValue,
   ancestors : Array[@value.JsonataValue],
 ) -> Array[PathFrame] {
-  value_to_frames_with_bindings(value, parent, ancestors, {})
+  value_to_frames_with_bindings(value, parent, ancestors, Map([]))
 }
 
 ///|
@@ -1176,7 +1176,7 @@ fn merge_into_group(
 /// 从合并后的 accumulator 构建最终 Json::Object。
 /// 单值保持原样；重复的相同字符串折叠为标量，否则转为数组。
 fn build_merged_group(merged : Map[String, Array[Json]]) -> Map[String, Json] {
-  let out : Map[String, Json] = {}
+  let out : Map[String, Json] = Map([])
   for name, values in merged {
     out[name] = json_for_merged_values(values)
   }
@@ -2146,13 +2146,13 @@ fn access_group_aggregate(
   let items = input.to_array()
   let pairs : Array[(@ast.Ast, @ast.Ast)] = match group_ast {
     @ast.Ast::Group(p) => p
-    _ => return @value.JsonataValue::Json(Json::object({}))
+    _ => return @value.JsonataValue::Json(Json::empty_object())
   }
   if items.length() == 0 {
-    return @value.JsonataValue::Json(Json::object({}))
+    return @value.JsonataValue::Json(Json::empty_object())
   }
   // 第 1 阶段：按 key 分组，每组的输入项收集为原始数组
-  let groups : Map[String, Array[@value.JsonataValue]] = {}
+  let groups : Map[String, Array[@value.JsonataValue]] = Map([])
   for item in items {
     // 对每组 key/value pair 求值 key
     for kv in pairs {
@@ -2171,7 +2171,7 @@ fn access_group_aggregate(
     }
   }
   // 第 2 阶段：对每组求值 value-expression，合并结果
-  let merged : Map[String, Array[Json]] = {}
+  let merged : Map[String, Array[Json]] = Map([])
   for key_str, group_items in groups {
     let group_input = @value.JsonataValue::sequence(group_items)
     for kv in pairs {
@@ -2198,7 +2198,7 @@ fn access_group_aggregate(
     }
   }
   // 将合并结果转为最终对象。
-  let out : Map[String, Json] = {}
+  let out : Map[String, Json] = Map([])
   for name, values in merged {
     out[name] = json_for_merged_values(values)
   }
@@ -2222,7 +2222,7 @@ fn access_group_aggregate_frames(
   //   4. Evaluate the value-expression with the reduced bindings
   let pairs : Array[(@ast.Ast, @ast.Ast)] = match group_ast {
     @ast.Ast::Group(p) => p
-    _ => return @value.JsonataValue::Json(Json::object({}))
+    _ => return @value.JsonataValue::Json(Json::empty_object())
   }
   // Check if frames carry focus bindings (tuple stream mode)
   let is_tuple_stream = frames.length() > 0 && frames[0].bindings.length() > 0
@@ -2230,7 +2230,7 @@ fn access_group_aggregate_frames(
     return access_group_aggregate_tuple_stream(frames, pairs, ctx)
   }
   // Non-tuple-stream path: evaluate group_ast per frame, merge results
-  let merged : Map[String, Array[Json]] = {}
+  let merged : Map[String, Array[Json]] = Map([])
   for frame in frames {
     let r = ctx.with_lineage(current=frame.value, ancestors=frame.ancestors, fn() -> @value.JsonataValue raise @error.JsonataError {
       with_frame_bindings(ctx, frame.bindings, fn() -> @value.JsonataValue raise @error.JsonataError {
@@ -2243,7 +2243,7 @@ fn access_group_aggregate_frames(
       _ => ()
     }
   }
-  let out : Map[String, Json] = {}
+  let out : Map[String, Json] = Map([])
   for name, values in merged {
     out[name] = json_for_merged_values(values)
   }
@@ -2261,7 +2261,7 @@ fn access_group_aggregate_tuple_stream(
 ) -> @value.JsonataValue raise @error.JsonataError {
   // Phase 1: group frames by key (per key-expression pair)
   // groups: key_str -> (pair_index, list of frames)
-  let groups : Map[String, (Int, Array[PathFrame])] = {}
+  let groups : Map[String, (Int, Array[PathFrame])] = Map([])
   for frame in frames {
     for pair_idx, kv in pairs {
       let (key_ast, _) = kv
@@ -2292,7 +2292,7 @@ fn access_group_aggregate_tuple_stream(
     }
   }
   // Phase 2: for each group, reduce tuple bindings and evaluate value-expression
-  let out : Map[String, Json] = {}
+  let out : Map[String, Json] = Map([])
   for key_str, group_entry in groups {
     let (pair_idx, group_frames) = group_entry
     if group_frames.length() == 0 {
@@ -2300,7 +2300,7 @@ fn access_group_aggregate_tuple_stream(
     }
     let (_, val_ast) = pairs[pair_idx]
     // Reduce: merge bindings across frames (append values for same name)
-    let reduced_bindings : Map[String, @value.JsonataValue] = {}
+    let reduced_bindings : Map[String, @value.JsonataValue] = Map([])
     let first_frame = group_frames[0]
     // Copy first frame's bindings
     for name, value in first_frame.bindings {

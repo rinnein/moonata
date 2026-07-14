@@ -185,7 +185,7 @@ fn jsonata_string_json(value : @value.JsonataValue) -> Json {
       Json::array(out)
     }
     @value.JsonataValue::Json(Json::Object(map)) => {
-      let out : Map[String, Json] = {}
+      let out : Map[String, Json] = Map([])
       for entry in map {
         let (key, item) = entry
         out[key] = jsonata_string_json(@value.JsonataValue::Json(item))
@@ -2929,7 +2929,7 @@ fn base64_char_at(idx : Int) -> Char {
 
 ///|
 fn base64_decode(s : String) -> String {
-  let lookup : Map[Char, Int] = {}
+  let lookup : Map[Char, Int] = Map([])
   for i, c in base64_chars {
     lookup[c] = i
   }

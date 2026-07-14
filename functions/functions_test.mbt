@@ -764,3 +764,61 @@ test "P12：函数数组与 reduce 组合（官方回归）" {
     Json::string("225"),
   )
 }
+
+///|
+fn eval_error_code(expr : String, data : Json) -> String {
+  try {
+    let tokens = @lexer.lex(expr)
+    let ast = @parser.parse(tokens)
+    let ctx = @value.EvalContext::new(@value.JsonataValue::Json(data))
+    @functions.register_builtins(ctx)
+    ignore(@evaluator.eval(ast, ctx))
+    ""
+  } catch {
+    @error.JsonataError::RuntimeError(code~, ..) =>
+      match code {
+        Some(c) => c
+        None => ""
+      }
+    @error.JsonataError::SyntaxError(code~, ..) =>
+      match code {
+        Some(c) => c
+        None => ""
+      }
+    _ => ""
+  }
+}
+
+///|
+test "regex: D3012 replacement function must return string" {
+  // case035: function returning boolean should throw D3012
+  assert_eq(
+    eval_error_code(
+      "$replace(\"Bowler Hat\", /hat/i, function($match) { true })",
+      Json::null(),
+    ),
+    "D3012",
+  )
+  // case036: function returning number should throw D3012
+  assert_eq(
+    eval_error_code(
+      "$replace(\"Bowler Hat\", /hat/i, function($match) { 42 })",
+      Json::null(),
+    ),
+    "D3012",
+  )
+  // D1004: capture group out of range
+  assert_eq(
+    eval_error_code("$replace(\"abracadabra\", /.*?/, \"$1\")", Json::null()),
+    "D1004",
+  )
+}
+
+///|
+test "lexer: S0202 unterminated string in non-operand position" {
+  // Parser-level: $replace("foo", "o, "rr") -> S0202
+  assert_eq(
+    eval_error_code("$replace(\"foo\", \"o, \"rr\")", Json::null()),
+    "S0202",
+  )
+}

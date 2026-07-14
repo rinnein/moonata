@@ -204,7 +204,7 @@ fn Lexer::next_token(
   }
   // 字符串
   if c == '"' || c == '\'' || c == '`' {
-    return self.lex_string(start)
+    return self.lex_string(start, expect_operand)
   }
   // 数字
   if is_digit(c) || (expect_operand && c == '-' && is_digit(self.peek_at(1))) {
@@ -289,6 +289,7 @@ fn Lexer::lex_regex(
 fn Lexer::lex_string(
   self : Lexer,
   start : Int,
+  expect_operand : Bool,
 ) -> Token raise @error.JsonataError {
   let quote = self.advance() // 消费引号
   let buf = StringBuilder::new()
@@ -298,7 +299,15 @@ fn Lexer::lex_string(
         "未终止的字符串",
         position=Some(start),
         token=None,
-        code=Some(if quote == '`' { "S0105" } else { "S0101" }),
+        code=Some(
+          if quote == '`' {
+            "S0105"
+          } else if expect_operand {
+            "S0101"
+          } else {
+            "S0202"
+          },
+        ),
       )
     }
     let c = match self.src.get_char(self.pos) {
