@@ -259,7 +259,7 @@ fn split_with_matcher(
   if limit == 0 {
     return @value.JsonataValue::Json(Json::array([]))
   }
-  let first = (matcher.invoke)([str_value], ctx)
+  let first = matcher.apply([str_value], ctx)
   validate_matcher_result(first)
   // 未匹配（matcher 返回 undefined）：返回整串作为唯一元素
   if first.is_undefined() {
@@ -298,7 +298,7 @@ fn split_with_matcher(
     // 调用 next() 获取下一个匹配
     match next_opt {
       Some(next_fn) => {
-        current = (next_fn.invoke)([], ctx)
+        current = next_fn.apply([], ctx)
         validate_matcher_result(current)
       }
       None => current = @value.JsonataValue::Undefined
@@ -359,7 +359,7 @@ fn match_with_matcher(
   matcher : @value.JsonataFunc,
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
-  let first = (matcher.invoke)(
+  let first = matcher.apply(
     [str_value, @value.JsonataValue::Json(Json::number(0.0))],
     ctx,
   )
@@ -377,7 +377,7 @@ fn match_with_matcher(
     let (_, _, next_opt) = extract_match_info(current)
     match next_opt {
       Some(next_fn) => {
-        current = (next_fn.invoke)([], ctx)
+        current = next_fn.apply([], ctx)
         validate_matcher_result(current)
         if current.is_undefined() {
           break
@@ -594,7 +594,7 @@ fn resolve_replacement(
 ) -> String raise @error.JsonataError {
   match replacement {
     @value.JsonataValue::Func(f) => {
-      let result = (f.invoke)([@value.JsonataValue::Json(match_object(m))], ctx)
+      let result = f.apply([@value.JsonataValue::Json(match_object(m))], ctx)
       match result {
         @value.JsonataValue::Json(Json::String(s)) => s
         _ =>

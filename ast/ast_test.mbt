@@ -139,6 +139,7 @@ test "Ast 表达式节点构造" {
     params=["a", "b"],
     body=Ast::Path([name_step("a")]),
     signature=None,
+    thunk=false,
   )
   let var_ = Ast::Var("x")
   let bind = Ast::Bind(name="x", value=Ast::Number(1.0))
@@ -223,6 +224,7 @@ test "Ast 表达式节点构造" {
       #|    ],
       #|  ),
       #|  signature=None,
+      #|  thunk=false,
       #|)
     ),
   )

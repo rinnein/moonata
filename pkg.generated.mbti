@@ -13,6 +13,10 @@ pub fn evaluate(String, Json) -> Json raise @error.JsonataError
 
 pub fn evaluate_undefined(String) -> Json raise @error.JsonataError
 
+pub fn evaluate_undefined_with_max_depth(String, Int) -> Json raise @error.JsonataError
+
+pub fn evaluate_with_max_depth(String, Json, Int) -> Json raise @error.JsonataError
+
 // Errors
 
 // Types and methods

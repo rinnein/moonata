@@ -136,17 +136,36 @@ skip_reasons
 下方固定快照仍是旧口径下的历史记录；本轮脚本升级后，`skip` 分类会更细，待下一次复跑官方审计后再刷新这里的数字。
 
 
-当前固定快照（2026-07-15，Object 变体保留函数字段 + $match matcher 协议 + lambda letrec 自引用，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-15，TCO 尾调用优化 + depth 下沉到 eval 入口 + --max-depth CLI 标志，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1667 pass 1666 fail 1 skip 15
+eligible 1667 pass 1667 fail 0 skip 15
 top_failures
-tail-recursion 1
 skip_reasons
 no_expected_outcome 15
 ```
 
-本轮修复（Object 变体保留函数字段 + $match matcher 协议 + lambda letrec 自引用）：
+本轮修复（TCO 尾调用优化 + depth 下沉到 eval 入口 + --max-depth CLI 标志）：
+- 提交：整体 pass 1666→1667 (+1)，fail 1→0 (-1)，通过率 99.94%→100%
+- 门禁：`moon check` 0e0w，`moon test` 291/291 passed，`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - AST: `Lambda` 新增 `thunk~ : Bool` 字段，标记尾调用 thunk Lambda
+  - Parser: 新增 `tail_call_optimize` 后处理，对齐 jsonata-js `tailCallOptimize`——将 Lambda body 中的尾位置函数调用（Apply）包装为 `Lambda(thunk=true, body=Apply(...))`，对 Conditional 的 then/else 分支与 Block 的最后一个表达式递归处理
+  - Value: `JsonataFunc` 新增 `thunk_call` 字段（闭包返回下一个 (func, args)）；新增 `JsonataFunc::apply` 方法实现 trampoline 循环——调用 `invoke` 后若返回 thunk Func 则循环展开，对齐 jsonata-js `apply()` + `applyInner` 的 `validateArguments` 调用；trampoline 迭代上限 10000 拦截无限尾递归（case006）
+  - Value: `EvalContext::tick` 步数超限改抛 U1001（对齐 jsonata-js timeboxExpression 超时语义）；`default_max_steps` 保持 1000000 覆盖复杂表达式
+  - Evaluator: `eval` 入口新增 `ctx.enter()`/`ctx.exit()` depth 管理（对齐 jsonata-js `evaluate()` 的 `environment.base.depth++`），使 `tail-recursion/case002`（factorial(100)，非尾递归）在 max_depth=302 下触发 U1001；移除所有 `with_depth` 调用（已由 eval 入口统一管理）
+  - Evaluator: `eval_apply`/`eval_chain`/`compose_functions` 等通过 `apply_with_trampoline` → `JsonataFunc::apply` 调用函数，确保尾递归经 trampoline 展开不增长调用栈
+  - Functions: `$map`/`$filter`/`$reduce`/`$sift`/`$sort`/`$match`/`$split` 等 HOF 的回调调用从 `(f.invoke)(args, ctx)` 改为 `f.apply(args, ctx)`，确保 lambda body 经 TCO 包装后返回的 thunk Func 被正确展开
+  - CLI: `cmd/main` 新增 `--max-depth` 标志，对齐 jsonata-js test runner 的 `timeboxExpression` maxDepth 语义
+  - Audit: `scripts/jsonata_official_audit.py` 从 case 文件的 `depth` 字段传递 `--max-depth` 给 CLI，使 `tail-recursion/case002`（depth=302）等用例能在指定深度触发 U1001
+  - moonata: 新增 `evaluate_with_max_depth`/`evaluate_undefined_with_max_depth` facade API
+- 修复效果：`tail-recursion` group 9→10 pass（全绿，-1 fail），`tail-recursion/case002` 由 mismatch → pass（U1001 在 max_depth=302 下触发），整体 fail 1→0
+- 关键设计决策：
+  - jsonata-js 通过 `__evaluate_entry` 回调在每次 `evaluate()` 入口递增 depth；本实现对齐此语义，将 depth 管理从 `with_depth` 调用点下沉到 `eval` 入口
+  - jsonata-js 通过 `tailCallOptimize` + thunk + trampoline 实现尾调用优化，使尾递归不增长调用栈；本实现完整移植此机制，使 `case007`（6555 层互递归）在 max_depth=500 下完成
+  - 无限尾递归（case006 `$inf()`）在 jsonata-js 中通过 timeout 触发 U1001；本实现通过 trampoline 迭代上限（10000）在 timelimit 内触发 U1001
+
+上一轮修复（Object 变体保留函数字段 + $match matcher 协议 + lambda letrec 自引用）：
 - 提交：整体 pass 1665→1666 (+1)，fail 2→1 (-1)，通过率 99.9%→99.94%
 - 门禁：`moon check` 0e0w，`moon test` 290→291 passed（+1 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：

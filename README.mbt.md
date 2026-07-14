@@ -91,14 +91,14 @@ docs: update official test status
 
 ## 兼容性状态
 
-固定快照：2026-07-15，Object 变体保留函数字段 + $match matcher 协议 + lambda letrec 自引用阶段。
+固定快照：2026-07-15，TCO 尾调用优化 + depth 下沉到 eval 入口 + --max-depth CLI 标志阶段。
 
 ```text
 本地测试：moon test 291/291
-官方可比对审计：eligible 1667, pass 1666, fail 1, skip 15
-通过率：99.94%
+官方可比对审计：eligible 1667, pass 1667, fail 0, skip 15
+通过率：100%
 ```
 
-Top failures: tail-recursion(1)
+Top failures: 无
 
 官方测试集审计流程与跳过策略记录在 `docs/jsonata-official-workflow.md`。

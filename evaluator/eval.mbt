@@ -237,11 +237,34 @@ fn steps_contain_tuple_binding(steps : Array[@ast.Step]) -> Bool {
 
 ///|
 /// 求值器入口：AST → JsonataValue。
+///
+/// 对齐 jsonata-js `evaluate()`：每次进入 eval 即递增 depth 并检查护栏，
+/// 使 `tail-recursion/case002`（factorial(100)，非尾递归）在 max_depth=302 下触发 U1001。
+/// 尾递归通过 parser 的 tailCallOptimize + evaluator 的 trampoline 保持 depth 平坦。
 pub fn eval(
   ast : @ast.Ast,
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
   ctx.tick()
+  ctx.enter()
+  try {
+    let r = eval_inner(ast, ctx)
+    ctx.exit()
+    r
+  } catch {
+    e => {
+      ctx.exit()
+      raise e
+    }
+  }
+}
+
+///|
+/// 求值器内部实现（depth 已由 `eval` 入口管理）。
+fn eval_inner(
+  ast : @ast.Ast,
+  ctx : @value.EvalContext,
+) -> @value.JsonataValue raise @error.JsonataError {
   match ast {
     @ast.Ast::String(s) => @value.JsonataValue::Json(Json::string(s))
     @ast.Ast::QuotedName(name) =>
@@ -262,8 +285,8 @@ pub fn eval(
     @ast.Ast::Bind(name~, value~) => eval_bind(name, value, ctx)
     @ast.Ast::Block(exprs) => eval_block(exprs, ctx)
     @ast.Ast::Apply(func~, args~) => eval_apply(func, args, ctx)
-    @ast.Ast::Lambda(params~, body~, signature~) =>
-      eval_lambda(params, body, signature, ctx)
+    @ast.Ast::Lambda(params~, body~, signature~, thunk~) =>
+      eval_lambda(params, body, signature, thunk, ctx)
     @ast.Ast::Chain(stages) => eval_chain(stages, ctx)
     @ast.Ast::Group(pairs) => eval_group(pairs, ctx)
     @ast.Ast::Sort(expr~, terms~) => eval_sort(expr, terms, ctx)
@@ -1928,7 +1951,7 @@ fn access_filter(
           ctx.bind(name, @value.JsonataValue::Json(Json::number(i.to_double())))
         None => ()
       }
-      ctx.with_depth(() => eval(expr, ctx))
+      eval(expr, ctx)
     })
     match r {
       @value.JsonataValue::Json(Json::True) => results.push(item)
@@ -1992,7 +2015,7 @@ fn access_filter_frames(
             )
           None => ()
         }
-        ctx.with_depth(() => eval(expr, ctx))
+        eval(expr, ctx)
       })
     })
     match r {
@@ -2087,7 +2110,7 @@ fn access_map(
           ctx.bind(name, @value.JsonataValue::Json(Json::number(i.to_double())))
         None => ()
       }
-      ctx.with_depth(() => eval(expr, ctx))
+      eval(expr, ctx)
     })
     match r {
       @value.JsonataValue::Undefined => continue
@@ -2158,7 +2181,7 @@ fn access_map_frames(
                   )
                 None => ()
               }
-              ctx.with_depth(() => eval(expr, ctx))
+              eval(expr, ctx)
             })
           },
         )
@@ -2230,7 +2253,7 @@ fn access_group_aggregate(
     for pair_idx, kv in pairs {
       let (key_ast, _val_ast) = kv
       let key_val = ctx.with_context(current=item, parent=input, fn() -> @value.JsonataValue raise @error.JsonataError {
-        ctx.with_depth(() => eval(key_ast, ctx))
+        eval(key_ast, ctx)
       })
       // undefined key 跳过（对齐 jsonata-js）
       if key_val.is_undefined() {
@@ -2269,7 +2292,7 @@ fn access_group_aggregate(
       let (key_ast, val_ast) = kv
       // 验证 key 匹配当前组
       let sample_key = ctx.with_context(current=group_items[0], parent=input, fn() -> @value.JsonataValue raise @error.JsonataError {
-        ctx.with_depth(() => eval(key_ast, ctx))
+        eval(key_ast, ctx)
       })
       let actual_key = match sample_key {
         @value.JsonataValue::Json(Json::String(s)) => s
@@ -2279,7 +2302,7 @@ fn access_group_aggregate(
         continue
       }
       let val = ctx.with_context(current=group_input, parent=input, fn() -> @value.JsonataValue raise @error.JsonataError {
-        ctx.with_depth(() => eval(val_ast, ctx))
+        eval(val_ast, ctx)
       })
       let json_val = json_for_constructor(val)
       match merged.get(key_str) {
@@ -2325,7 +2348,7 @@ fn access_group_aggregate_frames(
   for frame in frames {
     let r = ctx.with_lineage(current=frame.value, ancestors=frame.ancestors, fn() -> @value.JsonataValue raise @error.JsonataError {
       with_frame_bindings(ctx, frame.bindings, fn() -> @value.JsonataValue raise @error.JsonataError {
-        ctx.with_depth(() => eval(group_ast, ctx))
+        eval(group_ast, ctx)
       })
     })
     match r {
@@ -2361,7 +2384,7 @@ fn access_group_aggregate_tuple_stream(
         ancestors=frame.ancestors,
         fn() -> @value.JsonataValue raise @error.JsonataError {
           with_frame_bindings(ctx, frame.bindings, fn() -> @value.JsonataValue raise @error.JsonataError {
-            ctx.with_depth(() => eval(key_ast, ctx))
+            eval(key_ast, ctx)
           })
         },
       )
@@ -2420,7 +2443,7 @@ fn access_group_aggregate_tuple_stream(
       ancestors=first_frame.ancestors,
       fn() -> @value.JsonataValue raise @error.JsonataError {
         with_frame_bindings(ctx, reduced_bindings, fn() -> @value.JsonataValue raise @error.JsonataError {
-          ctx.with_depth(() => eval(val_ast, ctx))
+          eval(val_ast, ctx)
         })
       },
     )

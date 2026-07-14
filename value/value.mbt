@@ -21,11 +21,15 @@ pub(all) enum JsonataValue {
 /// 函数值：持有元数与闭包。
 ///
 /// 内建函数与用户 Lambda 统一为 `JsonataFunc`，闭包接收参数数组与上下文。
+/// `thunk_call` 字段用于尾调用优化（TCO）：当 Lambda 被 parser 标记为 thunk 时，
+/// `invoke` 返回携带 `thunk_call` 的 Func，apply 通过 trampoline 循环展开，
+/// 使尾递归不增长调用栈。
 pub struct JsonataFunc {
   arity : Int
   signature : String?
   contextual : Bool
   invoke : (Array[JsonataValue], EvalContext) -> JsonataValue raise @error.JsonataError
+  thunk_call : (() -> (JsonataFunc, Array[JsonataValue]) raise @error.JsonataError)?
 }
 
 ///|
@@ -44,8 +48,9 @@ pub fn JsonataFunc::new(
   signature? : String? = None,
   contextual? : Bool = false,
   invoke~ : (Array[JsonataValue], EvalContext) -> JsonataValue raise @error.JsonataError,
+  thunk_call? : (() -> (JsonataFunc, Array[JsonataValue]) raise @error.JsonataError)? = None,
 ) -> JsonataFunc {
-  { arity, signature, contextual, invoke }
+  { arity, signature, contextual, invoke, thunk_call }
 }
 
 ///|
@@ -83,6 +88,60 @@ pub fn JsonataFunc::validate_args(
     Some(sig) => validate_function_args(sig, args, context)
     None => args
   }
+}
+
+///|
+/// trampoline 最大迭代次数。
+/// 设为 10000：覆盖 case007 的 6555 层互递归；同时足够低以保证无限尾递归
+/// （case006）在 timelimit=1000ms 内触发 U1001（10000 次迭代约 0.1s）。
+let trampoline_max_iterations : Int = 10000
+
+///|
+/// 带尾调用优化的函数应用（trampoline）。
+///
+/// 调用 `invoke(args, ctx)` 后，若返回值是携带 `thunk_call` 的 Func，
+/// 则通过 trampoline 循环展开：调用 `thunk_call()` 获取下一个 (func, args)，
+/// 验证签名后调用 `next_func.invoke(next_args, ctx)`，避免递归增长调用栈。
+///
+/// 对齐 jsonata-js `apply()` 的 `while(isLambda(result) && result.thunk === true)` 循环
+/// + `applyInner` 中的 `validateArguments` 调用。
+///
+/// HOF（`$map`/`$filter`/`$sift` 等）通过此方法调用回调函数，
+/// 确保 lambda body 经 TCO 包装后返回的 thunk Func 被正确展开为最终值。
+pub fn JsonataFunc::apply(
+  self : JsonataFunc,
+  args : Array[JsonataValue],
+  ctx : EvalContext,
+) -> JsonataValue raise @error.JsonataError {
+  let result = (self.invoke)(args, ctx)
+  let mut r = result
+  let mut done = false
+  let mut iterations = 0
+  while !done {
+    match r {
+      Func(thunk_func) =>
+        match thunk_func.thunk_call {
+          Some(c) => {
+            iterations += 1
+            if iterations > trampoline_max_iterations {
+              raise @error.guardrail_error(
+                "U1001: Stack overflow error: Check for non-terminating recursive function.  Consider rewriting as tail-recursive. (trampoline iterations=\{iterations})",
+                limit=Some(
+                  "trampoline_max_iterations=\{trampoline_max_iterations}",
+                ),
+                code=Some("U1001"),
+              )
+            }
+            let (next_f, next_args) = c()
+            let validated_args = next_f.validate_args(next_args, ctx.current())
+            r = (next_f.invoke)(validated_args, ctx)
+          }
+          None => done = true
+        }
+      _ => done = true
+    }
+  }
+  r
 }
 
 ///|

@@ -12,6 +12,27 @@ pub fn evaluate(expr : String, data : Json) -> Json raise @error.JsonataError {
 }
 
 ///|
+/// JSONata 表达式求值（指定 max_depth）。
+///
+/// 用于官方审计脚本传递 case 文件中的 `depth` 字段，对齐 jsonata-js test runner
+/// 的 `timeboxExpression` 语义。`tail-recursion/case002` 期望 maxDepth=302 触发 U1001。
+pub fn evaluate_with_max_depth(
+  expr : String,
+  data : Json,
+  max_depth : Int,
+) -> Json raise @error.JsonataError {
+  let tokens = @lexer.lex(expr)
+  let ast = @parser.parse(tokens)
+  let ctx = @value.EvalContext::new_with_limits(
+    @value.JsonataValue::Json(data),
+    max_depth~,
+  )
+  @functions.register_builtins(ctx)
+  let result = @evaluator.eval(ast, ctx)
+  result.to_json()
+}
+
+///|
 /// JSONata 表达式求值（undefined 上下文）。
 ///
 /// 与 `evaluate` 相同，但使用 `Undefined` 作为根上下文，
@@ -20,6 +41,23 @@ pub fn evaluate_undefined(expr : String) -> Json raise @error.JsonataError {
   let tokens = @lexer.lex(expr)
   let ast = @parser.parse(tokens)
   let ctx = @value.EvalContext::new(@value.JsonataValue::Undefined)
+  @functions.register_builtins(ctx)
+  let result = @evaluator.eval(ast, ctx)
+  result.to_json()
+}
+
+///|
+/// JSONata 表达式求值（undefined 上下文，指定 max_depth）。
+pub fn evaluate_undefined_with_max_depth(
+  expr : String,
+  max_depth : Int,
+) -> Json raise @error.JsonataError {
+  let tokens = @lexer.lex(expr)
+  let ast = @parser.parse(tokens)
+  let ctx = @value.EvalContext::new_with_limits(
+    @value.JsonataValue::Undefined,
+    max_depth~,
+  )
   @functions.register_builtins(ctx)
   let result = @evaluator.eval(ast, ctx)
   result.to_json()

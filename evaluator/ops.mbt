@@ -618,8 +618,8 @@ fn eval_bind(
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
   let value = match value_ast {
-    @ast.Ast::Lambda(params~, body~, signature~) =>
-      eval_lambda_recursive(name, params, body, signature, ctx)
+    @ast.Ast::Lambda(params~, body~, signature~, thunk~) =>
+      eval_lambda_recursive(name, params, body, signature, thunk, ctx)
     _ => eval(value_ast, ctx)
   }
   ctx.bind(name, value)
@@ -635,6 +635,7 @@ fn eval_lambda_recursive(
   params : Array[String],
   body : @ast.Ast,
   signature : String?,
+  thunk : Bool,
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue {
   let arity = params.length()
@@ -658,9 +659,58 @@ fn eval_lambda_recursive(
         call_ctx.bind(param, ctx2.current())
       }
     }
+    // 直接返回 eval 结果（可能是 thunk Func）。
+    // trampoline 由 apply_with_trampoline / JsonataFunc::apply 处理。
     eval(body, call_ctx)
   }
-  let func = @value.JsonataFunc::new(arity~, signature~, invoke~)
+  // thunk=true 时构建 thunk_call 闭包，但需要绑定 self_name 到 self_ref
+  // 使尾递归调用能正确解析（与 invoke 一致的自引用语义）
+  let thunk_call : (() -> (@value.JsonataFunc, Array[@value.JsonataValue]) raise @error.JsonataError)? = if thunk {
+    let captured_for_thunk = ctx.capture()
+    Some(fn() -> (@value.JsonataFunc, Array[@value.JsonataValue]) raise @error.JsonataError {
+      // self_ref 是 mut 变量，闭包按引用捕获，读取时已是更新后的 Func
+      captured_for_thunk.bind(self_name, self_ref)
+      match body {
+        @ast.Ast::Apply(func=func_ast, args=args_ast) => {
+          let func_val = eval(func_ast, captured_for_thunk)
+          match func_val {
+            @value.JsonataValue::Func(f) => {
+              let args : Array[@value.JsonataValue] = []
+              for arg_ast in args_ast {
+                args.push(eval(arg_ast, captured_for_thunk))
+              }
+              (f, args)
+            }
+            @value.JsonataValue::Undefined =>
+              raise @error.runtime_error(
+                match func_ast {
+                  @ast.Ast::Path(steps) if steps.length() == 1 =>
+                    match steps[0].kind {
+                      @ast.StepKind::Name(n) => "T1005: Unknown function: \{n}"
+                      _ => "T1006: Attempted to invoke a non-function"
+                    }
+                  _ => "T1006: Attempted to invoke a non-function"
+                },
+                code=Some("T1005"),
+              )
+            _ =>
+              raise @error.runtime_error(
+                "T1006: Attempted to invoke a non-function",
+                code=Some("T1006"),
+              )
+          }
+        }
+        _ =>
+          raise @error.runtime_error(
+            "TCO thunk body 必须是 Apply AST",
+            code=None,
+          )
+      }
+    })
+  } else {
+    None
+  }
+  let func = @value.JsonataFunc::new(arity~, signature~, invoke~, thunk_call~)
   self_ref = @value.JsonataValue::Func(func)
   @value.JsonataValue::Func(func)
 }
@@ -682,9 +732,27 @@ fn eval_block(
 }
 
 ///|
+/// 带尾调用优化的函数应用（trampoline）。
+///
+/// 委托给 `JsonataFunc::apply`，该方法的 trampoline 循环对齐 jsonata-js `apply()`：
+/// 调用 `invoke` 后，若返回值是携带 `thunk_call` 的 Func，循环展开直到非 thunk。
+///
+/// 使 `tail-recursion/case007`（6555 层互递归）能在 max_depth=500 下完成，
+/// `tail-recursion/case009`（签名不匹配）抛 T0410，
+/// `tail-recursion/case006`（无限尾递归）在迭代上限内抛 U1001。
+fn apply_with_trampoline(
+  f : @value.JsonataFunc,
+  args : Array[@value.JsonataValue],
+  ctx : @value.EvalContext,
+) -> @value.JsonataValue raise @error.JsonataError {
+  f.apply(args, ctx)
+}
+
+///|
 /// 函数调用
 ///
 /// 支持部分应用：当提供参数少于元数时，返回捕获已提供参数的柯里化函数。
+/// 通过 trampoline 循环展开尾调用 thunk，使尾递归不增长调用栈。
 fn eval_apply(
   func_ast : @ast.Ast,
   args_ast : Array[@ast.Ast],
@@ -720,7 +788,7 @@ fn eval_apply(
           for a in captured {
             all.push(a)
           }
-          ctx2.with_depth(() => (original.invoke)(all, ctx2))
+          apply_with_trampoline(original, all, ctx2)
         }
         @value.JsonataValue::Func(
           @value.JsonataFunc::new(
@@ -730,7 +798,7 @@ fn eval_apply(
           ),
         )
       } else {
-        ctx.with_depth(() => (f.invoke)(args, ctx))
+        apply_with_trampoline(f, args, ctx)
       }
     }
     @value.JsonataValue::Undefined => {
@@ -862,7 +930,7 @@ fn make_partial_apply(
         }
       }
     }
-    ctx2.with_depth(() => (f.invoke)(args, ctx2))
+    apply_with_trampoline(f, args, ctx2)
   }
   @value.JsonataValue::Func(
     @value.JsonataFunc::new(
@@ -878,10 +946,14 @@ fn make_partial_apply(
 
 ///|
 /// Lambda 求值
+///
+/// 当 `thunk=true` 时，body 是尾位置函数调用（Apply AST），返回携带 `thunk_call` 的 Func。
+/// `eval_apply` 通过 trampoline 循环展开 thunk，使尾递归不增长调用栈。
 fn eval_lambda(
   params : Array[String],
   body : @ast.Ast,
   signature : String?,
+  thunk : Bool,
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue {
   let arity = params.length()
@@ -902,10 +974,60 @@ fn eval_lambda(
         call_ctx.bind(param, ctx2.current())
       }
     }
+    // 直接返回 eval 结果（可能是 thunk Func）。
+    // trampoline 由 apply_with_trampoline / JsonataFunc::apply 处理，
+    // 避免 invoke 内嵌 trampoline 导致无限递归。
     eval(body, call_ctx)
   }
+  // 当 thunk=true 时，thunk_call 闭包用于 eval_apply 的 trampoline：
+  // 评估 Apply.func 与 Apply.args，返回 (next_func, next_args)。
+  // thunk Func 的 invoke 仍可正常调用（作为 fallback），但 eval_apply 会优先走 trampoline。
+  let thunk_call : (() -> (@value.JsonataFunc, Array[@value.JsonataValue]) raise @error.JsonataError)? = if thunk {
+    let captured_for_thunk = ctx.capture()
+    Some(fn() -> (@value.JsonataFunc, Array[@value.JsonataValue]) raise @error.JsonataError {
+      match body {
+        @ast.Ast::Apply(func=func_ast, args=args_ast) => {
+          let func_val = eval(func_ast, captured_for_thunk)
+          match func_val {
+            @value.JsonataValue::Func(f) => {
+              let args : Array[@value.JsonataValue] = []
+              for arg_ast in args_ast {
+                args.push(eval(arg_ast, captured_for_thunk))
+              }
+              (f, args)
+            }
+            @value.JsonataValue::Undefined =>
+              raise @error.runtime_error(
+                match func_ast {
+                  @ast.Ast::Path(steps) if steps.length() == 1 =>
+                    match steps[0].kind {
+                      @ast.StepKind::Name(n) => "T1005: Unknown function: \{n}"
+                      _ => "T1006: Attempted to invoke a non-function"
+                    }
+                  _ => "T1006: Attempted to invoke a non-function"
+                },
+                code=Some("T1005"),
+              )
+            _ =>
+              raise @error.runtime_error(
+                "T1006: Attempted to invoke a non-function",
+                code=Some("T1006"),
+              )
+          }
+        }
+        _ =>
+          // thunk Lambda 的 body 必须是 Apply AST（由 parser 的 tailCallOptimize 保证）
+          raise @error.runtime_error(
+            "TCO thunk body 必须是 Apply AST",
+            code=None,
+          )
+      }
+    })
+  } else {
+    None
+  }
   @value.JsonataValue::Func(
-    @value.JsonataFunc::new(arity~, signature~, invoke~),
+    @value.JsonataFunc::new(arity~, signature~, invoke~, thunk_call~),
   )
 }
 
@@ -946,7 +1068,7 @@ fn eval_chain(
         match result {
           @value.JsonataValue::Func(left_func) =>
             result = compose_functions(left_func, f)
-          _ => result = ctx.with_depth(() => (f.invoke)([result], ctx))
+          _ => result = apply_with_trampoline(f, [result], ctx)
         }
       @value.JsonataValue::Regex(pattern~, flags~) =>
         result = chain_regex_match(result, pattern, flags)
@@ -997,7 +1119,7 @@ fn eval_chain_apply_stage(
     for item in captured {
       args.push(item)
     }
-    ctx2.with_depth(() => (target.invoke)(args, ctx2))
+    apply_with_trampoline(target, args, ctx2)
   }
   let stage_func = @value.JsonataFunc::new(
     arity=1,
@@ -1007,7 +1129,7 @@ fn eval_chain_apply_stage(
   match input {
     @value.JsonataValue::Func(left_func) =>
       compose_functions(left_func, stage_func)
-    _ => ctx.with_depth(() => (stage_func.invoke)([input], ctx))
+    _ => apply_with_trampoline(stage_func, [input], ctx)
   }
 }
 
@@ -1020,8 +1142,8 @@ fn compose_functions(
     args : Array[@value.JsonataValue],
     ctx : @value.EvalContext,
   ) -> @value.JsonataValue raise @error.JsonataError {
-    let intermediate = ctx.with_depth(() => (first.invoke)(args, ctx))
-    ctx.with_depth(() => (second.invoke)([intermediate], ctx))
+    let intermediate = apply_with_trampoline(first, args, ctx)
+    apply_with_trampoline(second, [intermediate], ctx)
   }
   @value.JsonataValue::Func(
     @value.JsonataFunc::new(

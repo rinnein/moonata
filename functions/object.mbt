@@ -135,7 +135,7 @@ fn register_object_functions(ctx : @value.EvalContext) -> Unit {
       @value.JsonataValue::Json(Json::Object(map)) => {
         let results : Array[@value.JsonataValue] = []
         for k, v in map {
-          let r = (f.invoke)(
+          let r = f.apply(
             [
               @value.JsonataValue::Json(v),
               @value.JsonataValue::Json(Json::string(k)),
@@ -166,7 +166,7 @@ fn register_object_functions(ctx : @value.EvalContext) -> Unit {
         let result : Map[String, Json] = Map([])
         let object = @value.JsonataValue::Json(Json::object(map))
         for k, v in map {
-          let r = (f.invoke)(
+          let r = f.apply(
             [
               @value.JsonataValue::Json(v),
               @value.JsonataValue::Json(Json::string(k)),

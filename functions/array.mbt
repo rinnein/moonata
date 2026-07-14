@@ -29,7 +29,7 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
     let source = json_array_value(items)
     let results : Array[@value.JsonataValue] = []
     for i, item in items {
-      let r = (f.invoke)(hof_callback_args(i, item, source), ctx)
+      let r = f.apply(hof_callback_args(i, item, source), ctx)
       match r {
         @value.JsonataValue::Undefined => continue
         @value.JsonataValue::Sequence(inner) =>
@@ -54,7 +54,7 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
     let source = json_array_value(items)
     let results : Array[@value.JsonataValue] = []
     for i, item in items {
-      let r = (f.invoke)(hof_callback_args(i, item, source), ctx)
+      let r = f.apply(hof_callback_args(i, item, source), ctx)
       if value_to_bool(r) {
         results.push(item)
       }
@@ -97,7 +97,7 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
       if f.arity >= 4 {
         cb_args.push(source)
       }
-      acc = (f.invoke)(cb_args, ctx)
+      acc = f.apply(cb_args, ctx)
     }
     acc
   })
@@ -349,7 +349,7 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
     let matched : Array[@value.JsonataValue] = []
     let unmatched : Array[@value.JsonataValue] = []
     for item in items {
-      let r = (f.invoke)([item], ctx)
+      let r = f.apply([item], ctx)
       if value_to_bool(r) {
         matched.push(item)
       } else {
@@ -485,7 +485,7 @@ fn item_gt(
 ) -> Bool raise @error.JsonataError {
   let (_, va) = a
   let (_, vb) = b
-  value_to_bool((cmp.invoke)([va, vb], ctx))
+  value_to_bool(cmp.apply([va, vb], ctx))
 }
 
 ///|
@@ -543,7 +543,7 @@ fn filter_single_candidates(
   let source = json_array_value(items)
   let results : Array[@value.JsonataValue] = []
   for i, item in items {
-    let r = (f.invoke)(
+    let r = f.apply(
       [item, @value.JsonataValue::Json(Json::number(i.to_double())), source],
       ctx,
     )

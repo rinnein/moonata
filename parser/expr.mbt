@@ -978,14 +978,14 @@ fn inject_current_arg_for_lambda_map(expr : @ast.Ast) -> @ast.Ast {
   match expr {
     @ast.Ast::Apply(func~, args~) =>
       match func {
-        @ast.Ast::Lambda(params~, body~, signature~) =>
+        @ast.Ast::Lambda(params~, body~, signature~, thunk~) =>
           if args.length() < params.length() {
             let injected : Array[@ast.Ast] = [@ast.Ast::Var("")]
             for arg in args {
               injected.push(arg)
             }
             @ast.Ast::Apply(
-              func=@ast.Ast::Lambda(params~, body~, signature~),
+              func=@ast.Ast::Lambda(params~, body~, signature~, thunk~),
               args=injected,
             )
           } else {

@@ -286,12 +286,16 @@ def run_case(
     data: Any,
     timeout: float,
     use_undefined: bool = False,
+    max_depth: int | None = None,
 ) -> RunResult:
     # When the case maps to undefined input (jsonata-js `dataset: null` →
     # undefined), invoke the CLI with `--no-data` so the root context is
     # undefined rather than JSON null.
+    extra_args: list[str] = []
+    if max_depth is not None and max_depth > 0:
+        extra_args.extend(["--max-depth", str(max_depth)])
     if use_undefined:
-        cmd = [str(exe), expr, "--no-data"]
+        cmd = [str(exe), expr, "--no-data"] + extra_args
         try:
             proc = subprocess.run(
                 cmd,
@@ -316,7 +320,7 @@ def run_case(
 
         try:
             proc = subprocess.run(
-                [str(exe), expr, "--file", data_path],
+                [str(exe), expr, "--file", data_path] + extra_args,
                 text=True,
                 capture_output=True,
                 timeout=timeout,
@@ -427,12 +431,18 @@ def audit(args: argparse.Namespace) -> AuditResult:
 
             eligible += 1
             wrapped_expr = wrap_expression_with_bindings(expr, bindings_expr)
+            # 对齐 jsonata-js test runner 的 timeboxExpression：case 文件的 `depth` 字段
+            # 作为 maxDepth 传给 CLI，使 `tail-recursion/case002`（depth=302）等用例
+            # 能在指定深度触发 U1001。
+            case_depth = case.get("depth")
+            max_depth = case_depth if isinstance(case_depth, int) and case_depth > 0 else None
             run_result = run_case(
                 exe=exe,
                 expr=wrapped_expr,
                 data=data,
                 timeout=resolve_timeout(case, args.timeout),
                 use_undefined=use_undefined,
+                max_depth=max_depth,
             )
 
             if expected_kind in {"result", "undefined"}:

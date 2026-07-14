@@ -3,6 +3,7 @@ import {
   "rinnein/moonata/error",
   "moonbitlang/core/env",
   "moonbitlang/core/json",
+  "moonbitlang/core/string",
   "moonbitlang/async",
   "moonbitlang/async/fs",
 }

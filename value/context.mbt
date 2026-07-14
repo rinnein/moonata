@@ -6,6 +6,9 @@ let default_max_depth : Int = 8000
 
 ///|
 /// 默认最大求值步数。
+/// 设为 1000000：覆盖复杂表达式求值（如 performance/case001 的 256 项嵌套路径）。
+/// 无限尾递归（TCO trampoline）通过 per-trampoline 迭代计数器拦截，
+/// 不依赖全局 max_steps。
 let default_max_steps : Int = 1_000_000
 
 ///|
@@ -321,13 +324,17 @@ pub fn EvalContext::exit(self : EvalContext) -> Unit {
 }
 
 ///|
-/// 记录一步求值（护栏：超限抛 GuardrailError）。
+/// 记录一步求值（护栏：超限抛 GuardrailError，错误码 U1001）。
+///
+/// 使用 U1001 对齐 jsonata-js test runner 的 timeboxExpression 超时语义，
+/// 使无限尾递归（如 `tail-recursion/case006`）在 TCO trampoline 下也能被拦截。
 pub fn EvalContext::tick(self : EvalContext) -> Unit raise @error.JsonataError {
   self.steps = self.steps + 1
   if self.steps > self.max_steps {
     raise @error.guardrail_error(
-      "求值步数超限 (steps=\{self.steps})",
+      "U1001: Stack overflow error: Check for non-terminating recursive function.  Consider rewriting as tail-recursive. (steps=\{self.steps}, max_steps=\{self.max_steps})",
       limit=Some("max_steps=\{self.max_steps}"),
+      code=Some("U1001"),
     )
   }
 }

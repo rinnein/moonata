@@ -6,6 +6,7 @@
 ///   moonata '<expr>' --data '<json>'   # 对指定 JSON 数据求值
 ///   moonata '<expr>' --file '<file>'   # 对指定 JSON 文件求值
 ///   moonata '<expr>' --no-data         # 对 undefined 上下文求值
+///   moonata '<expr>' --max-depth <n>   # 指定最大递归深度（对齐 jsonata-js test runner）
 ///   moonata --help                      # 显示帮助
 async fn main {
   let args = @env.args()
@@ -17,6 +18,7 @@ async fn main {
   let mut expr = ""
   let mut data_str = ""
   let mut use_undefined = false
+  let mut max_depth : Int = -1
   let mut i = 1
   while i < args.length() {
     let arg = args[i]
@@ -47,6 +49,19 @@ async fn main {
       "--no-data" =>
         // 对 undefined 上下文求值（对齐 jsonata-js `dataset: null` → undefined 语义）
         use_undefined = true
+      "--max-depth" => {
+        i += 1
+        if i < args.length() {
+          try {
+            max_depth = @string.parse_int(args[i])
+          } catch {
+            _ => {
+              println("错误: --max-depth 需要整数参数")
+              return
+            }
+          }
+        }
+      }
       _ => if expr == "" { expr = arg }
     }
     i += 1
@@ -59,7 +74,11 @@ async fn main {
   // 求值
   try {
     let result = if use_undefined {
-      @moonata.evaluate_undefined(expr)
+      if max_depth > 0 {
+        @moonata.evaluate_undefined_with_max_depth(expr, max_depth)
+      } else {
+        @moonata.evaluate_undefined(expr)
+      }
     } else {
       // 获取数据
       let data = if data_str != "" { data_str } else { "null" }
@@ -70,7 +89,11 @@ async fn main {
           return
         }
       }
-      @moonata.evaluate(expr, json_data)
+      if max_depth > 0 {
+        @moonata.evaluate_with_max_depth(expr, json_data, max_depth)
+      } else {
+        @moonata.evaluate(expr, json_data)
+      }
     }
     println(result.stringify(indent=2))
   } catch {
@@ -94,6 +117,7 @@ fn print_usage() -> Unit {
   println("  moonata '<expr>' --data '<json>'    对指定 JSON 数据求值")
   println("  moonata '<expr>' --file '<file>'    对指定 JSON 文件求值")
   println("  moonata '<expr>' --no-data          对 undefined 上下文求值")
+  println("  moonata '<expr>' --max-depth <n>    指定最大递归深度")
   println("  moonata --help                      显示此帮助")
   println("")
   println("示例:")

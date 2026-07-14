@@ -210,7 +210,57 @@ fn Parser::parse_lambda(self : Parser) -> @ast.Ast raise @error.JsonataError {
   self.expect(@lexer.TokenKind::LBrace, what="'{' for lambda body")
   let body = self.parse_block()
   self.expect(@lexer.TokenKind::RBrace, what="'}'")
-  @ast.Ast::Lambda(params~, body~, signature~)
+  let body = tail_call_optimize(body)
+  @ast.Ast::Lambda(params~, body~, signature~, thunk=false)
+}
+
+///|
+/// 尾调用优化（TCO）：对齐 jsonata-js parser 的 `tailCallOptimize`。
+///
+/// 检测 Lambda body 中的尾位置函数调用，将其包装为 `Lambda(thunk=true, body=Apply(...))`。
+/// 求值时 apply 通过 trampoline 循环展开 thunk，使尾递归不增长调用栈，
+/// 从而让 `tail-recursion/case007`（6555 层互递归）能在 max_depth=500 下完成。
+///
+/// 尾位置判定（与 jsonata-js 一致）：
+/// - Apply（函数调用，非谓词）→ 尾调用，包装为 thunk
+/// - Conditional（三元）→ 对 then/else 分支递归 TCO
+/// - Block → 对最后一个表达式递归 TCO
+/// - 其他 → 不变
+fn tail_call_optimize(expr : @ast.Ast) -> @ast.Ast {
+  match expr {
+    @ast.Ast::Apply(..) =>
+      // 谓词中的函数调用（如 `foo[bar()]`）不是尾调用，不优化
+      // 这里简单处理：所有顶层 Apply 都视为尾调用（与 jsonata-js parser 一致，
+      // jsonata-js 在 processAST 中对 lambda body 的 function 节点做 TCO）
+      @ast.Ast::Lambda(params=[], body=expr, signature=None, thunk=true)
+    @ast.Ast::Conditional(condition~, consequent~, alternate~) => {
+      let consequent2 = tail_call_optimize(consequent)
+      let alternate2 = match alternate {
+        Some(alt) => Some(tail_call_optimize(alt))
+        None => None
+      }
+      @ast.Ast::Conditional(
+        condition~,
+        consequent=consequent2,
+        alternate=alternate2,
+      )
+    }
+    @ast.Ast::Block(exprs) => {
+      if exprs.length() == 0 {
+        return expr
+      }
+      let out : Array[@ast.Ast] = []
+      for i, e in exprs {
+        if i == exprs.length() - 1 {
+          out.push(tail_call_optimize(e))
+        } else {
+          out.push(e)
+        }
+      }
+      @ast.Ast::Block(out)
+    }
+    _ => expr
+  }
 }
 
 ///|

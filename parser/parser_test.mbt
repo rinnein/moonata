@@ -841,6 +841,7 @@ test "解析：函数调用" {
       #|      params=["x"],
       #|      body=Binary(op="*", lhs=Var("x"), rhs=Number(2)),
       #|      signature=None,
+      #|      thunk=false,
       #|    ),
       #|  ],
       #|)
@@ -853,7 +854,7 @@ test "解析：Lambda" {
   debug_inspect(
     parse_str("function($x) { $x }"),
     content=(
-      #|Lambda(params=["x"], body=Var("x"), signature=None)
+      #|Lambda(params=["x"], body=Var("x"), signature=None, thunk=false)
     ),
   )
   debug_inspect(
@@ -863,13 +864,19 @@ test "解析：Lambda" {
       #|  params=["a", "b"],
       #|  body=Binary(op="+", lhs=Var("a"), rhs=Var("b")),
       #|  signature=None,
+      #|  thunk=false,
       #|)
     ),
   )
   debug_inspect(
     parse_str("λ($x)<n:n>{ $x }"),
     content=(
-      #|Lambda(params=["x"], body=Var("x"), signature=Some("<n:n>"))
+      #|Lambda(
+      #|  params=["x"],
+      #|  body=Var("x"),
+      #|  signature=Some("<n:n>"),
+      #|  thunk=false,
+      #|)
     ),
   )
   debug_inspect(
@@ -888,7 +895,12 @@ test "解析：Lambda" {
       #|    {
       #|      kind: Map(
       #|        Apply(
-      #|          func=Lambda(params=["x"], body=Var("x"), signature=Some("<n:n>")),
+      #|          func=Lambda(
+      #|            params=["x"],
+      #|            body=Var("x"),
+      #|            signature=Some("<n:n>"),
+      #|            thunk=false,
+      #|          ),
       #|          args=[Var("")],
       #|        ),
       #|      ),

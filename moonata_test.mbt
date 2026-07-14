@@ -2614,3 +2614,17 @@ test "官方套件：matchers case000 $match with function matcher" {
 /// （`python3 scripts/jsonata_official_audit.py --group tail-recursion`）。
 /// moon test 运行在 WASM 目标，栈深度远小于 native，无法安全触发 U1001 路径
 /// 而不引发 RangeError；故此处不直接断言，仅保留对 native 审计的引用说明。
+
+///|
+test "官方套件：tail-recursion case003 尾递归 factorial(5) 返回 120" {
+  // 验证 TCO trampoline 正确展开尾递归：$iter($n-1, $n*$acc) 在尾位置
+  let expr = "(  $factorial := function($n){(    $iter := function($n, $acc) {      $n = 0 ? $acc : $iter($n - 1, $n * $acc)    };    $iter($n, 1)  )};  $factorial(5)) "
+  let result = evaluate(expr, Json::null())
+  assert_true(result == Json::number(120.0))
+}
+
+///|
+test "官方套件：tail-recursion case000 空函数调用返回 undefined" {
+  let result = evaluate("(  $f := function($n){()};  $f(1)  ) ", Json::null())
+  assert_true(result == Json::null())
+}
