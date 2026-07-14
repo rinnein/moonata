@@ -136,19 +136,33 @@ skip_reasons
 下方固定快照仍是旧口径下的历史记录；本轮脚本升级后，`skip` 分类会更细，待下一次复跑官方审计后再刷新这里的数字。
 
 
-当前固定快照（2026-07-15，matchers T1010 + tail-recursion U1001 (infinite recursion) + Lambda depth propagation，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-15，dataset:null → undefined 语义对齐 + $join/$split/$map 严格签名校验，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1667 pass 1664 fail 3 skip 15
+eligible 1667 pass 1665 fail 2 skip 15
 top_failures
-function-string 1
 matchers 1
 tail-recursion 1
 skip_reasons
 no_expected_outcome 15
 ```
 
-本轮修复（matchers T1010 + tail-recursion U1001 + Lambda depth propagation）：
+本轮修复（dataset:null → undefined 语义对齐 + $join/$split/$map 严格签名校验）：
+- 提交：整体 pass 1664→1665 (+1)，fail 3→2 (-1)，通过率 99.8%→99.9%
+- 门禁：`moon check` 0e0w，`moon test` 286→290 passed（+4 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Audit: `scripts/jsonata_official_audit.py` 的 `data_for` 返回 `use_undefined` 标志，当 case 无内联 `data` 且 `dataset` 为 `null` 或缺失时设为 `True`，对齐 jsonata-js `run-test-suite.js#resolveDataset` 中 `dataset === null → undefined` 的语义；`run_case` 在 `use_undefined=True` 时调用 CLI `--no-data` 标志（替代写 `null` 到临时文件），使根上下文为 `Undefined` 而非 `Json::Null`
+  - Functions: `$join` 启用复杂签名 `a<s>s?` 并关闭 `contextual`，对齐 jsonata-js `<a<s>s?:s>`——0 参调用（无论上下文是否定义）由 `validate_args` 抛 T0410，而非 `apply_context_argument` 前置上下文后 silent 返回 undefined；删除冗余的 null/类型手工校验，保留 T0412 字符串元素校验
+  - Functions: `$split` 启用复杂签名 `s-(sf)n?` 并关闭 `contextual`，对齐 jsonata-js `<s-(sf)n?:a<s>>`——`$split(12345)` 等首参非字符串场景由签名校验抛 T0410，而非前置上下文导致用户实参偏移到 separator 位置后 silent 返回 undefined；保留 D3020 负 limit 与 matcher 协议路径
+  - Functions: `$split_regex` 的 limit 判定从 `args.length() > 2` 改为 `args.length() > 2 && !args[2].is_undefined()`，因为复杂签名会为可选参数 `n?` 自动补齐 `Undefined`，原判定会误把 Undefined 当作 `value_to_int → 0` 触发空数组返回
+  - Functions: `$map` 关闭 `contextual`（保留签名 `af`），对齐 jsonata-js `<af>`——`$map($add)` 单参调用由签名校验抛 T0410，而非前置上下文后进入函数体；2 参调用与 `~>` 链式调用行为不变
+  - Tests: 新增 4 个回归断言——`$string()` undefined 上下文返回 undefined、`$join()`/`$split(12345)`/`$map($add)` undefined 上下文抛 T0410
+- 修复效果：`function-string/case022` 由 mismatch → pass（`$string()` + undefined 上下文返回 undefined），`function-join/case011`、`function-split/case017`、`hof-map/case001` 由 silent undefined → T0410 pass；本轮 audit 脚本语义对齐 jsonata-js 后这三个 case 不再"虚假通过"
+- 剩余重点：
+  - `matchers/case000`：`$match(str, matcherFn)` 期望通过 matcher 协议迭代返回多匹配数组；当前对象构造器无法保留函数值字段（`{next: function(){...}}` 中的 `next` 会被 `json_for_constructor` 序列化为空字符串），导致无法从匹配对象还原 `next` 句柄迭代；修复需扩展对象构造器以保留 `JsonataValue::Func` 字段，留待后续轮次
+  - `tail-recursion/case002`：`$factorial(100)` 期望 U1001（jsonata-js test runner 设 `maxDepth=302`，jsonata-js 每次进入 `evaluate()` 即递增 depth，100 层 factorial 累计 ~300+ 次 evaluate 调用）；本实现 `depth` 仅在 `with_depth` 调用点递增（函数 invoke / 谓词 / 路径步等），100 层 factorial 仅累积 ~100 depth，远低于 `max_depth=8000`；修复需将 depth 计数下沉到 `eval` 入口，影响面较大，留待后续轮次
+
+上一轮修复（matchers T1010 + tail-recursion U1001 + Lambda depth propagation）：
 - 提交：整体 pass 1661→1664 (+3)，fail 6→3 (-3)，通过率 99.6%→99.8%
 - 门禁：`moon check` 0e0w，`moon test` 285→286 passed（+1 新增回归断言；U1001/互递归 case007 通过 native CLI 审计脚本验证，WASM 栈深不足故不在 moon test 中直接断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：

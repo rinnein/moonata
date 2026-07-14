@@ -60,55 +60,47 @@ fn register_regex_functions(ctx : @value.EvalContext) -> Unit {
   register(ctx, "split_regex", arity=2, invoke=fn(args, _ctx) {
     split_regex(args)
   })
-  register(ctx, "split", arity=2, invoke=(args, ctx) => {
-    if args.length() >= 2 {
-      match args[0] {
-        @value.JsonataValue::Undefined => return @value.JsonataValue::Undefined
-        _ => ()
+  // $split(str, separator, limit?)
+  // 对齐 jsonata-js `<s-(sf)n?:a<s>>`：首参字符串（context-optional），
+  // 第二参为字符串或函数（matcher 协议），第三参可选非负整数 limit。
+  // 关闭 contextual：由签名 `-` 修饰符自行处理上下文替换，避免 apply_context_argument
+  // 在参数不足时前置上下文导致用户实参偏移（function-split/case017 $split(12345) 应抛
+  // T0410 而非 silently 返回 undefined）。
+  register(
+    ctx,
+    "split",
+    arity=3,
+    signature=Some("s-(sf)n?"),
+    contextual=false,
+    invoke=(args, ctx) => {
+      // 签名校验后，args[0] 仍可能因 `-` 上下文替换为 undefined（用户 0 参且上下文未定义）
+      if args[0].is_undefined() {
+        return @value.JsonataValue::Undefined
       }
-      match args[0] {
-        @value.JsonataValue::Json(Json::String(_)) => ()
-        _ =>
-          raise @error.runtime_error(
-            "T0410: Arguments are not of expected type",
-          )
-      }
-      match args[1] {
-        @value.JsonataValue::Json(Json::String(_)) => ()
-        @value.JsonataValue::Func(_) => ()
-        @value.JsonataValue::Regex(_) => ()
-        _ =>
-          raise @error.runtime_error(
-            "T0410: Arguments are not of expected type",
-          )
-      }
-      if args.length() > 2 {
+      // D3020: 负 limit（签名仅校验类型，不校验范围）
+      if args.length() > 2 && !args[2].is_undefined() {
         match args[2] {
-          @value.JsonataValue::Json(Json::Null) =>
-            raise @error.runtime_error(
-              "T0410: Arguments are not of expected type",
-            )
           @value.JsonataValue::Json(Json::Number(n, ..)) =>
             if n < 0.0 {
-              raise @error.runtime_error("D3020: Negative limit")
+              raise @error.runtime_error(
+                "D3020: Third argument of split function must evaluate to a positive number",
+                code=Some("D3020"),
+              )
             }
-          _ =>
-            raise @error.runtime_error(
-              "T0410: Arguments are not of expected type",
-            )
+          _ => ()
         }
       }
-    }
-    // 当 separator 为函数时，走 matcher 协议（对齐 jsonata-js evaluateMatcher）。
-    // 调用 matcher(str) 后校验返回结构：必须是 undefined 或包含 start/end/groups/next
-    // 至少其一的对象；否则抛 T1010（对齐 jsonata-js T1010 错误码）。
-    match args[1] {
-      @value.JsonataValue::Func(f) =>
-        return split_with_matcher(args[0], f, args, ctx)
-      _ => ()
-    }
-    split_regex(args)
-  })
+      // 当 separator 为函数时，走 matcher 协议（对齐 jsonata-js evaluateMatcher）。
+      // 调用 matcher(str) 后校验返回结构：必须是 undefined 或包含 start/end/groups/next
+      // 至少其一的对象；否则抛 T1010（对齐 jsonata-js T1010 错误码）。
+      match args[1] {
+        @value.JsonataValue::Func(f) =>
+          return split_with_matcher(args[0], f, args, ctx)
+        _ => ()
+      }
+      split_regex(args)
+    },
+  )
   // $replace_regex(str, pattern, replacement) — 正则替换（首个匹配）
   register(ctx, "replace_regex", arity=3, invoke=fn(
     args,
@@ -289,7 +281,13 @@ fn chars_to_string_local(chars : Array[Char], start : Int, end : Int) -> String 
 ///|
 fn split_regex(args : Array[@value.JsonataValue]) -> @value.JsonataValue {
   let s = value_to_str(args[0])
-  let limit = if args.length() > 2 { value_to_int(args[2]) } else { -1 }
+  // 启用复杂签名后，validate_args 会为可选参数补齐 Undefined，
+  // 因此以 args[2] 是否为 Undefined 判断 limit 是否提供（而非 args.length）
+  let limit = if args.length() > 2 && !args[2].is_undefined() {
+    value_to_int(args[2])
+  } else {
+    -1
+  }
   if limit == 0 {
     return @value.JsonataValue::Json(Json::array([]))
   }

@@ -20,21 +20,21 @@
 | P8 | CLI 与集成 | moonata / cmd/main | 2 | 4 | ✅ 完成（CLI native 参数模式可用） |
 | P9 | 语义修复与函数补全 | evaluator / functions / value | 5 | 12 | ✅ 完成 |
 | P10 | 验收收尾与兼容性补齐 | value / evaluator / functions / docs | 4 | 7 | ✅ 完成 |
-| P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | 🟡 持续推进（1664/1667 通过） |
+| P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | 🟡 持续推进（1665/1667 通过） |
 | 合计 | | | **26** | **66** | |
 
-> 当前固定快照（2026-07-15，matchers T1010 + tail-recursion U1001 (infinite recursion) + Lambda depth propagation，使用 `scripts/jsonata_official_audit.py` 审计）：
+> 当前固定快照（2026-07-15，dataset:null → undefined 语义对齐 + $join/$split/$map 严格签名校验，使用 `scripts/jsonata_official_audit.py` 审计）：
 >
-> - `moon test` 为 286/286 通过；`moon check` 0 warnings；`moon info`、`moon fmt` 与 native CLI 构建均通过。
-> - JSONata 官方可比对审计为 `eligible 1667 / pass 1664 / fail 3 / skip 15`（通过率 99.8%）。
-> - Top failures：`function-string` 1、`matchers` 1、`tail-recursion` 1；skip 原因：`no_expected_outcome` 15。
+> - `moon test` 为 290/290 通过；`moon check` 0 warnings；`moon info`、`moon fmt` 与 native CLI 构建均通过。
+> - JSONata 官方可比对审计为 `eligible 1667 / pass 1665 / fail 2 / skip 15`（通过率 99.9%）。
+> - Top failures：`matchers` 1、`tail-recursion` 1；skip 原因：`no_expected_outcome` 15。
 > - 修复内容：
->   - Value: `EvalContext::enter` 抛出的 `GuardrailError` 携带 `code=Some("U1001")`，对齐 jsonata-js 栈溢出错误码
->   - Value: `default_max_depth` 从 1000 提升到 8000，覆盖 `tail-recursion/case007` 的 6555 层互递归
->   - Value: 新增 `EvalContext::sync_depth_from(other)` 方法
->   - Evaluator: `eval_lambda` invoke 中将 caller 的 `depth` 同步到 `call_ctx`，修复递归调用永远不超过 `max_depth` 的护栏失效问题（`tail-recursion/case005`/`case006` 之前以 SIGSEGV 退出而非抛 U1001 的根因）
->   - Functions: `$split` 在 separator 为函数时走 matcher 协议，新增 `validate_matcher_result` 校验返回值结构（T1010），对齐 jsonata-js `evaluateMatcher`
-> - Tests: 新增 matchers T1010 回归断言（`$split('some text', $uppercase)` 抛 T1010）；U1001/互递归 case007 通过 native CLI 审计脚本验证（WASM 栈深不足不在 moon test 中直接断言）
+>   - Audit: `scripts/jsonata_official_audit.py` 的 `data_for` 返回 `use_undefined` 标志，对齐 jsonata-js `dataset === null → undefined` 语义；`run_case` 在 `use_undefined=True` 时调用 CLI `--no-data` 标志
+>   - Functions: `$join` 启用复杂签名 `a<s>s?` 并关闭 `contextual`，0 参调用由 `validate_args` 抛 T0410
+>   - Functions: `$split` 启用复杂签名 `s-(sf)n?` 并关闭 `contextual`，首参非字符串场景抛 T0410
+>   - Functions: `$split_regex` 的 limit 判定改为 `!args[2].is_undefined()`，避免复杂签名补齐的 Undefined 被误当作 0
+>   - Functions: `$map` 关闭 `contextual`，单参调用由签名校验抛 T0410
+> - Tests: 新增 4 个回归断言——`$string()` undefined 上下文返回 undefined、`$join()`/`$split(12345)`/`$map($add)` undefined 上下文抛 T0410
 
 ### 1.1 当前暂停边界
 
@@ -42,16 +42,8 @@ P11 已完成日期时间 picture 修复、Lambda 签名语法与范围表达式
 
 | 排名 | 官方 group | 失败数 |
 | --- | --- | --- |
-| 1 | `object-constructor` | 5 |
-| 2 | `hof-reduce` | 3 |
-| 3 | `regex` | 3 |
-| 4 | `tail-recursion` | 3 |
-| 5 | `transforms` | 3 |
-| 6 | `hof-map` | 2 |
-| 7 | `matchers` | 2 |
-| 8 | `partial-application` | 2 |
-| 9 | `token-conversion` | 2 |
-| 10 | `errors` | 1 |
+| 1 | `matchers` | 1 |
+| 2 | `tail-recursion` | 1 |
 
 跳过项仅表示当前 CLI 审计 harness 无法直接比较，不表示通过或失败：`no_expected_outcome 15`。
 

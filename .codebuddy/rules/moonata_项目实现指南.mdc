@@ -126,12 +126,11 @@ _build/native/debug/build/cmd/main/main.exe '<expr>' --file '<tmp-json-data>'
 - 失败最多的前 10 个 group。
 - skip 原因计数。
 
-当前固定快照（2026-07-15，matchers T1010 + tail-recursion U1001 (infinite recursion) + Lambda depth propagation，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-15，dataset:null → undefined 语义对齐 + $join/$split/$map 严格签名校验，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1667 pass 1664 fail 3 skip 15
+eligible 1667 pass 1665 fail 2 skip 15
 top_failures
-function-string 1
 matchers 1
 tail-recursion 1
 skip_reasons

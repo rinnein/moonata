@@ -935,3 +935,69 @@ test "partial-application: T1007/T1008 unknown function with placeholder" {
     error_has_code(eval_fn_catch("unknown(?)", Json::null()), "T1008"),
   )
 }
+
+///|
+test "undefined-context: $string() returns undefined" {
+  // function-string/case022: $string() with undefined context → undefined
+  // 对齐 jsonata-js `dataset: null` → undefined 语义
+  let ctx = @value.EvalContext::new(@value.JsonataValue::Undefined)
+  @functions.register_builtins(ctx)
+  let r = try {
+    let tokens = @lexer.lex("$string()")
+    let ast = @parser.parse(tokens)
+    @evaluator.eval(ast, ctx)
+  } catch {
+    _ => @value.JsonataValue::Undefined
+  }
+  assert_true(r.is_undefined())
+}
+
+///|
+test "function-join: T0410 insufficient args under undefined context" {
+  // function-join/case011: $join() with undefined context → T0410
+  let ctx = @value.EvalContext::new(@value.JsonataValue::Undefined)
+  @functions.register_builtins(ctx)
+  let err = try {
+    let tokens = @lexer.lex("$join()")
+    let ast = @parser.parse(tokens)
+    ignore(@evaluator.eval(ast, ctx))
+    None
+  } catch {
+    e => Some(e)
+  }
+  assert_true(error_has_code(err, "T0410"))
+}
+
+///|
+test "function-split: T0410 non-string first arg under undefined context" {
+  // function-split/case017: $split(12345) with undefined context → T0410
+  let ctx = @value.EvalContext::new(@value.JsonataValue::Undefined)
+  @functions.register_builtins(ctx)
+  let err = try {
+    let tokens = @lexer.lex("$split(12345)")
+    let ast = @parser.parse(tokens)
+    ignore(@evaluator.eval(ast, ctx))
+    None
+  } catch {
+    e => Some(e)
+  }
+  assert_true(error_has_code(err, "T0410"))
+}
+
+///|
+test "hof-map: T0410 insufficient args under undefined context" {
+  // hof-map/case001: $map($add) with undefined context → T0410
+  let ctx = @value.EvalContext::new(@value.JsonataValue::Undefined)
+  @functions.register_builtins(ctx)
+  let err = try {
+    let tokens = @lexer.lex(
+      "(  $data := {    \"one\": [1,2,3,4,5],    \"two\": [5,4,3,2,1]  };  $add := function($x){$x*$x};  $map($add) )",
+    )
+    let ast = @parser.parse(tokens)
+    ignore(@evaluator.eval(ast, ctx))
+    None
+  } catch {
+    e => Some(e)
+  }
+  assert_true(error_has_code(err, "T0410"))
+}

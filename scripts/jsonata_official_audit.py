@@ -191,11 +191,24 @@ def load_text_from_candidates(candidates: list[Path]) -> tuple[bool, str, str]:
     return False, "", f"missing-file: {tried}"
 
 
-def data_for(case: dict[str, Any], source_dir: Path, suite_root: Path) -> tuple[bool, Any, str]:
+def data_for(
+    case: dict[str, Any], source_dir: Path, suite_root: Path
+) -> tuple[bool, Any, str, bool]:
+    """Resolve the input data for a case.
+
+    Returns ``(ok, data, reason, use_undefined)``.
+
+    ``use_undefined`` is True when the case has no inline ``data`` and either
+    no ``dataset`` field or ``dataset: null``. This matches jsonata-js
+    ``run-test-suite.js#resolveDataset`` which maps ``dataset === null`` to JS
+    ``undefined`` rather than JSON ``null``.
+    """
     if "data" in case:
-        return True, case["data"], ""
+        # Explicit inline data (may itself be null). Match jsonata-js by
+        # passing the actual value through, not undefined.
+        return True, case["data"], "", False
     dataset = case.get("dataset")
-    if dataset:
+    if dataset is not None and dataset != "":
         candidates = resolve_relative_candidates(
             str(dataset),
             roots=[source_dir, source_dir.parent, suite_root, suite_root / "datasets"],
@@ -204,10 +217,13 @@ def data_for(case: dict[str, Any], source_dir: Path, suite_root: Path) -> tuple[
         for dataset_path in candidates:
             if dataset_path.exists() and dataset_path.is_file():
                 with dataset_path.open(encoding="utf-8") as handle:
-                    return True, json.load(handle), ""
+                    return True, json.load(handle), "", False
         tried = ", ".join(str(path) for path in candidates)
-        return False, None, f"missing-dataset: {tried}"
-    return True, None, ""
+        return False, None, f"missing-dataset: {tried}", False
+    # No inline data and no named dataset: align with jsonata-js semantics
+    # (dataset: null → undefined). The CLI accepts `--no-data` to evaluate
+    # against an undefined root context.
+    return True, None, "", True
 
 
 def expr_for(case: dict[str, Any], source_dir: Path, suite_root: Path) -> tuple[bool, str, str]:
@@ -269,34 +285,54 @@ def run_case(
     expr: str,
     data: Any,
     timeout: float,
+    use_undefined: bool = False,
 ) -> RunResult:
-    with tempfile.NamedTemporaryFile(
-        "w",
-        suffix=".json",
-        encoding="utf-8",
-        delete=False,
-    ) as handle:
-        json.dump(data, handle, ensure_ascii=False)
-        data_path = handle.name
-
-    try:
-        proc = subprocess.run(
-            [str(exe), expr, "--file", data_path],
-            text=True,
-            capture_output=True,
-            timeout=timeout,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        return RunResult(ok=False, value=None, detail="timeout", stdout="", stderr="")
-    finally:
+    # When the case maps to undefined input (jsonata-js `dataset: null` →
+    # undefined), invoke the CLI with `--no-data` so the root context is
+    # undefined rather than JSON null.
+    if use_undefined:
+        cmd = [str(exe), expr, "--no-data"]
         try:
-            os.unlink(data_path)
-        except OSError:
-            pass
+            proc = subprocess.run(
+                cmd,
+                text=True,
+                capture_output=True,
+                timeout=timeout,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            return RunResult(ok=False, value=None, detail="timeout", stdout="", stderr="")
+        stdout = proc.stdout.strip()
+        stderr = proc.stderr.strip()
+    else:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            suffix=".json",
+            encoding="utf-8",
+            delete=False,
+        ) as handle:
+            json.dump(data, handle, ensure_ascii=False)
+            data_path = handle.name
 
-    stdout = proc.stdout.strip()
-    stderr = proc.stderr.strip()
+        try:
+            proc = subprocess.run(
+                [str(exe), expr, "--file", data_path],
+                text=True,
+                capture_output=True,
+                timeout=timeout,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            return RunResult(ok=False, value=None, detail="timeout", stdout="", stderr="")
+        finally:
+            try:
+                os.unlink(data_path)
+            except OSError:
+                pass
+
+        stdout = proc.stdout.strip()
+        stderr = proc.stderr.strip()
+
     if proc.returncode != 0:
         detail = stderr or stdout
         return RunResult(
@@ -375,7 +411,9 @@ def audit(args: argparse.Namespace) -> AuditResult:
                 skip_by_reason[expr_reason] += 1
                 continue
 
-            data_ok, data, data_reason = data_for(case, entry.group_file.parent, suite_root)
+            data_ok, data, data_reason, use_undefined = data_for(
+                case, entry.group_file.parent, suite_root
+            )
             if not data_ok:
                 skipped += 1
                 skip_by_reason[data_reason] += 1
@@ -394,6 +432,7 @@ def audit(args: argparse.Namespace) -> AuditResult:
                 expr=wrapped_expr,
                 data=data,
                 timeout=resolve_timeout(case, args.timeout),
+                use_undefined=use_undefined,
             )
 
             if expected_kind in {"result", "undefined"}:

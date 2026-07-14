@@ -11,8 +11,10 @@ fn hof_callback_args(
 ///|
 fn register_array_functions(ctx : @value.EvalContext) -> Unit {
   // $map
-  // 对齐 jsonata-js `<af>`：首参必须是数组，第二参必须是函数
-  register(ctx, "map", arity=2, signature=Some("af"), invoke=fn(
+  // 对齐 jsonata-js `<af>`：首参必须是数组，第二参必须是函数。
+  // 关闭 contextual：1 参调用（无论上下文是否定义）抛 T0410，
+  // 对齐 jsonata-js signature.validate 行为（hof-map/case001）。
+  register(ctx, "map", arity=2, signature=Some("af"), contextual=false, invoke=fn(
     args : Array[@value.JsonataValue],
     ctx : @value.EvalContext,
   ) -> @value.JsonataValue raise @error.JsonataError {
@@ -238,23 +240,15 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
     @value.JsonataValue::Json(Json::array(arr))
   })
   // $join
-  register(ctx, "join", arity=1, invoke=(args, _ctx) => {
+  // 对齐 jsonata-js `<a<s>s?:s>`：首参为字符串数组（标量自动包装为单元素数组），
+  // 第二参可选分隔符。关闭 contextual，由签名严格校验参数数量与类型——
+  // 0 参调用（无论上下文是否定义）抛 T0410，对齐 jsonata-js signature.validate 行为。
+  register(ctx, "join", arity=2, signature=Some("a<s>s?"), contextual=false, invoke=(
+    args,
+    _ctx,
+  ) => {
     if args[0].is_undefined() {
       return @value.JsonataValue::Undefined
-    }
-    // Null input (e.g. from context) → T0410
-    if args[0] is @value.JsonataValue::Json(Json::Null) {
-      raise @error.runtime_error("T0410: Arguments are not of expected type")
-    }
-    // Separator must be string if provided; undefined treated as not provided
-    if args.length() > 1 && !args[1].is_undefined() {
-      match args[1] {
-        @value.JsonataValue::Json(Json::String(_)) => ()
-        _ =>
-          raise @error.runtime_error(
-            "T0410: Arguments are not of expected type",
-          )
-      }
     }
     let items = args[0].to_array()
     // T0412: if elements exist but none are strings
@@ -267,10 +261,17 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
         }
       }
       if !has_string {
-        raise @error.runtime_error("T0412: No strings found in the array")
+        raise @error.runtime_error(
+          "T0412: No strings found in the array",
+          code=Some("T0412"),
+        )
       }
     }
-    let sep = if args.length() > 1 { value_to_str(args[1]) } else { "" }
+    let sep = if args.length() > 1 && !args[1].is_undefined() {
+      value_to_str(args[1])
+    } else {
+      ""
+    }
     let parts : Array[String] = []
     for item in items {
       parts.push(value_to_str(item))
