@@ -11,10 +11,14 @@ fn hof_callback_args(
 ///|
 fn register_array_functions(ctx : @value.EvalContext) -> Unit {
   // $map
-  register(ctx, "map", arity=2, invoke=fn(
+  // 对齐 jsonata-js `<af>`：首参必须是数组，第二参必须是函数
+  register(ctx, "map", arity=2, signature=Some("af"), invoke=fn(
     args : Array[@value.JsonataValue],
     ctx : @value.EvalContext,
   ) -> @value.JsonataValue raise @error.JsonataError {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     let items = args[0].to_array()
     let f = match args[1] {
       @value.JsonataValue::Func(f) => f
@@ -56,22 +60,42 @@ fn register_array_functions(ctx : @value.EvalContext) -> Unit {
     @value.JsonataValue::sequence(results)
   })
   // $reduce(array, func, init?) — 初始值可选
+  // 对齐 jsonata-js foldLeft：回调 arity>=3 注入 index，arity>=4 注入 source array；
+  // 回调 arity<2 抛 D3050。
   register(ctx, "reduce", arity=2, invoke=fn(
     args : Array[@value.JsonataValue],
     ctx : @value.EvalContext,
   ) -> @value.JsonataValue raise @error.JsonataError {
+    if args[0].is_undefined() {
+      return @value.JsonataValue::Undefined
+    }
     let items = args[0].to_array()
     let f = match args[1] {
       @value.JsonataValue::Func(f) => f
       _ => return @value.JsonataValue::Undefined
+    }
+    // D3050: 回调 arity 必须 >= 2
+    if f.arity < 2 {
+      raise @error.runtime_error(
+        "D3050: The second argument to $reduce should be a function of at least arity 2",
+        code=Some("D3050"),
+      )
     }
     if items.length() == 0 {
       return @value.JsonataValue::Undefined
     }
     let mut acc = if args.length() > 2 { args[2] } else { items[0] }
     let start = if args.length() > 2 { 0 } else { 1 }
+    let source = json_array_value(items)
     for i in start..<items.length() {
-      acc = (f.invoke)([acc, items[i]], ctx)
+      let cb_args : Array[@value.JsonataValue] = [acc, items[i]]
+      if f.arity >= 3 {
+        cb_args.push(@value.JsonataValue::Json(Json::number(i.to_double())))
+      }
+      if f.arity >= 4 {
+        cb_args.push(source)
+      }
+      acc = (f.invoke)(cb_args, ctx)
     }
     acc
   })

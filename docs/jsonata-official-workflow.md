@@ -136,26 +136,37 @@ skip_reasons
 下方固定快照仍是旧口径下的历史记录；本轮脚本升级后，`skip` 分类会更细，待下一次复跑官方审计后再刷新这里的数字。
 
 
-当前固定快照（2026-07-14，D3012/D1004/S0202 修复 + zero warnings，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-14，transforms T2011/T2012 + token-conversion S0201/S0213 + hof T0410/D3050 + partial-application T1007/T1008 + sort 单例提升，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1667 pass 1640 fail 27 skip 15
+eligible 1667 pass 1653 fail 14 skip 15
 top_failures
 object-constructor 5
-hof-reduce 3
 tail-recursion 3
-transforms 3
-hof-map 2
 matchers 2
-partial-application 2
-token-conversion 2
-function-sort 1
 function-string 1
+function-sum 1
+function-tomillis 1
+variables 1
 skip_reasons
 no_expected_outcome 15
 ```
 
-本轮修复（D3012 replace 回调非字符串 + D1004 零长度匹配 + S0202 非操作数位未终止字符串 + 34 ambiguous_braces warnings）：
+本轮修复（transforms T2011/T2012 + token-conversion S0201/S0213 + hof T0410/D3050 + partial-application T1007/T1008 + sort 单例提升）：
+- 提交：整体 pass 1640→1653 (+13)，fail 27→14 (-13)，通过率 98.4%→99.2%
+- 门禁：`moon check` 0e0w，`moon test` 271→278 passed（+7 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Evaluator: `apply_transform_match` 校验 update 必须为 Object（非 undefined 时抛 T2011），`extract_delete_keys` 校验 delete 必须为 String/String-Array（非 undefined 时抛 T2012），对齐 jsonata-js `evaluateTransformExpression`
+  - Parser: `.` 后跟 Number/Boolean/Null 时，若后续无 token 抛 S0213（字面量不能作为路径步），若后续有非路径 token 抛 S0201（意外的尾部 token），对齐 jsonata-js processAST 的 S0213 检查与顶层 S0201 残留 token 检查
+  - Functions: `$map` 启用复杂签名 `af`，首参非 array 抛 T0410（hof-map/case001）；contextual 行为保留以兼容 1 参调用
+  - Functions: `$reduce` 新增 D3050 校验（回调 arity<2 抛 D3050），并按回调 arity 注入 index（arity>=3）与 source array（arity>=4），对齐 jsonata-js foldLeft + hofFuncArgs
+  - Functions: `$string` 允许 3 参（HOF 回调 (item, index, source)），超过 3 参抛 T0410；args.length==3 时跳过 args[1] 的布尔校验
+  - Evaluator: `compare_op` 在比较前先 `lift_singleton`，修复 `$a.(Price * Quantity) > $b.(Price * Quantity)` 等单元素序列参与比较时抛 T2010 的问题
+  - Evaluator: 偏应用 `?` 调用未定义函数时分情况：已知函数名（建议补 `$`）抛 T1007，完全未知名抛 T1008；普通调用保留 T1005/T1006
+  - Tests: 新增 T2011/T2012/S0201/S0213/D3050/T0410/T1007/T1008 共 7 个回归断言（含 `eval_fn_catch`/`error_has_code` 复用）
+- 修复效果：`transforms` group 12→15 pass（全绿，-3 fail），`token-conversion` 2→4 pass（全绿，-2 fail），`hof-map` 10→12 pass（全绿，-2 fail），`hof-reduce` 8→11 pass（全绿，-3 fail），`partial-application` 3→5 pass（全绿，-2 fail），`function-sort` 10→11 pass（-1 fail）
+
+上一轮修复（D3012 replace 回调非字符串 + D1004 零长度匹配 + S0202 非操作数位未终止字符串 + 34 ambiguous_braces warnings）：
 - 提交：整体 pass 1636→1640 (+4)，fail 31→27 (-4)，通过率 98.2%→98.4%
 - 门禁：`moon check` 0e0w，`moon test` 271/271 passed（+3 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：

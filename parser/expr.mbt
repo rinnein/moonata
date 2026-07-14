@@ -598,6 +598,31 @@ fn Parser::parse_postfix(self : Parser) -> @ast.Ast raise @error.JsonataError {
               expr = append_step(expr, @ast.wildcard_step(recursive=true))
             }
           }
+          @lexer.TokenKind::Number(_)
+          | @lexer.TokenKind::Boolean(_)
+          | @lexer.TokenKind::Null => {
+            // 对齐 jsonata-js processAST：路径步为 number/boolean/null 时抛 S0213
+            // 但若 number 后还有无法作为路径继续的 token（如 ident），则由顶层
+            // 解析器抛 S0201（意外的尾部 token），匹配 jsonata-js 的"先解析再校验"顺序
+            let num_tok = self.peek()
+            let next_idx = self.pos + 1
+            let next_is_end = next_idx >= self.tokens.length()
+            if next_is_end {
+              raise @error.syntax_error(
+                "路径步不能是数字或字面量",
+                position=Some(num_tok.pos),
+                token=None,
+                code=Some("S0213"),
+              )
+            } else {
+              raise @error.syntax_error(
+                "意外的尾部 token",
+                position=Some(self.tokens[next_idx].pos),
+                token=Some(debug_tok(self.tokens[next_idx])),
+                code=Some("S0201"),
+              )
+            }
+          }
           _ =>
             raise @error.syntax_error(
               "路径点后期望标识符或 *",

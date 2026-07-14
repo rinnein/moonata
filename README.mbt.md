@@ -91,14 +91,14 @@ docs: update official test status
 
 ## 兼容性状态
 
-固定快照：2026-07-14，消除 ambiguous_braces 警告 + regex 错误处理对齐阶段。
+固定快照：2026-07-14，transforms T2011/T2012 + token-conversion S0201/S0213 + hof T0410/D3050 + partial-application T1007/T1008 + sort 单例提升阶段。
 
 ```text
-本地测试：moon test 271/271
-官方可比对审计：eligible 1667, pass 1640, fail 27, skip 15
-通过率：98.4%
+本地测试：moon test 278/278
+官方可比对审计：eligible 1667, pass 1653, fail 14, skip 15
+通过率：99.2%
 ```
 
-Top failures: object-constructor(5), hof-reduce(3), tail-recursion(3), transforms(3), hof-map(2), matchers(2), partial-application(2), token-conversion(2), function-sort(1), function-string(1)
+Top failures: object-constructor(5), tail-recursion(3), matchers(2), function-string(1), function-sum(1), function-tomillis(1), variables(1)
 
 官方测试集审计流程与跳过策略记录在 `docs/jsonata-official-workflow.md`。

@@ -1,16 +1,20 @@
 ///|
 fn register_type_functions(ctx : @value.EvalContext) -> Unit {
   // $string
+  // 对齐 jsonata-js `<x-b?:s>`：0 参时使用上下文作为首参；
+  // 1 参正常转换；2 参 pretty；3 参（HOF 回调 (item, index, source)）忽略 index/source。
   register(ctx, "string", arity=0, invoke=(args, ctx) => {
     let value = if args.length() == 0 { ctx.current() } else { args[0] }
-    if args.length() > 2 {
+    // HOF 回调 (item, index, source) 允许 3 个参数；超过 3 个抛 T0410
+    if args.length() > 3 {
       raise @error.runtime_error(
         "T0410: Arguments are not of expected type",
         code=Some("T0410"),
       )
     }
     // 第二参数（若提供）必须是布尔值
-    if args.length() > 1 && args.length() != 3 {
+    // args.length()==3 时是 HOF 回调的 index 参数，跳过布尔校验
+    if args.length() == 2 {
       match args[1] {
         @value.JsonataValue::Json(Json::True) => ()
         @value.JsonataValue::Json(Json::False) => ()
@@ -25,7 +29,8 @@ fn register_type_functions(ctx : @value.EvalContext) -> Unit {
     if value.is_undefined() {
       return @value.JsonataValue::Undefined
     }
-    let pretty = args.length() > 1 && value_to_bool(args[1])
+    // args.length()==3 时不使用 args[1] 作为 pretty（HOF 注入的 index）
+    let pretty = args.length() == 2 && value_to_bool(args[1])
     @value.JsonataValue::Json(Json::string(jsonata_string(value, pretty)))
   })
   // $number

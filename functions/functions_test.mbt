@@ -254,6 +254,10 @@ test "函数：$string $number $boolean" {
     Json::string("{\"function\":\"\",\"array\":[1,\"\"]}"),
   )
   assert_true(
+    eval_fn("$string($)", @json.parse("[4,true]")) == Json::string("[4,true]"),
+  )
+  // $string() 无参时使用上下文作为首参（对齐 jsonata-js `<x-b?:s>` 的 `-` 修饰符）
+  assert_true(
     eval_fn("$string()", @json.parse("[4,true]")) == Json::string("[4,true]"),
   )
   assert_true(eval_fn("$number(\"42\")", Json::null()) == Json::number(42.0))
@@ -846,5 +850,88 @@ test "lexer: S0202 unterminated string in non-operand position" {
   assert_eq(
     eval_error_code("$replace(\"foo\", \"o, \"rr\")", Json::null()),
     "S0202",
+  )
+}
+
+///|
+test "transforms: T2011 update must be object" {
+  // case009: update is a number, not object -> T2011
+  assert_true(
+    error_has_code(
+      eval_fn_catch(
+        "Account ~> |Order|5|",
+        @json.parse("{\"Account\":{\"Order\":[{\"OrderID\":\"o1\"}]}}"),
+      ),
+      "T2011",
+    ),
+  )
+  // case012: update is an array, not object -> T2011
+  assert_true(
+    error_has_code(
+      eval_fn_catch("{} ~> |$|['one', 'two', 'three']|", Json::null()),
+      "T2011",
+    ),
+  )
+}
+
+///|
+test "transforms: T2012 delete must be string or array of strings" {
+  // case010: update is {} (ok), delete is 5 (number) -> T2012
+  assert_true(
+    error_has_code(
+      eval_fn_catch(
+        "Account ~> |Order|{},5|",
+        @json.parse("{\"Account\":{\"Order\":[{\"OrderID\":\"o1\"}]}}"),
+      ),
+      "T2012",
+    ),
+  )
+}
+
+///|
+test "parser: S0201/S0213 number after path dot" {
+  // case002: $.7a - number followed by ident -> S0201 (unexpected trailing token)
+  assert_true(error_has_code(eval_fn_catch("$.7a", Json::null()), "S0201"))
+  // case003: $.7 - number at end of path -> S0213 (number not allowed as path step)
+  assert_true(error_has_code(eval_fn_catch("$.7", Json::null()), "S0213"))
+}
+
+///|
+test "hof-reduce: D3050 callback arity < 2" {
+  // case008: $reduce with function of arity 1 -> D3050
+  assert_true(
+    error_has_code(
+      eval_fn_catch(
+        "(  $seq := 1;  $reduce($seq, function($x){$x}))",
+        Json::null(),
+      ),
+      "D3050",
+    ),
+  )
+}
+
+///|
+test "hof-map: T0410 insufficient args" {
+  // case001: $map($add) with only 1 arg -> T0410
+  assert_true(
+    error_has_code(
+      eval_fn_catch(
+        "(  $data := {    \"one\": [1,2,3,4,5],    \"two\": [5,4,3,2,1]  };  $add := function($x){$x*$x};  $map($add) )  ",
+        Json::null(),
+      ),
+      "T0410",
+    ),
+  )
+}
+
+///|
+test "partial-application: T1007/T1008 unknown function with placeholder" {
+  // case003: substring(?, 0, ?) - known function name (suggest $) -> T1007
+  assert_true(
+    error_has_code(eval_fn_catch("substring(?, 0, ?)", Json::null()), "T1007"),
+  )
+  // case004: unknown(?) - truly unknown name -> T1008
+  assert_true(
+    error_has_code(eval_fn_catch("unknown(?)", Json::null()), "T1008"),
   )
 }

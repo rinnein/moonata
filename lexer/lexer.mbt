@@ -297,6 +297,7 @@ fn Lexer::lex_string(
     if self.pos >= self.len {
       // S0101: 未终止字符串（期待操作数位置，即独立字符串表达式）
       // S0202: 未终止字符串（非期待操作数位置，如标识符后的异常字符串）
+      // S0105: 未终止反引号字符串
       let code = if quote == '`' {
         "S0105"
       } else if expect_operand {
@@ -308,15 +309,7 @@ fn Lexer::lex_string(
         "未终止的字符串",
         position=Some(start),
         token=None,
-        code=Some(
-          if quote == '`' {
-            "S0105"
-          } else if expect_operand {
-            "S0101"
-          } else {
-            "S0202"
-          },
-        ),
+        code=Some(code),
       )
     }
     let c = match self.src.get_char(self.pos) {

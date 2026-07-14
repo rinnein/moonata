@@ -386,6 +386,9 @@ fn compare_op(
   rhs : @value.JsonataValue,
   op : String,
 ) -> @value.JsonataValue raise @error.JsonataError {
+  // 对齐 jsonata-js evaluateComparisonExpression：单元素序列先提升为标量
+  let lhs = lhs.lift_singleton()
+  let rhs = rhs.lift_singleton()
   // T2010: 两边都必须是可比较类型（undefined/string/number）
   if !is_comparable_value(lhs) || !is_comparable_value(rhs) {
     raise @error.runtime_error(
@@ -686,8 +689,10 @@ fn eval_apply(
       }
     }
     @value.JsonataValue::Undefined => {
-      // 区分 T1005（已知函数名但求值结果为 undefined）与 T1006（字段名未找到）：
-      // 检查该名称是否在绑定中注册为函数，若是则 T1005，否则 T1006
+      // 区分 T1005/T1006（普通调用）与 T1007/T1008（偏应用）：
+      // - 普通调用：已知函数名但求值结果为 undefined → T1005；非函数 → T1006
+      // - 偏应用 `?`：已知函数名 → T1007；非函数 → T1008
+      // 对齐 jsonata-js evaluateFunction 与 evaluatePartialApplication 的错误码分支
       let func_name = match func_ast {
         @ast.Ast::Path(steps) if steps.length() == 1 =>
           match steps[0].kind {
@@ -701,19 +706,31 @@ fn eval_apply(
           match ctx.lookup(name) {
             Some(@value.JsonataValue::Func(_)) =>
               raise @error.runtime_error(
-                "T1005: Unknown function: \{name}",
-                code=Some("T1005"),
+                if has_placeholder {
+                  "T1007: Attempted to partially apply a non-function. Did you mean $\{name}?"
+                } else {
+                  "T1005: Unknown function: \{name}"
+                },
+                code=Some(if has_placeholder { "T1007" } else { "T1005" }),
               )
             _ =>
               raise @error.runtime_error(
-                "T1006: Attempted to invoke a non-function",
-                code=Some("T1006"),
+                if has_placeholder {
+                  "T1008: Attempted to partially apply a non-function"
+                } else {
+                  "T1006: Attempted to invoke a non-function"
+                },
+                code=Some(if has_placeholder { "T1008" } else { "T1006" }),
               )
           }
         None =>
           raise @error.runtime_error(
-            "T1006: Attempted to invoke a non-function",
-            code=Some("T1006"),
+            if has_placeholder {
+              "T1008: Attempted to partially apply a non-function"
+            } else {
+              "T1006: Attempted to invoke a non-function"
+            },
+            code=Some(if has_placeholder { "T1008" } else { "T1006" }),
           )
       }
     }
@@ -1376,6 +1393,20 @@ fn apply_transform_match(
       let update_val = ctx.with_context(current=value, parent=value, fn() -> @value.JsonataValue raise @error.JsonataError {
         eval(update_ast, ctx)
       })
+      // T2011: update 必须是 object（undefined 跳过，对齐 jsonata-js）
+      match update_val {
+        @value.JsonataValue::Undefined => ()
+        @value.JsonataValue::Json(Json::Object(update_map)) =>
+          for k, v in update_map {
+            map.set(k, v)
+          }
+        _ =>
+          raise @error.runtime_error(
+            "T2011: The insert/update clause of the transform expression must evaluate to an object",
+            code=Some("T2011"),
+          )
+      }
+      // T2012: delete 必须是 string 或 string array（undefined 跳过）
       let delete_keys : Array[String] = match delete_ast {
         Some(d) =>
           ctx.with_context(current=value, parent=value, fn() -> Array[String] raise @error.JsonataError {
@@ -1383,14 +1414,6 @@ fn apply_transform_match(
             extract_delete_keys(dval)
           })
         None => []
-      }
-      // 合并 update（仅 Object 形式有效）
-      match update_val {
-        @value.JsonataValue::Json(Json::Object(update_map)) =>
-          for k, v in update_map {
-            map.set(k, v)
-          }
-        _ => ()
       }
       // 应用 delete
       for k in delete_keys {
@@ -1414,14 +1437,23 @@ fn apply_transform_match(
 ///|
 /// 从 delete 表达式求值结果提取字符串键列表。
 /// 支持字符串、字符串数组（Json::Array）与序列三种形式。
-fn extract_delete_keys(dval : @value.JsonataValue) -> Array[String] {
+/// 对齐 jsonata-js `isArrayOfStrings` 检查：非 string/array-of-strings 抛 T2012。
+fn extract_delete_keys(
+  dval : @value.JsonataValue,
+) -> Array[String] raise @error.JsonataError {
   match dval {
+    @value.JsonataValue::Undefined => []
+    @value.JsonataValue::Json(Json::String(s)) => [s]
     @value.JsonataValue::Sequence(arr) => {
       let keys : Array[String] = []
       for item in arr {
         match item {
           @value.JsonataValue::Json(Json::String(s)) => keys.push(s)
-          _ => continue
+          _ =>
+            raise @error.runtime_error(
+              "T2012: The delete clause of the transform expression must evaluate to a string or array of strings",
+              code=Some("T2012"),
+            )
         }
       }
       keys
@@ -1431,14 +1463,20 @@ fn extract_delete_keys(dval : @value.JsonataValue) -> Array[String] {
       for item in arr {
         match item {
           Json::String(s) => keys.push(s)
-          _ => continue
+          _ =>
+            raise @error.runtime_error(
+              "T2012: The delete clause of the transform expression must evaluate to a string or array of strings",
+              code=Some("T2012"),
+            )
         }
       }
       keys
     }
-    @value.JsonataValue::Json(Json::String(s)) => [s]
-    @value.JsonataValue::Undefined => []
-    _ => []
+    _ =>
+      raise @error.runtime_error(
+        "T2012: The delete clause of the transform expression must evaluate to a string or array of strings",
+        code=Some("T2012"),
+      )
   }
 }
 

@@ -20,14 +20,14 @@
 | P8 | CLI 与集成 | moonata / cmd/main | 2 | 4 | ✅ 完成（CLI native 参数模式可用） |
 | P9 | 语义修复与函数补全 | evaluator / functions / value | 5 | 12 | ✅ 完成 |
 | P10 | 验收收尾与兼容性补齐 | value / evaluator / functions / docs | 4 | 7 | ✅ 完成 |
-| P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | 🟡 持续推进（1639/1667 通过） |
+| P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | 🟡 持续推进（1653/1667 通过） |
 | 合计 | | | **26** | **66** | |
 
-> 当前固定快照（2026-07-14，D3012/D1004/S0202 + zero warnings，使用 `scripts/jsonata_official_audit.py` 审计）：
+> 当前固定快照（2026-07-14，transforms T2011/T2012 + token-conversion S0201/S0213 + hof T0410/D3050 + partial-application T1007/T1008 + sort 单例提升，使用 `scripts/jsonata_official_audit.py` 审计）：
 >
-> - `moon test` 为 271/271 通过；`moon check` 0 warnings；`moon info`、`moon fmt` 与 native CLI 构建均通过。
-> - JSONata 官方可比对审计为 `eligible 1667 / pass 1640 / fail 27 / skip 15`（通过率 98.4%）。
-> - Top failures：`object-constructor` 5、`hof-reduce` 3、`tail-recursion` 3、`transforms` 3、`hof-map` 2；skip 原因：`no_expected_outcome` 15。
+> - `moon test` 为 278/278 通过；`moon check` 0 warnings；`moon info`、`moon fmt` 与 native CLI 构建均通过。
+> - JSONata 官方可比对审计为 `eligible 1667 / pass 1653 / fail 14 / skip 15`（通过率 99.2%）。
+> - Top failures：`object-constructor` 5、`tail-recursion` 3、`matchers` 2、`function-string` 1、`function-sum` 1、`function-tomillis` 1、`variables` 1；skip 原因：`no_expected_outcome` 15。
 > - 修复内容：
 >   - Parser: `expect()` 在输入末尾抛 S0203（Expected ... before end of expression），非末尾仍抛 S0202（对齐 JSONata-js parser 的 `advance` 错误码分支）
 >   - Functions: `$replace` 启用复杂签名 `s(sf)(sf)n?`，严格校验参数数量与类型（T0410）；空 pattern 抛 D3010；负 limit 抛 D3011；可选 `n?` 缺省时 validate_args 追加的 Undefined 视为未提供

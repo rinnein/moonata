@@ -126,21 +126,18 @@ _build/native/debug/build/cmd/main/main.exe '<expr>' --file '<tmp-json-data>'
 - 失败最多的前 10 个 group。
 - skip 原因计数。
 
-当前固定快照（2026-07-14，D3012/D1004/S0202 修复 + zero warnings，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-14，transforms T2011/T2012 + token-conversion S0201/S0213 + hof T0410/D3050 + partial-application T1007/T1008 + sort 单例提升，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1667 pass 1640 fail 27 skip 15
+eligible 1667 pass 1653 fail 14 skip 15
 top_failures
 object-constructor 5
-hof-reduce 3
 tail-recursion 3
-transforms 3
-hof-map 2
 matchers 2
-partial-application 2
-token-conversion 2
-function-sort 1
 function-string 1
+function-sum 1
+function-tomillis 1
+variables 1
 skip_reasons
 no_expected_outcome 15
 ```
