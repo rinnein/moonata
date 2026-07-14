@@ -4,7 +4,15 @@
 /// 依赖 moonbitlang/regexp@0.3.5：compile + Regexp::execute + MatchResult。
 fn register_regex_functions(ctx : @value.EvalContext) -> Unit {
   // $match(str, pattern) — 返回首个匹配及捕获组
-  register(ctx, "match", arity=2, invoke=fn(args, _ctx) {
+  // 对齐 jsonata-js evaluateMatcher：当 pattern 为函数时，走 matcher 协议——
+  // 调用 matcher(str, 0) 获取首个匹配对象，再通过对象 `next` 字段迭代获取后续匹配，
+  // 最终返回所有匹配的数组。matcher 返回 undefined 表示无匹配。
+  register(ctx, "match", arity=2, invoke=(args, ctx) => {
+    // 函数 matcher：走 matcher 协议
+    match args[1] {
+      @value.JsonataValue::Func(f) => return match_with_matcher(args[0], f, ctx)
+      _ => ()
+    }
     let s = value_to_str(args[0])
     let re = compile_regex_value(args[1]) catch {
       _ => return @value.JsonataValue::Undefined
@@ -199,6 +207,26 @@ fn validate_matcher_result(
       let has_next = m.contains("next")
       has_start || has_end || has_groups || has_next
     }
+    @value.JsonataValue::Object(m) => {
+      // Object 变体：字段值为 JsonataValue，可直接识别 Func/Number/Array
+      let has_start = match m.get("start") {
+        Some(@value.JsonataValue::Json(Json::Number(_, ..))) => true
+        _ => false
+      }
+      let has_end = match m.get("end") {
+        Some(@value.JsonataValue::Json(Json::Number(_, ..))) => true
+        _ => false
+      }
+      let has_groups = match m.get("groups") {
+        Some(@value.JsonataValue::Json(Json::Array(_))) => true
+        _ => false
+      }
+      let has_next = match m.get("next") {
+        Some(@value.JsonataValue::Func(_)) => true
+        _ => false
+      }
+      has_start || has_end || has_groups || has_next
+    }
     _ => false
   }
   if !valid {
@@ -211,8 +239,8 @@ fn validate_matcher_result(
 
 ///|
 /// 使用 matcher 函数分割字符串（对齐 jsonata-js split with evaluateMatcher）。
-/// 调用 matcher(str) → 校验结构 → 若 undefined 返回 [str]；否则抛 T1010 或按 match.start/end 分割。
-/// 当前实现仅识别首个匹配（无法从对象字段还原 `next` 函数句柄），但已覆盖 T1010 校验路径。
+/// 调用 matcher(str) → 校验结构 → 若 undefined 返回 [str]；否则按 match.start/end 切片，
+/// 并通过 `next` 函数迭代获取后续匹配（Object 变体保留函数句柄）。
 fn split_with_matcher(
   str_value : @value.JsonataValue,
   matcher : @value.JsonataFunc,
@@ -237,34 +265,184 @@ fn split_with_matcher(
   if first.is_undefined() {
     return @value.JsonataValue::Json(Json::array([Json::string(s)]))
   }
-  // 单匹配分割：取 start/end 切片。无法迭代 next（函数值在对象中已序列化为字符串），
-  // 对齐 T1010 校验的同时尽可能给出合理结果；多匹配场景留待函数值保留改造后启用。
-  let m = match first {
-    @value.JsonataValue::Json(Json::Object(map)) => map
-    _ => return @value.JsonataValue::Json(Json::array([Json::string(s)]))
-  }
-  let start = match m.get("start") {
-    Some(Json::Number(n, ..)) => n.to_int()
-    _ => 0
-  }
-  let end = match m.get("end") {
-    Some(Json::Number(n, ..)) => n.to_int()
-    _ => start
-  }
+  // 迭代分割：通过 next 函数获取后续匹配，对齐 jsonata-js split with matcher
   let chars = s.to_array()
   let len = chars.length()
-  let safe_start = if start < 0 { 0 } else if start > len { len } else { start }
-  let safe_end = if end < safe_start {
-    safe_start
-  } else if end > len {
-    len
-  } else {
-    end
+  let parts : Array[Json] = []
+  let mut current = first
+  let mut prev_end = 0
+  let mut count = 0
+  while !current.is_undefined() {
+    if limit >= 0 && count >= limit {
+      break
+    }
+    let (start, end, next_opt) = extract_match_info(current)
+    let safe_start = if start < 0 {
+      0
+    } else if start > len {
+      len
+    } else {
+      start
+    }
+    let safe_end = if end < safe_start {
+      safe_start
+    } else if end > len {
+      len
+    } else {
+      end
+    }
+    let before = chars_to_string_local(chars, prev_end, safe_start)
+    parts.push(Json::string(before))
+    prev_end = safe_end
+    count = count + 1
+    // 调用 next() 获取下一个匹配
+    match next_opt {
+      Some(next_fn) => {
+        current = (next_fn.invoke)([], ctx)
+        validate_matcher_result(current)
+      }
+      None => current = @value.JsonataValue::Undefined
+    }
   }
-  let before = chars_to_string_local(chars, 0, safe_start)
-  let after = chars_to_string_local(chars, safe_end, len)
-  let parts : Array[Json] = [Json::string(before), Json::string(after)]
+  // 追加剩余部分
+  let after = chars_to_string_local(chars, prev_end, len)
+  parts.push(Json::string(after))
   @value.JsonataValue::Json(Json::array(parts))
+}
+
+///|
+/// 从匹配对象中提取 start/end/next 信息。
+/// 支持两种对象表示：`Json::Object`（next 为非函数值，无法调用）和 `Object` 变体（next 为 Func）。
+fn extract_match_info(
+  match_obj : @value.JsonataValue,
+) -> (Int, Int, @value.JsonataFunc?) {
+  match match_obj {
+    @value.JsonataValue::Object(m) => {
+      let start = match m.get("start") {
+        Some(@value.JsonataValue::Json(Json::Number(n, ..))) => n.to_int()
+        _ => 0
+      }
+      let end = match m.get("end") {
+        Some(@value.JsonataValue::Json(Json::Number(n, ..))) => n.to_int()
+        _ => start
+      }
+      let next_opt = match m.get("next") {
+        Some(@value.JsonataValue::Func(f)) => Some(f)
+        _ => None
+      }
+      (start, end, next_opt)
+    }
+    @value.JsonataValue::Json(Json::Object(m)) => {
+      let start = match m.get("start") {
+        Some(Json::Number(n, ..)) => n.to_int()
+        _ => 0
+      }
+      let end = match m.get("end") {
+        Some(Json::Number(n, ..)) => n.to_int()
+        _ => start
+      }
+      // Json::Object 中 next 已被序列化为字符串，无法调用
+      (start, end, None)
+    }
+    _ => (0, 0, None)
+  }
+}
+
+///|
+/// 使用 matcher 函数匹配字符串（对齐 jsonata-js evaluateMatcher for $match）。
+/// 调用 matcher(str, 0) → 校验结构 → 若 undefined 返回 undefined；
+/// 否则收集首个匹配，并通过 `next` 函数迭代收集所有匹配。
+/// 最终将每个匹配对象转换为 `{match, index, groups}` 结构（对齐 jsonata-js
+/// $match 函数对 matcher 结果的后处理——提取 match 字符串、start 作为 index、groups 数组）。
+fn match_with_matcher(
+  str_value : @value.JsonataValue,
+  matcher : @value.JsonataFunc,
+  ctx : @value.EvalContext,
+) -> @value.JsonataValue raise @error.JsonataError {
+  let first = (matcher.invoke)(
+    [str_value, @value.JsonataValue::Json(Json::number(0.0))],
+    ctx,
+  )
+  validate_matcher_result(first)
+  if first.is_undefined() {
+    return @value.JsonataValue::Undefined
+  }
+  // 收集所有匹配：next() 迭代直到 undefined
+  let matches : Array[@value.JsonataValue] = [first]
+  let mut current = first
+  // 安全上限：防止恶意 matcher 无限迭代
+  let mut safety = 100000
+  while safety > 0 {
+    safety = safety - 1
+    let (_, _, next_opt) = extract_match_info(current)
+    match next_opt {
+      Some(next_fn) => {
+        current = (next_fn.invoke)([], ctx)
+        validate_matcher_result(current)
+        if current.is_undefined() {
+          break
+        }
+        matches.push(current)
+      }
+      None => break
+    }
+  }
+  // 转换为 jsonata-js $match 输出格式：{match, index, groups}
+  let out : Array[Json] = []
+  for m in matches {
+    out.push(match_to_output(m))
+  }
+  @value.JsonataValue::Json(Json::array(out))
+}
+
+///|
+/// 将 matcher 返回的匹配对象转换为 $match 输出格式 `{match, index, groups}`。
+/// 支持两种对象表示：Object 变体（含 Func 字段）和 Json::Object。
+fn match_to_output(match_obj : @value.JsonataValue) -> Json {
+  let map : Map[String, Json] = Map([])
+  match match_obj {
+    @value.JsonataValue::Object(m) => {
+      match m.get("match") {
+        Some(@value.JsonataValue::Json(Json::String(s))) =>
+          map["match"] = Json::string(s)
+        Some(@value.JsonataValue::Json(j)) => map["match"] = j
+        _ => map["match"] = Json::string("")
+      }
+      match m.get("start") {
+        Some(@value.JsonataValue::Json(Json::Number(n, ..))) =>
+          map["index"] = Json::number(n)
+        _ => map["index"] = Json::number(0.0)
+      }
+      match m.get("groups") {
+        Some(@value.JsonataValue::Json(Json::Array(arr))) =>
+          map["groups"] = Json::array(arr)
+        Some(@value.JsonataValue::Json(j)) => map["groups"] = j
+        _ => map["groups"] = Json::array([])
+      }
+    }
+    @value.JsonataValue::Json(Json::Object(m)) => {
+      match m.get("match") {
+        Some(Json::String(s)) => map["match"] = Json::string(s)
+        Some(j) => map["match"] = j
+        None => map["match"] = Json::string("")
+      }
+      match m.get("start") {
+        Some(Json::Number(n, ..)) => map["index"] = Json::number(n)
+        _ => map["index"] = Json::number(0.0)
+      }
+      match m.get("groups") {
+        Some(Json::Array(arr)) => map["groups"] = Json::array(arr)
+        Some(j) => map["groups"] = j
+        None => map["groups"] = Json::array([])
+      }
+    }
+    _ => {
+      map["match"] = Json::string("")
+      map["index"] = Json::number(0.0)
+      map["groups"] = Json::array([])
+    }
+  }
+  Json::object(map)
 }
 
 ///|

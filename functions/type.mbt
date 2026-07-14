@@ -95,6 +95,7 @@ fn register_type_functions(ctx : @value.EvalContext) -> Unit {
       @value.JsonataValue::Json(Json::Null) => "null"
       @value.JsonataValue::Json(Json::Array(_)) => "array"
       @value.JsonataValue::Json(Json::Object(_)) => "object"
+      @value.JsonataValue::Object(_) => "object"
       @value.JsonataValue::Undefined => return @value.JsonataValue::Undefined
       @value.JsonataValue::Func(_) => "function"
       @value.JsonataValue::Regex(_) => "function"
@@ -194,6 +195,14 @@ fn jsonata_string_json(value : @value.JsonataValue) -> Json {
       for entry in map {
         let (key, item) = entry
         out[key] = jsonata_string_json(@value.JsonataValue::Json(item))
+      }
+      Json::object(out)
+    }
+    @value.JsonataValue::Object(map) => {
+      let out : Map[String, Json] = Map([])
+      for entry in map {
+        let (key, item) = entry
+        out[key] = jsonata_string_json(item)
       }
       Json::object(out)
     }

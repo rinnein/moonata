@@ -205,6 +205,7 @@ fn to_bool(v : @value.JsonataValue) -> Bool {
       any
     }
     @value.JsonataValue::Json(Json::Object(map)) => map.length() > 0
+    @value.JsonataValue::Object(map) => map.length() > 0
     @value.JsonataValue::Undefined => false
     @value.JsonataValue::Sequence(arr) => arr.length() > 0
     @value.JsonataValue::Func(_) => false

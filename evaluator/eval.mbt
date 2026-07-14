@@ -1392,6 +1392,12 @@ fn access_field(
         Some(v) => @value.JsonataValue::Json(v)
         None => @value.JsonataValue::Undefined
       }
+    @value.JsonataValue::Object(map) =>
+      // Object 变体保留 JsonataValue 字段（含 Func/Regex），直接返回
+      match map.get(name) {
+        Some(v) => v
+        None => @value.JsonataValue::Undefined
+      }
     @value.JsonataValue::Json(Json::Array(arr)) => {
       // 对数组元素映射访问字段
       let results : Array[@value.JsonataValue] = []
@@ -1423,6 +1429,13 @@ fn access_field_frames(
     @value.JsonataValue::Json(Json::Object(map)) =>
       match map.get(name) {
         Some(v) => push_child_json_frames(v, frame, results, flatten_array=true)
+        None => ()
+      }
+    @value.JsonataValue::Object(map) =>
+      // Object 变体：字段值为 JsonataValue（含 Func/Regex），需用 value 版 frame push
+      match map.get(name) {
+        Some(v) =>
+          push_child_value_frames(v, frame, results, flatten_array=true)
         None => ()
       }
     @value.JsonataValue::Json(Json::Array(arr)) =>
@@ -1460,6 +1473,12 @@ fn access_field_grouped_frames(
       match map.get(name) {
         Some(v) =>
           push_child_json_frames(v, frame, results, flatten_array=false)
+        None => ()
+      }
+    @value.JsonataValue::Object(map) =>
+      match map.get(name) {
+        Some(v) =>
+          push_child_value_frames(v, frame, results, flatten_array=false)
         None => ()
       }
     @value.JsonataValue::Json(Json::Array(arr)) =>
@@ -1517,6 +1536,40 @@ fn push_child_json_frames(
 }
 
 ///|
+/// 与 `push_child_json_frames` 相同，但接受 `JsonataValue`（含 Func/Regex）。
+/// 用于 Object 变体的字段访问——保留函数值以便后续 matcher 协议调用。
+fn push_child_value_frames(
+  value : @value.JsonataValue,
+  parent_frame : PathFrame,
+  results : Array[PathFrame],
+  flatten_array~ : Bool,
+) -> Unit {
+  let lineage = prepend_ancestor(parent_frame.value, parent_frame.ancestors)
+  match value {
+    @value.JsonataValue::Json(Json::Array(arr)) if flatten_array =>
+      for item in arr {
+        results.push(
+          path_frame_with_bindings(
+            @value.JsonataValue::Json(item),
+            lineage,
+            parent_frame.bindings,
+          ),
+        )
+      }
+    @value.JsonataValue::Sequence(arr) if flatten_array =>
+      for item in arr {
+        results.push(
+          path_frame_with_bindings(item, lineage, parent_frame.bindings),
+        )
+      }
+    _ =>
+      results.push(
+        path_frame_with_bindings(value, lineage, parent_frame.bindings),
+      )
+  }
+}
+
+///|
 /// 分组感知的字段访问：与 access_field 相同，但保留顶层数组元素为单元素
 /// 以支持后续 [N]/Slice 路径步的逐元素索引（如 a.b[N] 语义）。
 fn access_field_grouped(
@@ -1527,6 +1580,11 @@ fn access_field_grouped(
     @value.JsonataValue::Json(Json::Object(map)) =>
       match map.get(name) {
         Some(v) => @value.JsonataValue::Json(v)
+        None => @value.JsonataValue::Undefined
+      }
+    @value.JsonataValue::Object(map) =>
+      match map.get(name) {
+        Some(v) => v
         None => @value.JsonataValue::Undefined
       }
     @value.JsonataValue::Json(Json::Array(arr)) => {
@@ -1593,6 +1651,14 @@ fn access_wildcard(input : @value.JsonataValue) -> @value.JsonataValue {
       }
       @value.JsonataValue::sequence(results)
     }
+    @value.JsonataValue::Object(map) => {
+      // Object 变体：字段值为 JsonataValue（含 Func/Regex），直接 push
+      let results : Array[@value.JsonataValue] = []
+      for _, v in map {
+        push_path_result(results, v)
+      }
+      @value.JsonataValue::sequence(results)
+    }
     @value.JsonataValue::Json(Json::Array(arr)) => {
       let results : Array[@value.JsonataValue] = []
       for v in arr {
@@ -1641,6 +1707,11 @@ fn access_wildcard_frames(
               ),
             )
         }
+      }
+    @value.JsonataValue::Object(map) =>
+      // Object 变体：字段值为 JsonataValue（含 Func/Regex），保留原值
+      for _, v in map {
+        push_child_value_frames(v, frame, results, flatten_array=true)
       }
     @value.JsonataValue::Json(Json::Array(arr)) =>
       for v in arr {

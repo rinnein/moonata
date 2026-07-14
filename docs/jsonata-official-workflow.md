@@ -136,18 +136,32 @@ skip_reasons
 下方固定快照仍是旧口径下的历史记录；本轮脚本升级后，`skip` 分类会更细，待下一次复跑官方审计后再刷新这里的数字。
 
 
-当前固定快照（2026-07-15，dataset:null → undefined 语义对齐 + $join/$split/$map 严格签名校验，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-15，Object 变体保留函数字段 + $match matcher 协议 + lambda letrec 自引用，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1667 pass 1665 fail 2 skip 15
+eligible 1667 pass 1666 fail 1 skip 15
 top_failures
-matchers 1
 tail-recursion 1
 skip_reasons
 no_expected_outcome 15
 ```
 
-本轮修复（dataset:null → undefined 语义对齐 + $join/$split/$map 严格签名校验）：
+本轮修复（Object 变体保留函数字段 + $match matcher 协议 + lambda letrec 自引用）：
+- 提交：整体 pass 1665→1666 (+1)，fail 2→1 (-1)，通过率 99.9%→99.94%
+- 门禁：`moon check` 0e0w，`moon test` 290→291 passed（+1 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Value: `JsonataValue` 新增 `Object(Map[String, JsonataValue])` 变体，保留对象字面量中的函数/正则字段（不被 `json_for_constructor` 序列化为空字符串）；`to_json`/`equal`/`is_undefined` 等核心方法同步处理新变体
+  - Evaluator: `eval_group` 在对象字面量含 Func/Regex 字段时返回 `Object` 变体（否则回退 `Json::object` 保持向后兼容）；路径访问（`access_field`/`access_field_frames`/`access_field_grouped`/`access_wildcard` 等）新增 `Object` 分支，返回字段原始 `JsonataValue`（含 Func），使函数字段可被后续路径访问与调用
+  - Evaluator: `eval_bind` 对 Lambda 值启用 letrec 语义——新增 `eval_lambda_recursive` 函数，invoke 时绑定 `self_name` 到函数自身，修复递归 lambda 跨函数返回后丢失自引用的问题（matcher 协议中 `next` 调用 `$match` 递归的场景）
+  - Functions: `$match` 新增函数 matcher 支持（`match_with_matcher`），对齐 jsonata-js `evaluateMatcher`——调用 matcher(str, 0) → 通过对象 `next` 字段迭代收集所有匹配 → 转换为 `{match, index, groups}` 输出格式
+  - Functions: `$split` 的 `split_with_matcher` 重写为迭代分割（通过 `next` 函数获取后续匹配），替代之前仅识别首个匹配的限制；新增 `extract_match_info` 辅助函数支持 `Object` 与 `Json::Object` 两种表示
+  - Functions: `validate_matcher_result` 新增 `Object` 变体分支，可直接识别 `next` 字段为 Func（`Json::Object` 分支因函数已序列化仍用宽松判定）
+  - Tests: 新增 matchers case000 回归断言（`$match("abracadabra", $generateMatcher('a'))` 返回 5 个 `{match, index, groups}` 匹配）
+- 修复效果：`matchers/case000` 由 mismatch → pass（`$match` 函数 matcher 协议完整实现，`next` 函数可迭代调用）
+- 剩余重点：
+  - `tail-recursion/case002`：`$factorial(100)` 期望 U1001（jsonata-js test runner 设 `maxDepth=302`，jsonata-js 每次进入 `evaluate()` 即递增 depth，100 层 factorial 累计 ~300+ 次 evaluate 调用）；本实现 `depth` 仅在 `with_depth` 调用点递增（函数 invoke / 谓词 / 路径步等），100 层 factorial 仅累积 ~100 depth，远低于 `max_depth=8000`；修复需将 depth 计数下沉到 `eval` 入口，影响面较大，留待后续轮次
+
+上一轮修复（dataset:null → undefined 语义对齐 + $join/$split/$map 严格签名校验）：
 - 提交：整体 pass 1664→1665 (+1)，fail 3→2 (-1)，通过率 99.8%→99.9%
 - 门禁：`moon check` 0e0w，`moon test` 286→290 passed（+4 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：

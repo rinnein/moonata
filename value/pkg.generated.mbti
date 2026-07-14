@@ -63,6 +63,7 @@ pub(all) enum JsonataValue {
   Json(Json)
   Sequence(Array[JsonataValue])
   Func(JsonataFunc)
+  Object(Map[String, JsonataValue])
   Regex(pattern~ : String, flags~ : String)
   Undefined
 } derive(@debug.Debug)

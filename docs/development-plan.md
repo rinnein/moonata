@@ -20,14 +20,14 @@
 | P8 | CLI 与集成 | moonata / cmd/main | 2 | 4 | ✅ 完成（CLI native 参数模式可用） |
 | P9 | 语义修复与函数补全 | evaluator / functions / value | 5 | 12 | ✅ 完成 |
 | P10 | 验收收尾与兼容性补齐 | value / evaluator / functions / docs | 4 | 7 | ✅ 完成 |
-| P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | 🟡 持续推进（1665/1667 通过） |
+| P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | 🟡 持续推进（1666/1667 通过） |
 | 合计 | | | **26** | **66** | |
 
-> 当前固定快照（2026-07-15，dataset:null → undefined 语义对齐 + $join/$split/$map 严格签名校验，使用 `scripts/jsonata_official_audit.py` 审计）：
+> 当前固定快照（2026-07-15，Object 变体保留函数字段 + $match matcher 协议 + lambda letrec 自引用，使用 `scripts/jsonata_official_audit.py` 审计）：
 >
-> - `moon test` 为 290/290 通过；`moon check` 0 warnings；`moon info`、`moon fmt` 与 native CLI 构建均通过。
-> - JSONata 官方可比对审计为 `eligible 1667 / pass 1665 / fail 2 / skip 15`（通过率 99.9%）。
-> - Top failures：`matchers` 1、`tail-recursion` 1；skip 原因：`no_expected_outcome` 15。
+> - `moon test` 为 291/291 通过；`moon check` 0 warnings；`moon info`、`moon fmt` 与 native CLI 构建均通过。
+> - JSONata 官方可比对审计为 `eligible 1667 / pass 1666 / fail 1 / skip 15`（通过率 99.94%）。
+> - Top failures：`tail-recursion` 1；skip 原因：`no_expected_outcome` 15。
 > - 修复内容：
 >   - Audit: `scripts/jsonata_official_audit.py` 的 `data_for` 返回 `use_undefined` 标志，对齐 jsonata-js `dataset === null → undefined` 语义；`run_case` 在 `use_undefined=True` 时调用 CLI `--no-data` 标志
 >   - Functions: `$join` 启用复杂签名 `a<s>s?` 并关闭 `contextual`，0 参调用由 `validate_args` 抛 T0410

@@ -268,6 +268,7 @@ fn get_value_symbol(value : JsonataValue) -> Char {
     Json(Json::Null) => 'l'
     Json(Json::Object(_)) => 'o'
     Json(Json::Array(_)) => 'a'
+    Object(_) => 'o'
     Sequence(_) => 'a'
   }
 }

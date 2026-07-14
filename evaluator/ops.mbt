@@ -610,14 +610,59 @@ fn eval_construct(
 
 ///|
 /// 绑定求值：`$name := value`，绑定变量并返回赋值结果。
+/// 对 Lambda 值启用 letrec 语义——函数闭包可在 invoke 时引用自身（按 $name），
+/// 修复递归 lambda 定义在跨函数返回后丢失自引用的问题（如 matcher 协议中的 $match）。
 fn eval_bind(
   name : String,
   value_ast : @ast.Ast,
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
-  let value = eval(value_ast, ctx)
+  let value = match value_ast {
+    @ast.Ast::Lambda(params~, body~, signature~) =>
+      eval_lambda_recursive(name, params, body, signature, ctx)
+    _ => eval(value_ast, ctx)
+  }
   ctx.bind(name, value)
   value
+}
+
+///|
+/// 创建支持自引用的 Lambda（letrec 语义）。
+/// 与 `eval_lambda` 相同，但 invoke 时会先绑定 `self_name` 到函数自身，
+/// 使函数体内可通过 `$self_name` 递归调用。对齐 jsonata-js function declaration 语义。
+fn eval_lambda_recursive(
+  self_name : String,
+  params : Array[String],
+  body : @ast.Ast,
+  signature : String?,
+  ctx : @value.EvalContext,
+) -> @value.JsonataValue {
+  let arity = params.length()
+  let captured_ctx = ctx.capture()
+  // self_ref 持有函数自身引用，invoke 时绑定到 self_name
+  // 初始为 Undefined，函数构造后更新为 Func
+  let mut self_ref : @value.JsonataValue = @value.JsonataValue::Undefined
+  let invoke = fn(
+    args : Array[@value.JsonataValue],
+    ctx2 : @value.EvalContext,
+  ) -> @value.JsonataValue raise @error.JsonataError {
+    let call_ctx = captured_ctx.capture()
+    call_ctx.sync_depth_from(ctx2)
+    call_ctx.inherit_missing_bindings_from(ctx2)
+    // 绑定 self_name 到函数自身，使递归调用可解析
+    call_ctx.bind(self_name, self_ref)
+    for i, param in params {
+      if i < args.length() {
+        call_ctx.bind(param, args[i])
+      } else if lambda_missing_arg_uses_context(signature) {
+        call_ctx.bind(param, ctx2.current())
+      }
+    }
+    eval(body, call_ctx)
+  }
+  let func = @value.JsonataFunc::new(arity~, signature~, invoke~)
+  self_ref = @value.JsonataValue::Func(func)
+  @value.JsonataValue::Func(func)
 }
 
 ///|
@@ -1527,10 +1572,15 @@ fn eval_group(
   pairs : Array[(@ast.Ast, @ast.Ast)],
   ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
-  let map : Map[String, Json] = Map([])
+  // 第一遍：求值所有键值对，保留 JsonataValue（不立即转 Json）。
+  // 若任意值为 Func/Regex，返回 Object 变体以保留函数字段（对齐 jsonata-js
+  // 对象字面量语义——函数可作为字段值并被后续路径访问/调用，如 matcher 协议）。
+  // 否则回退到 Json::object 保持向后兼容。
+  let value_map : Map[String, @value.JsonataValue] = Map([])
   // 对齐 jsonata-js evaluateGroupExpression：记录每个 key 由哪个 pair 产生，
   // 同一 key 被不同 pair 表达式产生时抛 D1009。
   let key_pair_index : Map[String, Int] = Map([])
+  let mut has_non_json = false
   for pair_idx, kv in pairs {
     let (key_ast, val_ast) = kv
     let key = eval(key_ast, ctx)
@@ -1563,9 +1613,23 @@ fn eval_group(
     if val.is_undefined() {
       continue
     }
-    map[key_str] = json_for_constructor(val)
+    match val {
+      @value.JsonataValue::Func(_) | @value.JsonataValue::Regex(_) =>
+        has_non_json = true
+      _ => ()
+    }
+    value_map[key_str] = val
   }
-  @value.JsonataValue::Json(Json::object(map))
+  // 若无函数/正则字段，回退到 Json::object 保持向后兼容
+  if not(has_non_json) {
+    let map : Map[String, Json] = Map([])
+    for name, val in value_map {
+      map[name] = json_for_constructor(val)
+    }
+    return @value.JsonataValue::Json(Json::object(map))
+  }
+  // 有函数/正则字段：返回 Object 变体保留原始 JsonataValue
+  @value.JsonataValue::Object(value_map)
 }
 
 ///|
@@ -1573,6 +1637,14 @@ fn json_for_constructor(value : @value.JsonataValue) -> Json {
   match value {
     @value.JsonataValue::Func(_) => Json::string("")
     @value.JsonataValue::Regex(_) => Json::string("")
+    @value.JsonataValue::Object(map) => {
+      // 将 Object 转为 Json::object（Func/Regex → ""，对齐 to_json 语义）
+      let out : Map[String, Json] = Map([])
+      for name, val in map {
+        out[name] = json_for_constructor(val)
+      }
+      Json::object(out)
+    }
     @value.JsonataValue::Sequence(arr) =>
       match arr.length() {
         0 => Json::null()

@@ -2573,6 +2573,43 @@ test "官方套件：matchers T1010 split with non-matcher function" {
 }
 
 ///|
+/// matchers/case000: $match(str, matcherFn) 通过 matcher 协议迭代返回多匹配数组。
+/// 验证对象构造器保留函数字段（`next` 可调用），以及 $match 函数 matcher 协议实现。
+/// 对齐 jsonata-js evaluateMatcher：调用 matcher(str, 0) → 通过 next() 迭代收集所有匹配。
+test "官方套件：matchers case000 $match with function matcher" {
+  let expr = "($generateMatcher := function($ch) { $match := function($str, $offset) { ( $before := $substringBefore($str, $ch); $start := $length($before) + ($exists($offset) ? $offset : 0); $end := $start + $length($ch); $before != $str and $length($ch) > 0 ? { 'match': $ch, 'start': $start, 'end': $end, 'groups': [], 'next': function() { $match($substringAfter($str, $ch), $end) } } ) } }; $match(\"abracadabra\", $generateMatcher('a')) )"
+  let result = evaluate(expr, Json::null())
+  // 期望 5 个匹配，每个为 {match, index, groups}
+  match result {
+    Json::Array(arr) => {
+      assert_true(arr.length() == 5)
+      // 第一个匹配：match="a", index=0
+      match arr[0] {
+        Json::Object(m) => {
+          assert_true(m.get("match") == Some(Json::string("a")))
+          assert_true(m.get("index") == Some(Json::number(0.0)))
+          assert_true(m.get("groups") == Some(Json::array([])))
+        }
+        _ => assert_true(false)
+      }
+      // 第二个匹配：match="a", index=3
+      match arr[1] {
+        Json::Object(m) =>
+          assert_true(m.get("index") == Some(Json::number(3.0)))
+        _ => assert_true(false)
+      }
+      // 第五个匹配：match="a", index=10
+      match arr[4] {
+        Json::Object(m) =>
+          assert_true(m.get("index") == Some(Json::number(10.0)))
+        _ => assert_true(false)
+      }
+    }
+    _ => assert_true(false)
+  }
+}
+
+///|
 /// tail-recursion U1001 与互递归 case007 的回归通过 native CLI 审计脚本验证
 /// （`python3 scripts/jsonata_official_audit.py --group tail-recursion`）。
 /// moon test 运行在 WASM 目标，栈深度远小于 native，无法安全触发 U1001 路径

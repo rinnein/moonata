@@ -4,11 +4,15 @@
 /// - `Json`：单个 JSON 值（包装 prelude 的 `Json`）。
 /// - `Sequence`：平坦序列，元素恒为 `Json`（已展平）。
 /// - `Func`：函数值（内建函数与 Lambda 统一为一等公民）。
+/// - `Object`：对象字面量（保留 `JsonataValue` 字段，含 `Func`/`Regex`）。
+///   仅在对象构造器遇到函数/正则值时使用；普通对象仍用 `Json(Json::object)`。
+///   `to_json`/`json_for_constructor` 将其转换为 `Json::object`（Func → ""）。
 /// - `Undefined`：JSONata 语义一等值，参与传播，不等同于 `null`。
 pub(all) enum JsonataValue {
   Json(Json)
   Sequence(Array[JsonataValue])
   Func(JsonataFunc)
+  Object(Map[String, JsonataValue])
   Regex(pattern~ : String, flags~ : String)
   Undefined
 } derive(Debug)
@@ -93,12 +97,24 @@ pub fn JsonataValue::from_json(json : Json) -> JsonataValue {
 /// - `Undefined` → `Null`（JSONata 语义：undefined 序列化为 null）
 /// - `Sequence` → 长度 0 转 null；长度 1 提升为单例；否则转数组
 /// - `Func` → `Null`
+/// - `Object` → `Json::object`（字段值递归 `to_json`，`Func` → `Json::string("")`）
 pub fn JsonataValue::to_json(self : JsonataValue) -> Json {
   match self {
     Json(j) => j
     Undefined => Json::null()
     Func(_) => Json::null()
     Regex(_) => Json::null()
+    Object(map) => {
+      let out : Map[String, Json] = Map([])
+      for name, value in map {
+        out[name] = match value {
+          Func(_) => Json::string("")
+          Regex(_) => Json::string("")
+          _ => value.to_json()
+        }
+      }
+      Json::object(out)
+    }
     Sequence(arr) =>
       match arr.length() {
         0 => Json::null()
@@ -190,6 +206,7 @@ pub fn JsonataValue::sequence(items : Array[JsonataValue]) -> JsonataValue {
 /// 比较两个 JsonataValue 是否结构相等（用于测试）。
 ///
 /// 函数值按元数比较；序列按元素递归比较。
+/// `Object` 与 `Json(Json::object)` 通过 `to_json` 归一后比较，保证语义等价。
 pub fn JsonataValue::equal(self : JsonataValue, other : JsonataValue) -> Bool {
   match (self, other) {
     (Undefined, Undefined) => true
@@ -200,6 +217,28 @@ pub fn JsonataValue::equal(self : JsonataValue, other : JsonataValue) -> Bool {
     (Regex(pattern=ap, flags=af), Regex(pattern=bp, flags=bf)) =>
       ap == bp && af == bf
     (Json(a), Json(b)) => a == b
+    (Object(a), Object(b)) =>
+      if a.length() != b.length() {
+        false
+      } else {
+        let mut all = true
+        for name, v1 in a {
+          match b.get(name) {
+            Some(v2) =>
+              if !v1.equal(v2) {
+                all = false
+                break
+              }
+            None => {
+              all = false
+              break
+            }
+          }
+        }
+        all
+      }
+    (Object(_), Json(_)) | (Json(_), Object(_)) =>
+      self.to_json() == other.to_json()
     (Sequence(a), Sequence(b)) =>
       if a.length() != b.length() {
         false
