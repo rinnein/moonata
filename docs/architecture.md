@@ -50,10 +50,12 @@
 ```
 moonata/                       # facade 包（根），对外暴露 evaluate/compile API
 ├── moon.mod
-├── moon.pkg                   # 依赖 error/ast/value/evaluator/functions
+├── moon.pkg                   # 依赖 error/ast/value/evaluator/functions + core/argparse
 ├── moonata.mbt                # facade 实现
+├── cli.mbt                    # CLI 声明与参数解析（CliConfig + cli_command + parse_cli_config）
 ├── moonata_test.mbt           # 黑盒测试
 ├── moonata_wbtest.mbt         # 白盒测试
+├── cli_test.mbt               # CLI 参数解析黑盒测试
 ├── error/                     # 错误类型层级
 │   └── moon.pkg               # 无内部依赖（最底层）
 ├── ast/                       # AST 定义
@@ -69,9 +71,9 @@ moonata/                       # facade 包（根），对外暴露 evaluate/com
 ├── functions/                 # 60+ 内建函数
 │   └── moon.pkg               # 依赖 error/ast/value/evaluator（P9.4 增 regexp）
 └── cmd/
-    └── main/                  # CLI 入口
-        ├── moon.pkg           # is-main，依赖 moonata
-        └── main.mbt
+    └── main/                  # CLI 入口（仅装配：parse_cli_config → run）
+        ├── moon.pkg           # is-main，依赖 moonata + async/fs
+        └── main.mbt           # 薄入口；参数解析与命令声明在根包 cli.mbt
 ```
 
 共 **8 个库包** + **1 个 CLI 包**。
@@ -107,7 +109,7 @@ moonata/                       # facade 包（根），对外暴露 evaluate/com
 | `parser` | 递归下降语法分析 | `Parser`、`parse` |
 | `evaluator` | AST→值求值、序列语义 | `Evaluator`、`eval` |
 | `functions` | 60+ 内建函数实现与注册 | `register_builtins`、签名 |
-| `moonata` | facade：编译/求值入口 | `evaluate`、`compile` |
+| `moonata` | facade：编译/求值入口、CLI 参数解析 | `evaluate`、`compile`、`CliConfig`、`parse_cli_config` |
 
 ## 5. 关键类型设计
 

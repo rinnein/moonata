@@ -7,6 +7,8 @@ import {
   "rinnein/moonata/parser",
   "rinnein/moonata/evaluator",
   "rinnein/moonata/functions",
+  "moonbitlang/core/argparse",
+  "moonbitlang/core/string",
 }
 
 import {

@@ -1,6 +1,9 @@
 ///|
 /// Moonata CLI 入口（native 目标）。
 ///
+/// 本文件仅做装配：读 argv → 调用库包 `parse_cli_config` → 执行 `run`。
+/// 参数解析、命令声明与测试见根包 `cli.mbt` / `cli_test.mbt`。
+///
 /// 用法：
 ///   moonata '<expr>'                    # 对 null 求值
 ///   moonata '<expr>' --data '<json>'   # 对指定 JSON 数据求值
@@ -98,26 +101,31 @@ async fn main {
   }
   // 求值
   try {
-    let result = if use_undefined {
-      if max_depth > 0 {
-        @moonata.evaluate_undefined_with_max_depth(expr, max_depth)
+    let result = if config.no_data {
+      if config.max_depth > 0 {
+        @moonata.evaluate_undefined_with_max_depth(
+          config.expr,
+          config.max_depth,
+        )
       } else {
-        @moonata.evaluate_undefined(expr)
+        @moonata.evaluate_undefined(config.expr)
       }
     } else {
-      // 获取数据
-      let data = if data_str != "" { data_str } else { "null" }
       // 解析 JSON 数据
-      let json_data = @json.parse(data) catch {
+      let json_data = @json.parse(data_str) catch {
         _ => {
           println("错误: 无效的 JSON 数据")
           return
         }
       }
-      if max_depth > 0 {
-        @moonata.evaluate_with_max_depth(expr, json_data, max_depth)
+      if config.max_depth > 0 {
+        @moonata.evaluate_with_max_depth(
+          config.expr,
+          json_data,
+          config.max_depth,
+        )
       } else {
-        @moonata.evaluate(expr, json_data)
+        @moonata.evaluate(config.expr, json_data)
       }
     }
     println(result.stringify(indent=2))
