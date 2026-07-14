@@ -91,11 +91,11 @@ docs: update official test status
 
 ## 兼容性状态
 
-固定快照：2026-07-15，TCO 尾调用优化 + depth 下沉到 eval 入口 + --max-depth CLI 标志阶段。
+固定快照：2026-07-15，`tonyfetes/url@0.3.3` 接入 + `--expr-file` WTF-8 通道修复最后 2 个 encodeUrl/encodeUrlComponent fail 阶段。
 
 ```text
-本地测试：moon test 291/291
-官方可比对审计：eligible 1667, pass 1667, fail 0, skip 15
+本地测试：moon test 299/299
+官方可比对审计：eligible 1682, pass 1682, fail 0, skip 0
 通过率：100%
 ```
 

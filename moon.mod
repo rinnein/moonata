@@ -29,4 +29,5 @@ import {
   "moonbitlang/regexp@0.3.5",
   "moonbitlang/async@0.20.0",
   "moonbitlang/x@0.4.46",
+  "tonyfettes/url@0.3.3",
 }

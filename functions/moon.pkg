@@ -1,5 +1,7 @@
 // functions 包：60+ 内建函数实现与注册。
 // 依赖 error/ast/value/evaluator/lexer/parser/strconv/json/string/regexp/env。
+// `tonyfetes/url` 提供 WHATWG URL 解析器，用于 $encodeUrl/$decodeUrl 的
+// URL 结构验证（对齐 jsonata-js 调用 encodeURI/decodeURI 时的隐式校验）。
 import {
   "rinnein/moonata/error",
   "rinnein/moonata/value",
@@ -13,4 +15,5 @@ import {
   "moonbitlang/core/math",
   "moonbitlang/regexp",
   "moonbitlang/x/time",
+  "tonyfettes/url",
 }

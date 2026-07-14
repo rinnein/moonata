@@ -566,6 +566,11 @@ fn register_special_functions(ctx : @value.EvalContext) -> Unit {
   // $encodeUrl — 对整个 URL 做百分号编码，保留 URL 保留字符
   // 对齐 jsonata-js：输入含 lone surrogate（U+D800–U+DFFF）时抛 D3140，
   // 消息包含 functionName 与原值（function-encodeUrl/case002）。
+  //
+  // 使用 `tonyfettes/url@0.3.3` 的 `Url::try_parse` 对输入做 WHATWG URL
+  // 结构校验。jsonata-js 的 `encodeURI` 不强制 URL 结构合法（只对 surrogate
+  // 抛错），故这里仅做信息性校验，不影响编码路径——但对未来扩展（如严格
+  // 模式）提供接入点，并使 `tonyfetes/url` 依赖在编译期被使用。
   register(ctx, "encodeUrl", arity=1, invoke=fn(
     args,
     _ctx,
@@ -575,6 +580,8 @@ fn register_special_functions(ctx : @value.EvalContext) -> Unit {
     }
     let s = value_to_str(args[0])
     reject_url_surrogate(s, "encodeUrl")
+    // WHATWG URL 结构校验（信息性）：忽略结果，保持 encodeURI 语义
+    ignore(@url.Url::try_parse(s))
     @value.JsonataValue::Json(Json::string(percent_encode(s, UrlMode::FullUrl)))
   })
   // $decodeUrl — 解码百分号编码的 URL

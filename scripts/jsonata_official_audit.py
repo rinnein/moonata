@@ -297,15 +297,31 @@ def run_case(
 ) -> RunResult:
     """Invoke the Moonata CLI on a single case and capture its textual output.
 
-    Uses ``surrogatepass`` when encoding argv so that official cases containing
-    lone surrogates (e.g. ``function-encodeUrl/case002`` with ``'\\ud800'`` in
-    the expression) reach the CLI byte-for-byte rather than crashing the
-    subprocess layer. Captured stdout/stderr are decoded with ``replace`` so
-    the audit script always produces a printable haystack.
+    For cases whose expression contains lone surrogates (e.g.
+    ``function-encodeUrl/case002`` with ``'\\ud800'`` in the expression), the
+    expression is written to a temporary file and passed via ``--expr-file``.
+    The CLI reads the file as raw bytes and decodes them using WTF-8, which
+    preserves lone surrogates as MoonBit ``Char`` codepoints — letting
+    ``reject_url_surrogate`` detect them and throw D3140. This is necessary
+    because MoonBit's ``@env.args()`` decodes argv using strict UTF-8 and
+    replaces the WTF-8 sequence ``0xED 0xA0 0x80`` (U+D800) with U+FFFD
+    before the JSONata parser sees it.
+
+    For ordinary cases (no surrogates), the expression is passed as argv[1]
+    using ``surrogatepass`` encoding for consistency.
+
+    Captured stdout/stderr are decoded with ``surrogatepass`` so that lone
+    surrogates in the CLI's WTF-8 output (e.g. the ``value`` field echoed in
+    the error message) are preserved in the haystack for ``error_object_matches``
+    substring matching.
     """
     extra_args: list[str] = []
     if max_depth is not None and max_depth > 0:
         extra_args.extend(["--max-depth", str(max_depth)])
+
+    # Detect lone surrogates in the expression; if present, route via --expr-file
+    # so the CLI's WTF-8 decoder can preserve them.
+    has_surrogate = any(0xD800 <= ord(c) <= 0xDFFF for c in expr)
 
     def _spawn(cmd_strs: list[str]) -> tuple[int, str, str]:
         cmd_bytes = [s.encode("utf-8", errors="surrogatepass") for s in cmd_strs]
@@ -315,42 +331,70 @@ def run_case(
             timeout=timeout,
             check=False,
         )
-        stdout = proc.stdout.decode("utf-8", errors="replace").strip()
-        stderr = proc.stderr.decode("utf-8", errors="replace").strip()
+        # Use surrogatepass when decoding so lone surrogates in the CLI's
+        # WTF-8 output are preserved in the Python string haystack.
+        stdout = proc.stdout.decode("utf-8", errors="surrogatepass").strip()
+        stderr = proc.stderr.decode("utf-8", errors="surrogatepass").strip()
         return proc.returncode, stdout, stderr
 
-    if use_undefined:
-        # When the case maps to undefined input (jsonata-js `dataset: null` →
-        # undefined), invoke the CLI with `--no-data` so the root context is
-        # undefined rather than JSON null.
-        cmd = [str(exe), expr, "--no-data"] + extra_args
+    # Temporary paths to clean up in the finally block.
+    cleanup_paths: list[str] = []
+
+    try:
+        if has_surrogate:
+            # Write the expression to a temp file using WTF-8 (surrogatepass)
+            # so that 0xED 0xA0 0x80 (U+D800) reaches the CLI byte-for-byte.
+            with tempfile.NamedTemporaryFile(
+                "wb",
+                suffix=".expr",
+                delete=False,
+            ) as expr_handle:
+                expr_handle.write(expr.encode("utf-8", errors="surrogatepass"))
+                expr_path = expr_handle.name
+            cleanup_paths.append(expr_path)
+
+            if use_undefined:
+                cmd = [str(exe), "--expr-file", expr_path, "--no-data"] + extra_args
+            else:
+                with tempfile.NamedTemporaryFile(
+                    "w",
+                    suffix=".json",
+                    encoding="utf-8",
+                    delete=False,
+                ) as handle:
+                    json.dump(data, handle, ensure_ascii=False)
+                    data_path = handle.name
+                cleanup_paths.append(data_path)
+                cmd = [
+                    str(exe),
+                    "--expr-file",
+                    expr_path,
+                    "--file",
+                    data_path,
+                ] + extra_args
+        else:
+            if use_undefined:
+                cmd = [str(exe), expr, "--no-data"] + extra_args
+            else:
+                with tempfile.NamedTemporaryFile(
+                    "w",
+                    suffix=".json",
+                    encoding="utf-8",
+                    delete=False,
+                ) as handle:
+                    json.dump(data, handle, ensure_ascii=False)
+                    data_path = handle.name
+                cleanup_paths.append(data_path)
+                cmd = [str(exe), expr, "--file", data_path] + extra_args
+
         try:
             rc, stdout, stderr = _spawn(cmd)
         except subprocess.TimeoutExpired:
             return RunResult(ok=False, value=None, detail="timeout", stdout="", stderr="")
-    else:
-        with tempfile.NamedTemporaryFile(
-            "w",
-            suffix=".json",
-            encoding="utf-8",
-            delete=False,
-        ) as handle:
-            json.dump(data, handle, ensure_ascii=False)
-            data_path = handle.name
-
-        try:
-            rc, stdout, stderr = _spawn(
-                [str(exe), expr, "--file", data_path] + extra_args
-            )
-        except subprocess.TimeoutExpired:
+    finally:
+        for path in cleanup_paths:
             try:
-                os.unlink(data_path)
-            except OSError:
-                pass
-            return RunResult(ok=False, value=None, detail="timeout", stdout="", stderr="")
-        finally:
-            try:
-                os.unlink(data_path)
+                os.unlink(path)
             except OSError:
                 pass
 

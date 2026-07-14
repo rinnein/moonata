@@ -312,11 +312,23 @@ fn Lexer::lex_string(
         code=Some(code),
       )
     }
+    // 优先使用 `get_char`：对配对代理对返回完整的 supplementary 字符。
+    // 对 lone surrogate（U+D800–U+DFFF），`get_char` 返回 None；此时回退到
+    // 原始 UTF-16 code unit，用 `Int::unsafe_to_char` 保留该 codepoint——这对
+    // `function-encodeUrl/case002` 等 case 必需，源码中的 lone surrogate
+    // 必须原样进入字符串值，让 `reject_url_surrogate` 检测生效。
+    // 注意：这里不推进 `pos`，由下面的 `self.pos = self.pos + c.utf16_len()`
+    // 统一处理；对 lone surrogate，`utf16_len()` 返回 1，正确消费单个 code unit。
     let c = match self.src.get_char(self.pos) {
       Some(ch) => ch
       None => {
-        self.pos = self.pos + 1
-        '\u{FFFD}'
+        let code = self.peek().to_int()
+        if code >= 0xD800 && code <= 0xDFFF {
+          // lone surrogate；用 unsafe_to_char 保留 codepoint
+          Int::unsafe_to_char(code)
+        } else {
+          '\u{FFFD}'
+        }
       }
     }
     if c.to_int() == quote.to_int() {

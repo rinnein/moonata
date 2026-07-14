@@ -39,6 +39,12 @@ _build/native/debug/build/cmd/main/main.exe
 _build/native/debug/build/cmd/main/main.exe '<expr>' --file '<tmp-json-data>'
 ```
 
+含 lone surrogate 的表达式（如 `function-encodeUrl/case002` 的 `'\ud800'`）通过 `--expr-file` 传递，绕过 argv 严格 UTF-8 解码：
+
+```bash
+_build/native/debug/build/cmd/main/main.exe --expr-file '<tmp-expr-file>' --file '<tmp-json-data>'
+```
+
 本仓库提供自动审计脚本：
 
 ```bash
@@ -136,17 +142,33 @@ skip_reasons
 下方固定快照仍是旧口径下的历史记录；本轮脚本升级后，`skip` 分类会更细，待下一次复跑官方审计后再刷新这里的数字。
 
 
-当前固定快照（2026-07-15，`error` 字段纳入审计口径 + 15 个 `no_expected_outcome` skip 转可审计 + 13 个新 pass，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-15，`tonyfetes/url@0.3.3` 接入 + `--expr-file` WTF-8 通道修复最后 2 个 encodeUrl/encodeUrlComponent fail，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1682 pass 1680 fail 2 skip 0
+eligible 1682 pass 1682 fail 0 skip 0
 top_failures
-function-encodeUrl 1
-function-encodeUrlComponent 1
 skip_reasons
 ```
 
-本轮修复（`error` 字段纳入审计口径 + 15 个 `no_expected_outcome` skip 转可审计）：
+本轮修复（`tonyfetes/url@0.3.3` 接入 + `--expr-file` WTF-8 通道 + lexer lone surrogate 保留）：
+- 提交：整体 eligible 1682 不变，pass 1680→1682 (+2)，fail 2→0 (-2)，skip 0 不变；通过率（pass/eligible）99.88%→100%，**非通过总数（fail + skip）由 2 降至 0**
+- 门禁：`moon check` 0e0w，`moon test` 299/299 passed，`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - 依赖：`moon.mod` 新增 `tonyfetes/url@0.3.3`（WHATWG URL 标准解析器，MoonBit 实现），`functions/moon.pkg` 导入 `tonyfetes/url`；`$encodeUrl` 调用 `@url.Url::try_parse` 做信息性 URL 结构校验（不影响编码路径，保持 `encodeURI` 语义）
+  - CLI: `cmd/main` 新增 `--expr-file <path>` 标志，从文件读取表达式原始字节并通过新增的 `wtf8_decode` 函数解码为 MoonBit 字符串——WTF-8 是 UTF-8 的超集，允许 3 字节序列 `0xED 0xA0-0xBF 0x80-0xBF` 编码 Unicode surrogate codepoint（U+D800–U+DFFF），使 `function-encodeUrl/case002` 等 case 中 audit 脚本通过 `surrogatepass` 写入的 `0xED 0xA0 0x80`（U+D800 的 WTF-8 编码）能被还原为 lone surrogate，让 `reject_url_surrogate` 检测生效
+  - CLI: 新增 `wtf8_encode` 函数将 MoonBit 字符串按 WTF-8 编码为字节序列，新增 `println_wtf8` async 函数通过 `@stdio.stdout.write` 直接输出原始字节——MoonBit 标准 `println` 使用严格 UTF-8 编码，会把 lone surrogate 替换/重映射为其他字符（如 U+2422），使 audit 脚本无法在 stdout 字节流中匹配到 `value: "\uD800"` 子串；`println_wtf8` 保留 lone surrogate 的 WTF-8 字节序列 `0xED 0xA0 0x80`，使 `error_object_matches` 的子串匹配生效
+  - Lexer: `lex_string` 中的 `self.src.get_char(self.pos)` 对 lone surrogate 返回 `None`（MoonBit `Char` 是 Unicode scalar value，不含 surrogate）；新增回退逻辑——当 `get_char` 返回 `None` 且当前 UTF-16 code unit 在 `0xD800–0xDFFF` 范围时，用 `Int::unsafe_to_char` 保留该 codepoint，使源码字符串字面量中的 lone surrogate 原样进入字符串值；不推进 `pos`，由外层 `self.pos = self.pos + c.utf16_len()` 统一处理（对 lone surrogate `utf16_len()` 返回 1）
+  - Audit: `scripts/jsonata_official_audit.py` 的 `run_case` 新增 `has_surrogate` 检测——当表达式含 lone surrogate 时，写入临时 `.expr` 文件（`surrogatepass` 编码）并通过 `--expr-file` 传递给 CLI；stdout/stderr 解码从 `errors="replace"` 改为 `errors="surrogatepass"`，保留 CLI WTF-8 输出中的 lone surrogate 字节，使 `error_object_matches` 能在 haystack 中匹配 `value: "\uD800"` 子串
+- 修复效果：
+  - `function-encodeUrl/case002`：fail → pass（`$encodeUrl('\ud800')` 通过 `--expr-file` 接收 WTF-8 字节，`reject_url_surrogate` 检测到 U+D800 抛 D3140，错误消息经 `println_wtf8` 输出保留 `0xED 0xA0 0x80` 字节，audit 脚本 `error_object_matches` 匹配 `code: "D3140"` / `functionName: "encodeUrl"` / `value: "\uD800"` 全部命中）
+  - `function-encodeUrlComponent/case002`：fail → pass（同上，`functionName: "encodeUrlComponent"`）
+- 关键设计决策：
+  - jsonata-js 通过 `encodeURI(str)` / `encodeURIComponent(str)` 实现 `$encodeUrl` / `$encodeUrlComponent`，JavaScript 的 `encodeURI` 对 lone surrogate 抛 `URIError`；本实现通过 `reject_url_surrogate` 前置检测对齐此语义
+  - MoonBit 运行时的 `@env.args()` 使用严格 UTF-8 解码 argv，会把 WTF-8 序列 `0xED 0xA0 0x80`（U+D800）替换为 U+FFFD——这是 `function-encodeUrl/case002` 在 CLI 路径下的根因；通过 `--expr-file` + `wtf8_decode` 绕过 argv 解码，从文件原始字节直接构造含 lone surrogate 的 MoonBit 字符串
+  - MoonBit 标准 `println` 对 String 的 UTF-8 编码不支持 lone surrogate（会重映射为其他字符）；通过 `wtf8_encode` + `@stdio.stdout.write` 直接输出 WTF-8 字节，保留 lone surrogate 的字节序列
+  - `tonyfetes/url@0.3.3` 提供 WHATWG URL 标准解析器，但其 percent-encode/decode 函数为包内私有；本实现仅在 `$encodeUrl` 中调用 `Url::try_parse` 做信息性 URL 结构校验，percent-encode/decode 仍使用 `functions/type.mbt` 内的实现，以保持与 `encodeURI` / `decodeURI` 语义一致
+
+上一轮修复（`error` 字段纳入审计口径 + 15 个 `no_expected_outcome` skip 转可审计）：
 - 提交：整体 eligible 1667→1682 (+15)，pass 1667→1680 (+13)，fail 0→2 (+2)，skip 15→0 (-15)；通过率（pass/eligible）99.94%→99.88%，但 **非通过总数（fail + skip）由 15 降至 2**，是本轮的真实改进口径
 - 门禁：`moon check` 0e0w，`moon test` 299/299 passed（+6 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：

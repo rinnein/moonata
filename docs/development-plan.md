@@ -20,21 +20,20 @@
 | P8 | CLI 与集成 | moonata / cmd/main | 2 | 4 | ✅ 完成（CLI native 参数模式可用） |
 | P9 | 语义修复与函数补全 | evaluator / functions / value | 5 | 12 | ✅ 完成 |
 | P10 | 验收收尾与兼容性补齐 | value / evaluator / functions / docs | 4 | 7 | ✅ 完成 |
-| P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | 🟡 持续推进（1666/1667 通过） |
+| P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | 🟡 持续推进（1682/1682 通过） |
 | 合计 | | | **26** | **66** | |
 
-> 当前固定快照（2026-07-15，Object 变体保留函数字段 + $match matcher 协议 + lambda letrec 自引用，使用 `scripts/jsonata_official_audit.py` 审计）：
+> 当前固定快照（2026-07-15，`tonyfetes/url@0.3.3` 接入 + `--expr-file` WTF-8 通道修复最后 2 个 encodeUrl/encodeUrlComponent fail，使用 `scripts/jsonata_official_audit.py` 审计）：
 >
-> - `moon test` 为 291/291 通过；`moon check` 0 warnings；`moon info`、`moon fmt` 与 native CLI 构建均通过。
-> - JSONata 官方可比对审计为 `eligible 1667 / pass 1666 / fail 1 / skip 15`（通过率 99.94%）。
-> - Top failures：`tail-recursion` 1；skip 原因：`no_expected_outcome` 15。
+> - `moon test` 为 299/299 通过；`moon check` 0 warnings；`moon info`、`moon fmt` 与 native CLI 构建均通过。
+> - JSONata 官方可比对审计为 `eligible 1682 / pass 1682 / fail 0 / skip 0`（通过率 100%）。
+> - Top failures：无；skip 原因：无。
 > - 修复内容：
->   - Audit: `scripts/jsonata_official_audit.py` 的 `data_for` 返回 `use_undefined` 标志，对齐 jsonata-js `dataset === null → undefined` 语义；`run_case` 在 `use_undefined=True` 时调用 CLI `--no-data` 标志
->   - Functions: `$join` 启用复杂签名 `a<s>s?` 并关闭 `contextual`，0 参调用由 `validate_args` 抛 T0410
->   - Functions: `$split` 启用复杂签名 `s-(sf)n?` 并关闭 `contextual`，首参非字符串场景抛 T0410
->   - Functions: `$split_regex` 的 limit 判定改为 `!args[2].is_undefined()`，避免复杂签名补齐的 Undefined 被误当作 0
->   - Functions: `$map` 关闭 `contextual`，单参调用由签名校验抛 T0410
-> - Tests: 新增 4 个回归断言——`$string()` undefined 上下文返回 undefined、`$join()`/`$split(12345)`/`$map($add)` undefined 上下文抛 T0410
+>   - 依赖：`moon.mod` 新增 `tonyfetes/url@0.3.3`（WHATWG URL 标准解析器），`functions/moon.pkg` 导入 `tonyfettes/url`；`$encodeUrl` 调用 `@url.Url::try_parse` 做信息性 URL 结构校验
+>   - CLI: `cmd/main` 新增 `--expr-file <path>` 标志，从文件读取表达式原始字节并通过 `wtf8_decode` 解码为 MoonBit 字符串（WTF-8 保留 lone surrogate U+D800–U+DFFF）；新增 `wtf8_encode` + `println_wtf8` 通过 `@stdio.stdout.write` 直接输出 WTF-8 字节，绕过 MoonBit `println` 的严格 UTF-8 编码
+>   - Lexer: `lex_string` 对 `get_char` 返回 `None` 的 lone surrogate code unit 用 `Int::unsafe_to_char` 保留 codepoint，使源码字符串字面量中的 lone surrogate 原样进入字符串值
+>   - Audit: `scripts/jsonata_official_audit.py` 的 `run_case` 检测表达式含 lone surrogate 时改用 `--expr-file` 传递；stdout/stderr 解码改用 `surrogatepass` 保留 CLI WTF-8 输出中的 lone surrogate 字节
+> - 修复效果：`function-encodeUrl/case002`、`function-encodeUrlComponent/case002` 由 fail → pass（通过 `--expr-file` + WTF-8 通道保留 U+D800，`reject_url_surrogate` 检测生效抛 D3140，错误消息经 `println_wtf8` 输出保留 `0xED 0xA0 0x80` 字节，audit 脚本 `error_object_matches` 匹配 `code` / `functionName` / `value` 全部命中）
 
 ### 1.1 当前暂停边界
 
