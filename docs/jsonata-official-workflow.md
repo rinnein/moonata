@@ -136,19 +136,35 @@ skip_reasons
 下方固定快照仍是旧口径下的历史记录；本轮脚本升级后，`skip` 分类会更细，待下一次复跑官方审计后再刷新这里的数字。
 
 
-当前固定快照（2026-07-15，object-constructor T1003/D1009 + variables S0212 + $sum T0410 + $toMillis D3136 gap detection，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-15，matchers T1010 + tail-recursion U1001 (infinite recursion) + Lambda depth propagation，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1667 pass 1661 fail 6 skip 15
+eligible 1667 pass 1664 fail 3 skip 15
 top_failures
-tail-recursion 3
-matchers 2
 function-string 1
+matchers 1
+tail-recursion 1
 skip_reasons
 no_expected_outcome 15
 ```
 
-本轮修复（object-constructor T1003/D1009 + variables S0212 + $sum T0410 + $toMillis D3136 gap detection）：
+本轮修复（matchers T1010 + tail-recursion U1001 + Lambda depth propagation）：
+- 提交：整体 pass 1661→1664 (+3)，fail 6→3 (-3)，通过率 99.6%→99.8%
+- 门禁：`moon check` 0e0w，`moon test` 285→286 passed（+1 新增回归断言；U1001/互递归 case007 通过 native CLI 审计脚本验证，WASM 栈深不足故不在 moon test 中直接断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Value: `EvalContext::enter` 抛出的 `GuardrailError` 携带 `code=Some("U1001")`，对齐 jsonata-js 栈溢出错误码（`D1011` 在 jsonata-js 中是可选 stack 限制的错误码，官方测试集 `tail-recursion` group 通过 `timeboxExpression` 设置 `maxDepth` 后改抛 `U1001`）
+  - Value: `default_max_depth` 从 1000 提升到 8000，覆盖 `tail-recursion/case007` 的 6555 层互递归；同时足够低以在 8MB native 栈耗尽前拦截无限递归
+  - Value: 新增 `EvalContext::sync_depth_from(other)` 方法，用于跨上下文同步递归深度计数
+  - Evaluator: `eval_lambda` invoke 中将 caller 的 `depth` 同步到 `call_ctx`（替代原来从 `captured_ctx.depth` 起算），修复递归调用永远不超过 `max_depth` 的护栏失效问题——这是 `tail-recursion/case005` 与 `case006` 之前以 SIGSEGV (exit -11) 退出而非抛 U1001 的根因
+  - Functions: `$split` 在 separator 为函数时走 matcher 协议，新增 `validate_matcher_result` 校验返回值结构（必须是 undefined 或包含 `start`/`end`/`groups`/`next` 至少其一的对象），否则抛 `T1010`，对齐 jsonata-js `evaluateMatcher`；新增 `split_with_matcher` 实现单匹配分割路径
+  - Tests: 新增 matchers T1010 回归断言（`$split('some text', $uppercase)` 抛 T1010）
+- 修复效果：`matchers` group 0→1 pass（-1 fail），`tail-recursion` group 7→9 pass（-2 fail，case005/case006 现抛 U1001 而非 segfault；case007 互递归 6555 层正常返回 true）
+- 剩余重点：
+  - `function-string/case022`：`$string()` + `dataset: null` 期望 undefined，本仓库 CLI 当前把 `dataset: null` 解析为 `Json::null()` 上下文，与 jsonata-js test runner 将其映射为 `undefined` 的语义不一致；修复需调整审计脚本对 `dataset: null` 使用 `--no-data` 标志，但会连带影响 $join/$split/$map 等函数对 0 参时 undefined 上下文的签名校验路径，留待后续轮次
+  - `matchers/case000`：`$match(str, matcherFn)` 期望通过 matcher 协议迭代返回多匹配数组；当前对象构造器无法保留函数值字段（`{next: function(){...}}` 中的 `next` 会被 `json_for_constructor` 序列化为空字符串），导致无法从匹配对象还原 `next` 句柄迭代；修复需扩展对象构造器以保留 `JsonataValue::Func` 字段，留待后续轮次
+  - `tail-recursion/case002`：`$factorial(100)` 期望 U1001（jsonata-js test runner 设 `maxDepth=302`，jsonata-js 每次进入 `evaluate()` 即递增 depth，100 层 factorial 累计 ~300+ 次 evaluate 调用）；本实现 `depth` 仅在 `with_depth` 调用点递增（函数 invoke / 谓词 / 路径步等），100 层 factorial 仅累积 ~100 depth，远低于 `max_depth=8000`；修复需将 depth 计数下沉到 `eval` 入口，影响面较大，留待后续轮次
+
+上一轮修复（object-constructor T1003/D1009 + variables S0212 + $sum T0410 + $toMillis D3136 gap detection）：
 - 提交：整体 pass 1653→1661 (+8)，fail 14→6 (-8)，通过率 99.2%→99.6%
 - 门禁：`moon check` 0e0w，`moon test` 278→285 passed（+7 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：

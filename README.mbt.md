@@ -91,14 +91,14 @@ docs: update official test status
 
 ## 兼容性状态
 
-固定快照：2026-07-15，object-constructor T1003/D1009 + variables S0212 + $sum T0410 + $toMillis D3136 gap detection 阶段。
+固定快照：2026-07-15，matchers T1010 + tail-recursion U1001 (infinite recursion) + Lambda depth propagation 阶段。
 
 ```text
-本地测试：moon test 285/285
-官方可比对审计：eligible 1667, pass 1661, fail 6, skip 15
-通过率：99.6%
+本地测试：moon test 286/286
+官方可比对审计：eligible 1667, pass 1664, fail 3, skip 15
+通过率：99.8%
 ```
 
-Top failures: tail-recursion(3), matchers(2), function-string(1)
+Top failures: function-string(1), matchers(1), tail-recursion(1)
 
 官方测试集审计流程与跳过策略记录在 `docs/jsonata-official-workflow.md`。

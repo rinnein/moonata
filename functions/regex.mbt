@@ -60,7 +60,7 @@ fn register_regex_functions(ctx : @value.EvalContext) -> Unit {
   register(ctx, "split_regex", arity=2, invoke=fn(args, _ctx) {
     split_regex(args)
   })
-  register(ctx, "split", arity=2, invoke=(args, _ctx) => {
+  register(ctx, "split", arity=2, invoke=(args, ctx) => {
     if args.length() >= 2 {
       match args[0] {
         @value.JsonataValue::Undefined => return @value.JsonataValue::Undefined
@@ -98,6 +98,14 @@ fn register_regex_functions(ctx : @value.EvalContext) -> Unit {
             )
         }
       }
+    }
+    // 当 separator 为函数时，走 matcher 协议（对齐 jsonata-js evaluateMatcher）。
+    // 调用 matcher(str) 后校验返回结构：必须是 undefined 或包含 start/end/groups/next
+    // 至少其一的对象；否则抛 T1010（对齐 jsonata-js T1010 错误码）。
+    match args[1] {
+      @value.JsonataValue::Func(f) =>
+        return split_with_matcher(args[0], f, args, ctx)
+      _ => ()
     }
     split_regex(args)
   })
@@ -168,6 +176,114 @@ fn contains_regex(args : Array[@value.JsonataValue]) -> @value.JsonataValue {
   }
   let m = re.execute(s)
   @value.JsonataValue::Json(Json::boolean(m.matched()))
+}
+
+///|
+/// 校验 matcher 函数返回的匹配对象结构（对齐 jsonata-js evaluateMatcher）。
+/// 返回值必须是 undefined，或包含 `start`（数字）/ `end`（数字）/ `groups`（数组）/ `next`（函数）
+/// 至少其一的对象。否则抛 T1010。
+fn validate_matcher_result(
+  result : @value.JsonataValue,
+) -> Unit raise @error.JsonataError {
+  if result.is_undefined() {
+    return
+  }
+  let valid = match result {
+    @value.JsonataValue::Json(Json::Object(m)) => {
+      let has_start = match m.get("start") {
+        Some(Json::Number(_, ..)) => true
+        _ => false
+      }
+      let has_end = match m.get("end") {
+        Some(Json::Number(_, ..)) => true
+        _ => false
+      }
+      let has_groups = match m.get("groups") {
+        Some(Json::Array(_)) => true
+        _ => false
+      }
+      // 函数值在对象构造时会被转为空字符串，无法在此处识别 Func 句柄；
+      // 只要 next 字段存在（任意类型）即视为结构有效，对齐 jsonata-js 宽松分支。
+      let has_next = m.contains("next")
+      has_start || has_end || has_groups || has_next
+    }
+    _ => false
+  }
+  if !valid {
+    raise @error.type_error(
+      "T1010: The matcher function argument passed to function split does not return the correct object structure",
+      code=Some("T1010"),
+    )
+  }
+}
+
+///|
+/// 使用 matcher 函数分割字符串（对齐 jsonata-js split with evaluateMatcher）。
+/// 调用 matcher(str) → 校验结构 → 若 undefined 返回 [str]；否则抛 T1010 或按 match.start/end 分割。
+/// 当前实现仅识别首个匹配（无法从对象字段还原 `next` 函数句柄），但已覆盖 T1010 校验路径。
+fn split_with_matcher(
+  str_value : @value.JsonataValue,
+  matcher : @value.JsonataFunc,
+  args : Array[@value.JsonataValue],
+  ctx : @value.EvalContext,
+) -> @value.JsonataValue raise @error.JsonataError {
+  let s = value_to_str(str_value)
+  let limit = if args.length() > 2 {
+    match args[2] {
+      @value.JsonataValue::Undefined => -1
+      _ => value_to_int(args[2])
+    }
+  } else {
+    -1
+  }
+  if limit == 0 {
+    return @value.JsonataValue::Json(Json::array([]))
+  }
+  let first = (matcher.invoke)([str_value], ctx)
+  validate_matcher_result(first)
+  // 未匹配（matcher 返回 undefined）：返回整串作为唯一元素
+  if first.is_undefined() {
+    return @value.JsonataValue::Json(Json::array([Json::string(s)]))
+  }
+  // 单匹配分割：取 start/end 切片。无法迭代 next（函数值在对象中已序列化为字符串），
+  // 对齐 T1010 校验的同时尽可能给出合理结果；多匹配场景留待函数值保留改造后启用。
+  let m = match first {
+    @value.JsonataValue::Json(Json::Object(map)) => map
+    _ => return @value.JsonataValue::Json(Json::array([Json::string(s)]))
+  }
+  let start = match m.get("start") {
+    Some(Json::Number(n, ..)) => n.to_int()
+    _ => 0
+  }
+  let end = match m.get("end") {
+    Some(Json::Number(n, ..)) => n.to_int()
+    _ => start
+  }
+  let chars = s.to_array()
+  let len = chars.length()
+  let safe_start = if start < 0 { 0 } else if start > len { len } else { start }
+  let safe_end = if end < safe_start {
+    safe_start
+  } else if end > len {
+    len
+  } else {
+    end
+  }
+  let before = chars_to_string_local(chars, 0, safe_start)
+  let after = chars_to_string_local(chars, safe_end, len)
+  let parts : Array[Json] = [Json::string(before), Json::string(after)]
+  @value.JsonataValue::Json(Json::array(parts))
+}
+
+///|
+fn chars_to_string_local(chars : Array[Char], start : Int, end : Int) -> String {
+  let out = StringBuilder::new()
+  let mut i = start
+  while i < end {
+    out.write_char(chars[i])
+    i += 1
+  }
+  out.to_string()
 }
 
 ///|

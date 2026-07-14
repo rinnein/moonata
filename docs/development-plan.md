@@ -20,24 +20,21 @@
 | P8 | CLI 与集成 | moonata / cmd/main | 2 | 4 | ✅ 完成（CLI native 参数模式可用） |
 | P9 | 语义修复与函数补全 | evaluator / functions / value | 5 | 12 | ✅ 完成 |
 | P10 | 验收收尾与兼容性补齐 | value / evaluator / functions / docs | 4 | 7 | ✅ 完成 |
-| P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | 🟡 持续推进（1661/1667 通过） |
+| P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | 🟡 持续推进（1664/1667 通过） |
 | 合计 | | | **26** | **66** | |
 
-> 当前固定快照（2026-07-15，object-constructor T1003/D1009 + variables S0212 + $sum T0410 + $toMillis D3136 gap detection，使用 `scripts/jsonata_official_audit.py` 审计）：
+> 当前固定快照（2026-07-15，matchers T1010 + tail-recursion U1001 (infinite recursion) + Lambda depth propagation，使用 `scripts/jsonata_official_audit.py` 审计）：
 >
-> - `moon test` 为 285/285 通过；`moon check` 0 warnings；`moon info`、`moon fmt` 与 native CLI 构建均通过。
-> - JSONata 官方可比对审计为 `eligible 1667 / pass 1661 / fail 6 / skip 15`（通过率 99.6%）。
-> - Top failures：`tail-recursion` 3、`matchers` 2、`function-string` 1；skip 原因：`no_expected_outcome` 15。
+> - `moon test` 为 286/286 通过；`moon check` 0 warnings；`moon info`、`moon fmt` 与 native CLI 构建均通过。
+> - JSONata 官方可比对审计为 `eligible 1667 / pass 1664 / fail 3 / skip 15`（通过率 99.8%）。
+> - Top failures：`function-string` 1、`matchers` 1、`tail-recursion` 1；skip 原因：`no_expected_outcome` 15。
 > - 修复内容：
->   - Parser: `expect()` 在输入末尾抛 S0203（Expected ... before end of expression），非末尾仍抛 S0202（对齐 JSONata-js parser 的 `advance` 错误码分支）
->   - Functions: `$replace` 启用复杂签名 `s(sf)(sf)n?`，严格校验参数数量与类型（T0410）；空 pattern 抛 D3010；负 limit 抛 D3011；可选 `n?` 缺省时 validate_args 追加的 Undefined 视为未提供
->   - Functions: `$lowercase`/`$uppercase` 启用复杂签名 `s-` + `contextual=false`，让 `validate_args` 通过 `-` 修饰符正确处理上下文替换，参数过多抛 T0410
->   - Functions: `$substringBefore`/`$substringAfter` 启用复杂签名 `s-s` + `contextual=false`，上下文类型不匹配抛 T0411（对齐 JSONata-js），参数过多/类型不匹配抛 T0410
->   - Functions: `$substring` 启用复杂签名 `s-nn?` + `contextual=false`，第三参可选 `n?` 缺省时视为未提供；类型不匹配抛 T0410
->   - Functions: `register` 辅助新增 `contextual` 参数（默认 `true` 保持兼容），允许按函数关闭 `apply_context_argument` 的前置上下文行为
->   - Evaluator: `make_partial_apply` 将偏函数的 `signature` 设为 `None`，避免偏函数被 `validate_args` 用原始签名误校验
->   - Value: `validate_function_args`/`FunctionSignature::validate` 抛 T0410/T0411/T0412/S0401/S0402 时附带 `code=Some(...)`，使 CLI 错误输出前缀官方错误码
-> - Tests: 新增 transform case057/063/069/076/084/092/094/097 + function-replace case005/008/009/010/011 共 13 个回归断言
+>   - Value: `EvalContext::enter` 抛出的 `GuardrailError` 携带 `code=Some("U1001")`，对齐 jsonata-js 栈溢出错误码
+>   - Value: `default_max_depth` 从 1000 提升到 8000，覆盖 `tail-recursion/case007` 的 6555 层互递归
+>   - Value: 新增 `EvalContext::sync_depth_from(other)` 方法
+>   - Evaluator: `eval_lambda` invoke 中将 caller 的 `depth` 同步到 `call_ctx`，修复递归调用永远不超过 `max_depth` 的护栏失效问题（`tail-recursion/case005`/`case006` 之前以 SIGSEGV 退出而非抛 U1001 的根因）
+>   - Functions: `$split` 在 separator 为函数时走 matcher 协议，新增 `validate_matcher_result` 校验返回值结构（T1010），对齐 jsonata-js `evaluateMatcher`
+> - Tests: 新增 matchers T1010 回归断言（`$split('some text', $uppercase)` 抛 T1010）；U1001/互递归 case007 通过 native CLI 审计脚本验证（WASM 栈深不足不在 moon test 中直接断言）
 
 ### 1.1 当前暂停边界
 

@@ -846,6 +846,9 @@ fn eval_lambda(
     ctx2 : @value.EvalContext,
   ) -> @value.JsonataValue raise @error.JsonataError {
     let call_ctx = captured_ctx.capture()
+    // 同步 caller 的递归深度到 call_ctx，使递归调用能正确累积 depth 触发护栏
+    // （否则每次 invoke 都从 captured_ctx.depth 起算，递归永远不超过 max_depth）。
+    call_ctx.sync_depth_from(ctx2)
     call_ctx.inherit_missing_bindings_from(ctx2)
     for i, param in params {
       if i < args.length() {

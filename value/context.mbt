@@ -1,6 +1,8 @@
 ///|
 /// 默认最大递归深度。
-let default_max_depth : Int = 1000
+/// 设为 8000：覆盖 case007 的 6555 层互递归；同时较低以保证在 8MB native 栈耗尽前
+/// 触发 U1001 拦截无限递归（case005/case006）。
+let default_max_depth : Int = 8000
 
 ///|
 /// 默认最大求值步数。
@@ -290,15 +292,26 @@ pub fn EvalContext::restore_bindings(
 }
 
 ///|
-/// 进入递归层（护栏：超限抛 GuardrailError）。
+/// 进入递归层（护栏：超限抛 GuardrailError，错误码 U1001 对齐 jsonata-js 栈溢出语义）。
 pub fn EvalContext::enter(self : EvalContext) -> Unit raise @error.JsonataError {
   self.depth = self.depth + 1
   if self.depth > self.max_depth {
     raise @error.guardrail_error(
-      "递归深度超限 (depth=\{self.depth})",
+      "U1001: Stack overflow error: Check for non-terminating recursive function.  Consider rewriting as tail-recursive. (depth=\{self.depth}, max_depth=\{self.max_depth})",
       limit=Some("max_depth=\{self.max_depth}"),
+      code=Some("U1001"),
     )
   }
+}
+
+///|
+/// 同步 caller 的递归深度到当前上下文（用于 Lambda invoke 跨上下文传播深度计数）。
+/// Lambda 闭包捕获定义时的 depth，invoke 时若不与 caller 同步会导致护栏失效。
+pub fn EvalContext::sync_depth_from(
+  self : EvalContext,
+  other : EvalContext,
+) -> Unit {
+  self.depth = other.depth
 }
 
 ///|

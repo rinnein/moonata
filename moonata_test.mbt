@@ -2554,3 +2554,26 @@ test "官方套件：$toMillis D3136 picture 组件间隔缺失" {
   }
   assert_true(raised)
 }
+
+///|
+/// matchers/case001: $split(str, $uppercase) 应抛 T1010
+/// $uppercase 返回字符串而非匹配对象结构，对齐 jsonata-js evaluateMatcher 校验。
+test "官方套件：matchers T1010 split with non-matcher function" {
+  let raised = try {
+    ignore(evaluate("$split('some text', $uppercase)", Json::null()))
+    false
+  } catch {
+    _e =>
+      match _e {
+        @error.JsonataError::TypeError(code=Some(c), ..) => c == "T1010"
+        _ => false
+      }
+  }
+  assert_true(raised)
+}
+
+///|
+/// tail-recursion U1001 与互递归 case007 的回归通过 native CLI 审计脚本验证
+/// （`python3 scripts/jsonata_official_audit.py --group tail-recursion`）。
+/// moon test 运行在 WASM 目标，栈深度远小于 native，无法安全触发 U1001 路径
+/// 而不引发 RangeError；故此处不直接断言，仅保留对 native 审计的引用说明。
