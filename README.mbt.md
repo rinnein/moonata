@@ -91,7 +91,7 @@ docs: update official test status
 
 ## 兼容性状态
 
-固定快照：2026-07-14，tuple-stream 过滤后全局索引绑定修复阶段。
+固定快照：2026-07-14，消除 ambiguous_braces 警告 + regex 错误处理对齐阶段。
 
 ```text
 本地测试：moon test 271/271

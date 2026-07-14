@@ -295,6 +295,15 @@ fn Lexer::lex_string(
   let buf = StringBuilder::new()
   for ;; {
     if self.pos >= self.len {
+      // S0101: 未终止字符串（期待操作数位置，即独立字符串表达式）
+      // S0202: 未终止字符串（非期待操作数位置，如标识符后的异常字符串）
+      let code = if quote == '`' {
+        "S0105"
+      } else if expect_operand {
+        "S0101"
+      } else {
+        "S0202"
+      }
       raise @error.syntax_error(
         "未终止的字符串",
         position=Some(start),

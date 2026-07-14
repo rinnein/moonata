@@ -286,6 +286,34 @@ test "词法：未终止字符串报错" {
 }
 
 ///|
+test "词法：S0101 vs S0202 未终止字符串区分" {
+  // 独立字符串未终止 → S0101
+  let r1 = try {
+    ignore(lex("\"no closing quote"))
+    ""
+  } catch {
+    e =>
+      match e.error_code() {
+        Some(c) => c
+        None => ""
+      }
+  }
+  assert_true(r1 == "S0101")
+  // 标识符后字符串未终止 → S0202
+  let r2 = try {
+    ignore(lex("rr\""))
+    ""
+  } catch {
+    e =>
+      match e.error_code() {
+        Some(c) => c
+        None => ""
+      }
+  }
+  assert_true(r2 == "S0202")
+}
+
+///|
 test "词法：数字带指数" {
   debug_inspect(
     tok_kind("1e10"),

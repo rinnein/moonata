@@ -371,7 +371,7 @@ fn expand_replacement(replacement : String, m : @regexp.MatchResult) -> String {
         )
         match m.get(index) {
           Some(group) => out.write_string(group.to_owned())
-          None => ()
+          None => () // 不存在的或未捕获的 group，输出空字符串
         }
         i = next
       } else {

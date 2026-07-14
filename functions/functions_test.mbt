@@ -14,6 +14,32 @@ fn eval_fn(expr : String, data : Json) -> Json {
 }
 
 ///|
+fn eval_fn_catch(expr : String, data : Json) -> @error.JsonataError? {
+  try {
+    let tokens = @lexer.lex(expr)
+    let ast = @parser.parse(tokens)
+    let ctx = @value.EvalContext::new(@value.JsonataValue::Json(data))
+    @functions.register_builtins(ctx)
+    ignore(@evaluator.eval(ast, ctx))
+    None
+  } catch {
+    e => Some(e)
+  }
+}
+
+///|
+fn error_has_code(result : @error.JsonataError?, code : String) -> Bool {
+  match result {
+    Some(err) =>
+      match err.error_code() {
+        Some(c) => c == code
+        None => false
+      }
+    None => false
+  }
+}
+
+///|
 fn eval_signature_error(expr : String) -> Bool {
   try {
     let tokens = @lexer.lex(expr)

@@ -20,7 +20,7 @@
 | P8 | CLI 与集成 | moonata / cmd/main | 2 | 4 | ✅ 完成（CLI native 参数模式可用） |
 | P9 | 语义修复与函数补全 | evaluator / functions / value | 5 | 12 | ✅ 完成 |
 | P10 | 验收收尾与兼容性补齐 | value / evaluator / functions / docs | 4 | 7 | ✅ 完成 |
-| P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | 🟡 持续推进（1636/1667 通过） |
+| P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | 🟡 持续推进（1639/1667 通过） |
 | 合计 | | | **26** | **66** | |
 
 > 当前固定快照（2026-07-14，D3012/D1004/S0202 + zero warnings，使用 `scripts/jsonata_official_audit.py` 审计）：
