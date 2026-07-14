@@ -83,3 +83,21 @@ pub fn JsonataError::error_code(self : JsonataError) -> String? {
     GuardrailError(code~, ..) => code
   }
 }
+
+///|
+/// 提取错误消息（未经 Debug 转义）。
+///
+/// 用于 CLI 输出与官方测试集审计：jsonata-js test runner 通过
+/// `deep.contain(testcase.error)` 校验 `message` 字段，audit 脚本以子串
+/// 匹配方式实现等价语义。Debug 派生的 `to_repr` 会把消息中的 `"` 转义为
+/// `\"`，导致带引号的消息（如 D3140 `Malformed URL passed to $decodeUrl():
+/// "%E0%A4%A"`）无法被子串匹配命中。本方法返回原始 message 文本。
+pub fn JsonataError::error_message(self : JsonataError) -> String {
+  match self {
+    SyntaxError(message~, ..) => message
+    RuntimeError(message~, ..) => message
+    TypeError(message~, ..) => message
+    SignatureError(message~, ..) => message
+    GuardrailError(message~, ..) => message
+  }
+}

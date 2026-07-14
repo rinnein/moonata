@@ -249,18 +249,18 @@ fn arith_op(
 ) -> @value.JsonataValue raise @error.JsonataError {
   // T2001: 左侧非 undefined 时必须是数字
   if !lhs.is_undefined() {
-    let _ = to_number_with_code(lhs, "left")
+    let _ = to_number_with_code(lhs, "left", op~)
   }
   // T2002: 右侧非 undefined 时必须是数字
   if !rhs.is_undefined() {
-    let _ = to_number_with_code(rhs, "right")
+    let _ = to_number_with_code(rhs, "right", op~)
   }
   // undefined 传播：任一为 undefined → 结果为 undefined
   if lhs.is_undefined() || rhs.is_undefined() {
     return @value.JsonataValue::Undefined
   }
-  let l = to_number_with_code(lhs, "left")
-  let r = to_number_with_code(rhs, "right")
+  let l = to_number_with_code(lhs, "left", op~)
+  let r = to_number_with_code(rhs, "right", op~)
   // 除法特殊处理：除以零返回 Infinity/NaN（对齐 JSONata-js）
   if op == "/" {
     if r == 0.0 {

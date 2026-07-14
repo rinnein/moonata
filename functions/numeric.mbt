@@ -52,7 +52,12 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
   // $max / $min
   register(ctx, "max", arity=1, invoke=(args, _ctx) => {
     if args.length() > 1 {
-      raise @error.runtime_error("T0410: Wrong number of arguments")
+      // 对齐 jsonata-js T0410：消息中包含函数名，使 audit 脚本可对
+      // `token: "max"` 字段做子串匹配。
+      raise @error.runtime_error(
+        "T0410: Wrong number of arguments to function $max",
+        code=Some("T0410"),
+      )
     }
     let input_items = args[0].to_array()
     if input_items.length() == 0 {
@@ -72,7 +77,12 @@ fn register_numeric_functions(ctx : @value.EvalContext) -> Unit {
   })
   register(ctx, "min", arity=1, invoke=(args, _ctx) => {
     if args.length() > 1 {
-      raise @error.runtime_error("T0410: Wrong number of arguments")
+      // 对齐 jsonata-js T0410：消息中包含函数名，使 audit 脚本可对
+      // `token: "min"` 字段做子串匹配（errors/case025）。
+      raise @error.runtime_error(
+        "T0410: Wrong number of arguments to function $min",
+        code=Some("T0410"),
+      )
     }
     let input_items = args[0].to_array()
     if input_items.length() == 0 {

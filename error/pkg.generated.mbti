@@ -25,6 +25,7 @@ pub(all) suberror JsonataError {
   GuardrailError(message~ : String, limit~ : String?, code~ : String?)
 } derive(Eq, @debug.Debug)
 pub fn JsonataError::error_code(Self) -> String?
+pub fn JsonataError::error_message(Self) -> String
 
 // Types and methods
 

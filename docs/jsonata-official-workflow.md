@@ -79,14 +79,14 @@ python3 scripts/jsonata_official_audit.py \
 
 跳过项只表示当前 CLI 审计无法直接比较，不代表通过或失败。当前 skip 原因使用这些分类：
 
-- `no_expected_outcome`：官方 case 没有 `result` / `undefinedResult` / `code`，通常是 harness 行为断言；
+- `no_expected_outcome`：官方 case 没有 `result` / `undefinedResult` / `code` / `error`，通常是 harness 行为断言；
 - `non-string-expr`：`expr` 不是字符串，且 `expr-file` 也无法解析；
 - `missing-file`：`expr-file` 指向的外部表达式文件不存在；
 - `missing-dataset`：`dataset` 无法解析到本地数据文件；
 - `invalid-binding-name`：`bindings` 中出现无法安全注入的变量名；
 - `depth`：需要官方深度限制 harness。
 
-说明：`code` 类期望值会先与当前 CLI 的错误文本做包含匹配，因此只要错误消息里保留了官方代码前缀，脚本就可以直接参与比较。
+说明：`code` 与 `error` 类期望值会先与当前 CLI 的错误文本做包含匹配，因此只要错误消息里保留了官方代码前缀，脚本就可以直接参与比较。`error` 类对齐 jsonata-js test runner 的 `to.eventually.deep.contain(testcase.error)` 语义——`error.code` / `error.message` / `error.token` / `error.functionName` / `error.value` 等字段都会作为子串参与匹配，覆盖 `function-assert`、`function-error`、`function-decodeUrl`、`function-encodeUrl`、`errors` 等 group 中带结构化 `error` 期望的 case。
 
 ## 4. 执行审计并记录快照
 
@@ -136,16 +136,46 @@ skip_reasons
 下方固定快照仍是旧口径下的历史记录；本轮脚本升级后，`skip` 分类会更细，待下一次复跑官方审计后再刷新这里的数字。
 
 
-当前固定快照（2026-07-15，TCO 尾调用优化 + depth 下沉到 eval 入口 + --max-depth CLI 标志，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-15，`error` 字段纳入审计口径 + 15 个 `no_expected_outcome` skip 转可审计 + 13 个新 pass，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1667 pass 1667 fail 0 skip 15
+eligible 1682 pass 1680 fail 2 skip 0
 top_failures
+function-encodeUrl 1
+function-encodeUrlComponent 1
 skip_reasons
-no_expected_outcome 15
 ```
 
-本轮修复（TCO 尾调用优化 + depth 下沉到 eval 入口 + --max-depth CLI 标志）：
+本轮修复（`error` 字段纳入审计口径 + 15 个 `no_expected_outcome` skip 转可审计）：
+- 提交：整体 eligible 1667→1682 (+15)，pass 1667→1680 (+13)，fail 0→2 (+2)，skip 15→0 (-15)；通过率（pass/eligible）99.94%→99.88%，但 **非通过总数（fail + skip）由 15 降至 2**，是本轮的真实改进口径
+- 门禁：`moon check` 0e0w，`moon test` 299/299 passed（+6 新增回归断言），`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
+- 修复内容：
+  - Audit: `scripts/jsonata_official_audit.py` 新增 `error` 期望类型识别——对齐 jsonata-js test runner 的 `to.eventually.deep.contain(testcase.error)` 语义；新增 `error_object_matches` 对 `error.code` / `error.message` / `error.token` / `error.functionName` / `error.value` 等字段做子串匹配；argv 编码改用 `surrogatepass` 以承载 lone surrogate（function-encodeUrl/case002 的 `'\ud800'`）；JSON 报告与 `--show-failures` 输出经 `_sanitize_for_json` 替换 lone surrogate 为 U+FFFD，避免 `json.dump` 拒绝
+  - Error: 新增 `JsonataError::error_message` 公共方法，返回未经 Debug 转义的原始 message——Debug 派生的 `to_repr` 会把 `"` 转义为 `\"`，导致带引号的消息（如 D3140 `Malformed URL passed to $decodeUrl(): "..."`）无法被子串匹配命中
+  - CLI: `cmd/main` 错误输出改为 `错误: <code>: <raw_message>` + 第二行 `to_repr(e)` 供人工排查；raw_message 进入 audit 脚本的 haystack，使 `error.message` 字段可精确子串匹配
+  - Evaluator: `to_number_with_code` 新增 `op` 参数，消息改为 `The right side of the '<op>' operator must evaluate to a number`——对齐 jsonata-js `evaluateNumericExpression` 抛出的 `message`/`token` 字段（errors/case002 期望 `token: "+"`）
+  - Functions: `$min`/`$max` 的 T0410 arity 校验消息改为 `T0410: Wrong number of arguments to function $min/$max` 并显式带 `code=Some("T0410")`——对齐 jsonata-js `token: "min"` 期望（errors/case025）
+  - Functions: `$assert` 改为抛 `code=Some("D3141")`，无消息时使用默认 `$assert() statement failed`（function-assert/case006）；`$error` 改为抛 `code=Some("D3137")`，关闭 `contextual` 避免 0 参调用被前置上下文，0 参或 undefined 参走默认消息 `$error() function evaluated`（function-error/case009/case010）
+  - Functions: `$decodeUrl`/`$decodeUrlComponent` 调用新的 `percent_decode_strict`，对百分号解码后的字节序列做严格 UTF-8 校验（continuation byte 范围、overlong、surrogate、>U+10FFFF），遇非法序列抛 `code=Some("D3140")` + `Malformed URL passed to $<fn>(): "<raw>"`（function-decodeUrl/case002、function-decodeUrlComponent/case002）
+  - Functions: `$encodeUrl`/`$encodeUrlComponent` 调用新的 `reject_url_surrogate`，输入含 lone surrogate（U+D800–U+DFFF）时抛 `code=Some("D3140")` + `Malformed URL passed to $<fn>(): "<raw>"`（function-encodeUrl/case002、function-encodeUrlComponent/case002）
+  - Tests: 新增 6 个回归断言覆盖 errors/case025、errors/case026、function-assert/case000-006、function-error/case000-010、function-decodeUrl/case002、function-encodeUrl/case002 的语义
+- 修复效果：
+  - `errors/case025`：skip → pass（T0410 message 含 `$min`）
+  - `errors/case026`：skip → pass（T2002 message 含 `'+'`）
+  - `function-assert/case000,003,006`：skip → pass（D3141 + message 子串匹配）
+  - `function-decodeUrl/case002, function-decodeUrlComponent/case002`：skip → pass（D3140 + 完整 message 子串匹配，CLI 输出 raw_message 规避 Debug 转义）
+  - `function-error/case000,003,005,006,009,010`：skip → pass（D3137 + message 子串匹配，case009/010 走默认消息）
+  - `function-encodeUrl/case002, function-encodeUrlComponent/case002`：skip → fail（**已知限制**，见下）
+- 已知限制（function-encodeUrl/case002、function-encodeUrlComponent/case002）：
+  - jsonata-js 期望 `$encodeUrl('\ud800')` 抛 `{code: D3140, functionName: "encodeUrl", value: "\ud800"}`，要求 audit 脚本的 haystack 中出现 U+D800 字符
+  - 本实现 `reject_url_surrogate` 已正确检测 U+D800–U+DFFF 并抛 D3140（moon test 已断言），但 native CLI 经 `@env.args()` 解码 argv 时，UTF-8 字节序列 `0xED 0xA0 0x80`（WTF-8 编码的 U+D800）会被运行时替换为 3 个 U+FFFD 字符，使表达式中的 surrogate 字符在到达 `reject_url_surrogate` 前已丢失
+  - 修复路径需要 MoonBit 运行时支持 argv 的 `surrogatepass` 解码或 CLI 改用 stdin/文件承载含 surrogate 的表达式，影响面较大，留待后续轮次
+- 关键设计决策：
+  - jsonata-js test runner 通过 `to.eventually.deep.contain(testcase.error)` 校验 `error` 对象的所有字段；本实现由于 CLI 输出为文本而非结构化对象，采用子串匹配作为等价语义——每个 `error.*` 字段值必须作为子串出现在 combined output（detail + stdout + stderr）中
+  - CLI 错误输出同时打印 raw_message（用于子串匹配）与 Debug repr（保留 expected/actual 等结构化字段供人工排查），两者都进入 audit haystack，互不冲突
+  - 严格 UTF-8 校验规则对齐 WHATWG / RFC 3629：拒绝 overlong encoding、lone continuation byte、surrogate（U+D800–U+DFFF）、>U+10FFFF，与 jsonata-js `decodeURI` 抛 URIError 的语义一致
+
+上一轮修复（TCO 尾调用优化 + depth 下沉到 eval 入口 + --max-depth CLI 标志）：
 - 提交：整体 pass 1666→1667 (+1)，fail 1→0 (-1)，通过率 99.94%→100%
 - 门禁：`moon check` 0e0w，`moon test` 291/291 passed，`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native` 通过
 - 修复内容：

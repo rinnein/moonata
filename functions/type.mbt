@@ -411,6 +411,8 @@ fn register_higher_order_functions(ctx : @value.EvalContext) -> Unit {
     }
   })
   // $assert — JSONata spec: true→undefined, non-boolean→T0410, false→error
+  // 对齐 jsonata-js：失败时抛 D3141（携带 code 字段），无消息时使用
+  // 默认 "$assert() statement failed"（function-assert/case006）。
   register(ctx, "assert", arity=1, invoke=fn(
     args : Array[@value.JsonataValue],
     _ctx : @value.EvalContext,
@@ -418,8 +420,12 @@ fn register_higher_order_functions(ctx : @value.EvalContext) -> Unit {
     match args[0] {
       @value.JsonataValue::Json(Json::True) => @value.JsonataValue::Undefined
       @value.JsonataValue::Json(Json::False) => {
-        let msg = if args.length() > 1 { value_to_str(args[1]) } else { "" }
-        raise @error.runtime_error(msg)
+        let msg = if args.length() > 1 && !args[1].is_undefined() {
+          value_to_str(args[1])
+        } else {
+          "$assert() statement failed"
+        }
+        raise @error.runtime_error(msg, code=Some("D3141"))
       }
       _ =>
         raise @error.runtime_error("T0410: Arguments are not of expected type")
@@ -538,48 +544,78 @@ fn register_special_functions(ctx : @value.EvalContext) -> Unit {
     let s = value_to_str(args[0])
     @value.JsonataValue::Json(Json::string(base64_decode(s)))
   })
-  // $error — must be a string
-  register(ctx, "error", arity=1, invoke=(args, _ctx) => {
+  // $error — JSONata spec: string message → D3137, undefined/missing arg →
+  // 默认 "$error() function evaluated"（function-error/case009/case010）。
+  // 对齐 jsonata-js：始终携带 code=D3137，使 audit 脚本可对 `code` 字段做子串匹配。
+  // 关闭 `contextual`：避免 `$error()` 0 参调用时被自动前置上下文，
+  // 让 `args.length() == 0` 分支直接走默认消息路径（jsonata-js 同语义）。
+  register(ctx, "error", arity=1, contextual=false, invoke=(args, _ctx) => {
+    if args.length() == 0 || args[0].is_undefined() {
+      raise @error.runtime_error(
+        "$error() function evaluated",
+        code=Some("D3137"),
+      )
+    }
     match args[0] {
       @value.JsonataValue::Json(Json::String(s)) =>
-        raise @error.runtime_error(s)
+        raise @error.runtime_error(s, code=Some("D3137"))
       _ =>
         raise @error.runtime_error("T0410: Arguments are not of expected type")
     }
   })
   // $encodeUrl — 对整个 URL 做百分号编码，保留 URL 保留字符
-  register(ctx, "encodeUrl", arity=1, invoke=fn(args, _ctx) {
+  // 对齐 jsonata-js：输入含 lone surrogate（U+D800–U+DFFF）时抛 D3140，
+  // 消息包含 functionName 与原值（function-encodeUrl/case002）。
+  register(ctx, "encodeUrl", arity=1, invoke=fn(
+    args,
+    _ctx,
+  ) -> @value.JsonataValue raise @error.JsonataError {
     if args[0].is_undefined() {
       return @value.JsonataValue::Undefined
     }
     let s = value_to_str(args[0])
+    reject_url_surrogate(s, "encodeUrl")
     @value.JsonataValue::Json(Json::string(percent_encode(s, UrlMode::FullUrl)))
   })
   // $decodeUrl — 解码百分号编码的 URL
-  register(ctx, "decodeUrl", arity=1, invoke=fn(args, _ctx) {
+  // 对齐 jsonata-js：百分号解码后做严格 UTF-8 校验，遇非法字节序列抛 D3140，
+  // 消息包含函数名与原始输入（function-decodeUrl/case002）。
+  register(ctx, "decodeUrl", arity=1, invoke=fn(
+    args,
+    _ctx,
+  ) -> @value.JsonataValue raise @error.JsonataError {
     if args[0].is_undefined() {
       return @value.JsonataValue::Undefined
     }
     let s = value_to_str(args[0])
-    @value.JsonataValue::Json(Json::string(percent_decode(s)))
+    let decoded = percent_decode_strict(s, "decodeUrl")
+    @value.JsonataValue::Json(Json::string(decoded))
   })
   // $encodeUrlComponent — 对 URL 组件做百分号编码（不保留任何保留字符）
-  register(ctx, "encodeUrlComponent", arity=1, invoke=fn(args, _ctx) {
+  register(ctx, "encodeUrlComponent", arity=1, invoke=fn(
+    args,
+    _ctx,
+  ) -> @value.JsonataValue raise @error.JsonataError {
     if args[0].is_undefined() {
       return @value.JsonataValue::Undefined
     }
     let s = value_to_str(args[0])
+    reject_url_surrogate(s, "encodeUrlComponent")
     @value.JsonataValue::Json(
       Json::string(percent_encode(s, UrlMode::Component)),
     )
   })
   // $decodeUrlComponent — 解码百分号编码的 URL 组件
-  register(ctx, "decodeUrlComponent", arity=1, invoke=fn(args, _ctx) {
+  register(ctx, "decodeUrlComponent", arity=1, invoke=fn(
+    args,
+    _ctx,
+  ) -> @value.JsonataValue raise @error.JsonataError {
     if args[0].is_undefined() {
       return @value.JsonataValue::Undefined
     }
     let s = value_to_str(args[0])
-    @value.JsonataValue::Json(Json::string(percent_decode(s)))
+    let decoded = percent_decode_strict(s, "decodeUrlComponent")
+    @value.JsonataValue::Json(Json::string(decoded))
   })
 }
 
@@ -3001,11 +3037,20 @@ fn percent_encode(s : String, mode : UrlMode) -> String {
 }
 
 ///|
-/// 百分号解码：将 %XX 序列还原为 UTF-8 字符串。
-fn percent_decode(s : String) -> String {
+/// 百分号解码：将 %XX 序列还原为 UTF-8 字符串，并对最终字节序列做严格 UTF-8
+/// 校验。遇非法 continuation byte 或 truncated 多字节序列时抛 D3140，对齐
+/// jsonata-js `$decodeUrl` 对 malformed URL 的处理（function-decodeUrl/case002）。
+///
+/// `fn_name` 用于错误消息，区分 `$decodeUrl` 与 `$decodeUrlComponent`。
+fn percent_decode_strict(
+  s : String,
+  fn_name : String,
+) -> String raise @error.JsonataError {
   let chars = s.to_array()
   let bytes : Array[Int] = []
   let mut i = 0
+  // %XX 解码阶段：严格按 2 位十六进制解析，遇到不完整的 %XX（如 `%A` 或 `%G0`）
+  // 时直接把 `%` 当字面量处理（对齐 jsonata-js `decodeURI` 的宽容行为）。
   while i < chars.length() {
     if chars[i] == '%' && i + 2 < chars.length() {
       let hi = hex_digit(chars[i + 1])
@@ -3022,42 +3067,111 @@ fn percent_decode(s : String) -> String {
     }
     i += 1
   }
-  utf8_decode(bytes)
+  utf8_decode_strict(bytes, fn_name, s)
 }
 
 ///|
-/// 将 UTF-8 字节序列解码为字符串。
-fn utf8_decode(bytes : Array[Int]) -> String {
+/// 将 UTF-8 字节序列解码为字符串，对非法字节序列抛 D3140。
+///
+/// 严格校验规则（对齐 WHATWG / RFC 3629）：
+/// - 多字节序列的每个 continuation byte 必须在 0x80–0xBF 范围
+/// - 0xC0/0xC1 视为非法（应使用单字节 ASCII 表示）
+/// - 0xE0 的次字节必须 ≥ 0xA0；0xED 的次字节必须 ≤ 0x9F（拒绝 surrogate）
+/// - 0xF0 的次字节必须 ≥ 0x90；0xF4 的次字节必须 ≤ 0x8F（拒绝 > U+10FFFF）
+fn utf8_decode_strict(
+  bytes : Array[Int],
+  fn_name : String,
+  raw_input : String,
+) -> String raise @error.JsonataError {
   let result = StringBuilder::new()
+  let n = bytes.length()
   let mut i = 0
-  while i < bytes.length() {
+  let fail = fn() -> String raise @error.JsonataError {
+    raise @error.runtime_error(
+      "D3140: Malformed URL passed to $\{fn_name}(): \"\{raw_input}\"",
+      code=Some("D3140"),
+    )
+  }
+  while i < n {
     let b = bytes[i]
     if b < 0x80 {
       result.write_char(Int::unsafe_to_char(b))
       i += 1
-    } else if b < 0xE0 && i + 1 < bytes.length() {
+    } else if b < 0xC2 {
+      // 0x80-0xBF: 孤立 continuation byte；0xC0/0xC1: overlong 2-byte
+      return fail()
+    } else if b < 0xE0 {
+      if i + 1 >= n || (bytes[i + 1] & 0xC0) != 0x80 {
+        return fail()
+      }
       let c = ((b & 0x1F) << 6) | (bytes[i + 1] & 0x3F)
       result.write_char(Int::unsafe_to_char(c))
       i += 2
-    } else if b < 0xF0 && i + 2 < bytes.length() {
-      let c = ((b & 0x0F) << 12) |
-        ((bytes[i + 1] & 0x3F) << 6) |
-        (bytes[i + 2] & 0x3F)
+    } else if b < 0xF0 {
+      if i + 2 >= n {
+        return fail()
+      }
+      let b1 = bytes[i + 1]
+      let b2 = bytes[i + 2]
+      if (b1 & 0xC0) != 0x80 || (b2 & 0xC0) != 0x80 {
+        return fail()
+      }
+      // 0xE0 次字节必须 ≥ 0xA0（拒绝 overlong 3-byte）
+      // 0xED 次字节必须 ≤ 0x9F（拒绝 surrogate U+D800–U+DFFF）
+      if (b == 0xE0 && b1 < 0xA0) || (b == 0xED && b1 > 0x9F) {
+        return fail()
+      }
+      let c = ((b & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F)
       result.write_char(Int::unsafe_to_char(c))
       i += 3
-    } else if i + 3 < bytes.length() {
+    } else if b < 0xF5 {
+      if i + 3 >= n {
+        return fail()
+      }
+      let b1 = bytes[i + 1]
+      let b2 = bytes[i + 2]
+      let b3 = bytes[i + 3]
+      if (b1 & 0xC0) != 0x80 || (b2 & 0xC0) != 0x80 || (b3 & 0xC0) != 0x80 {
+        return fail()
+      }
+      // 0xF0 次字节必须 ≥ 0x90（拒绝 overlong 4-byte）
+      // 0xF4 次字节必须 ≤ 0x8F（拒绝 > U+10FFFF）
+      if (b == 0xF0 && b1 < 0x90) || (b == 0xF4 && b1 > 0x8F) {
+        return fail()
+      }
       let c = ((b & 0x07) << 18) |
-        ((bytes[i + 1] & 0x3F) << 12) |
-        ((bytes[i + 2] & 0x3F) << 6) |
-        (bytes[i + 3] & 0x3F)
+        ((b1 & 0x3F) << 12) |
+        ((b2 & 0x3F) << 6) |
+        (b3 & 0x3F)
       result.write_char(Int::unsafe_to_char(c))
       i += 4
     } else {
-      // 无效字节序列，跳过
-      i += 1
+      // 0xF5-0xFF: 非法 leading byte
+      return fail()
     }
   }
   result.to_string()
+}
+
+///|
+/// 检测字符串中是否含 lone surrogate（U+D800–U+DFFF），若有则抛 D3140。
+///
+/// 对齐 jsonata-js `$encodeUrl`/`$encodeUrlComponent` 对 lone surrogate 的拒绝
+/// 行为（function-encodeUrl/case002 / function-encodeUrlComponent/case002）。
+/// 错误消息包含 functionName 与原值，使 audit 脚本可对这两个字段做子串匹配。
+fn reject_url_surrogate(
+  s : String,
+  fn_name : String,
+) -> Unit raise @error.JsonataError {
+  for c in s {
+    let code = c.to_int()
+    if code >= 0xD800 && code <= 0xDFFF {
+      raise @error.runtime_error(
+        "D3140: Malformed URL passed to $\{fn_name}(): \"\{s}\"",
+        code=Some("D3140"),
+      )
+    }
+  }
 }
 
 ///|

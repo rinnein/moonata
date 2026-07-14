@@ -1001,3 +1001,184 @@ test "hof-map: T0410 insufficient args under undefined context" {
   }
   assert_true(error_has_code(err, "T0410"))
 }
+
+///|
+/// errors/case025: `$min(2, 3)` 在 function 内调用，arity=1 但传 2 参 → T0410
+/// 官方期望 token="min"，本实现通过在 message 中嵌入函数名 `$min` 实现等价子串匹配。
+test "errors/case025: $min wrong arity carries function name" {
+  let ctx = @value.EvalContext::new(@value.JsonataValue::Undefined)
+  @functions.register_builtins(ctx)
+  let err = try {
+    let tokens = @lexer.lex("( $A := function(){$min(2, 3)}; $A() )")
+    let ast = @parser.parse(tokens)
+    ignore(@evaluator.eval(ast, ctx))
+    None
+  } catch {
+    e => Some(e)
+  }
+  assert_true(error_has_code(err, "T0410"))
+  // 消息中包含函数名 `$min`，使 audit 脚本可对 token="min" 做子串匹配
+  match err {
+    Some(e) => assert_true(e.error_message().contains("$min"))
+    None => assert_true(false)
+  }
+}
+
+///|
+/// errors/case026: `2 + ''` 在 function 内调用 → T2002
+/// 官方期望 token="+"，本实现通过在 message 中嵌入运算符 `'+'` 实现等价子串匹配。
+test "errors/case026: T2002 right-side non-number carries operator" {
+  let ctx = @value.EvalContext::new(@value.JsonataValue::Undefined)
+  @functions.register_builtins(ctx)
+  let err = try {
+    let tokens = @lexer.lex(
+      "( $B := function(){''}; $A := function(){2 + $B()}; $A() )",
+    )
+    let ast = @parser.parse(tokens)
+    ignore(@evaluator.eval(ast, ctx))
+    None
+  } catch {
+    e => Some(e)
+  }
+  assert_true(error_has_code(err, "T2002"))
+  match err {
+    Some(e) => assert_true(e.error_message().contains("'+'"))
+    None => assert_true(false)
+  }
+}
+
+///|
+/// function-assert/case000,003,006: $assert(false[, msg]) → D3141
+/// case006 验证默认消息 "$assert() statement failed"
+test "function-assert: D3141 on false with default message" {
+  let ctx = @value.EvalContext::new(@value.JsonataValue::Json(Json::null()))
+  @functions.register_builtins(ctx)
+  // case000: $assert(false, 'Too Expensive') → D3141 with custom message
+  let err1 = eval_fn_catch("$assert(false, 'Too Expensive')", Json::null())
+  assert_true(error_has_code(err1, "D3141"))
+  match err1 {
+    Some(e) => assert_true(e.error_message() == "Too Expensive")
+    None => assert_true(false)
+  }
+  // case006: $assert(false) → D3141 with default message
+  let err2 = eval_fn_catch("$assert(false)", Json::null())
+  assert_true(error_has_code(err2, "D3141"))
+  match err2 {
+    Some(e) => assert_true(e.error_message() == "$assert() statement failed")
+    None => assert_true(false)
+  }
+  // case000: $assert(true) → undefined (no error)
+  let ok = eval_fn("$assert(true)", Json::null())
+  assert_true(ok == Json::null())
+}
+
+///|
+/// function-error/case000,003,005,006,009,010: $error(...) → D3137
+/// case009/010 验证 undefined/missing arg → 默认消息 "$error() function evaluated"
+test "function-error: D3137 with default message on undefined arg" {
+  let ctx = @value.EvalContext::new(@value.JsonataValue::Json(Json::null()))
+  @functions.register_builtins(ctx)
+  // case000: $error('Too Expensive') → D3137 with custom message
+  let err1 = eval_fn_catch("$error('Too Expensive')", Json::null())
+  assert_true(error_has_code(err1, "D3137"))
+  match err1 {
+    Some(e) => assert_true(e.error_message() == "Too Expensive")
+    None => assert_true(false)
+  }
+  // case009: $error() → D3137 with default message
+  let err2 = eval_fn_catch("$error()", Json::null())
+  assert_true(error_has_code(err2, "D3137"))
+  match err2 {
+    Some(e) => assert_true(e.error_message() == "$error() function evaluated")
+    None => assert_true(false)
+  }
+  // case010: $error(foo) where foo is undefined → D3137 with default message
+  let err3 = eval_fn_catch("$error(foo)", Json::null())
+  assert_true(error_has_code(err3, "D3137"))
+  match err3 {
+    Some(e) => assert_true(e.error_message() == "$error() function evaluated")
+    None => assert_true(false)
+  }
+}
+
+///|
+/// function-decodeUrl/case002, function-decodeUrlComponent/case002:
+/// 畸形 UTF-8 百分号编码序列（`%E0%A4%A` 缺第三字节）→ D3140
+test "function-decodeUrl: D3140 on malformed UTF-8 percent-sequence" {
+  // %E0 是 3 字节 UTF-8 序列的 leading byte，需要 2 个 continuation byte；
+  // `%A4%A` 中 `%A` 不是合法百分号序列，导致第三字节缺失 → 畸形 UTF-8
+  let err1 = eval_fn_catch("$decodeUrl('%E0%A4%A')", Json::null())
+  assert_true(error_has_code(err1, "D3140"))
+  match err1 {
+    Some(e) => assert_true(e.error_message().contains("$decodeUrl"))
+    None => assert_true(false)
+  }
+  let err2 = eval_fn_catch("$decodeUrlComponent('%E0%A4%A')", Json::null())
+  assert_true(error_has_code(err2, "D3140"))
+  match err2 {
+    Some(e) => assert_true(e.error_message().contains("$decodeUrlComponent"))
+    None => assert_true(false)
+  }
+  // 合法 URL 解码不受影响
+  let ok = eval_fn("$decodeUrl('hello%20world')", Json::null())
+  assert_true(ok == Json::string("hello world"))
+}
+
+///|
+/// function-encodeUrl/case002, function-encodeUrlComponent/case002:
+/// 输入含 lone surrogate（U+D800–U+DFFF）→ D3140
+/// 注：native CLI argv 解码会将 surrogate 字节替换为 U+FFFD，因此本测试在
+/// MoonBit 单元测试层面直接构造含 surrogate 的字符串，绕过 argv 解码限制。
+test "function-encodeUrl: D3140 on lone surrogate input" {
+  let ctx = @value.EvalContext::new(@value.JsonataValue::Json(Json::null()))
+  @functions.register_builtins(ctx)
+  // 直接调用函数，构造含 U+D800 的字符串
+  let sb = StringBuilder::new()
+  sb.write_char(Int::unsafe_to_char(0xD800))
+  let surrogate_str = sb.to_string()
+  let args : Array[@value.JsonataValue] = [
+    @value.JsonataValue::Json(Json::string(surrogate_str)),
+  ]
+  let err1 = try {
+    let f = ctx.lookup("encodeUrl")
+    match f {
+      Some(func) =>
+        match func {
+          @value.JsonataValue::Func(f_obj) => {
+            ignore((f_obj.invoke)(args, ctx))
+            None
+          }
+          _ => None
+        }
+      None => None
+    }
+  } catch {
+    e => Some(e)
+  }
+  assert_true(error_has_code(err1, "D3140"))
+  match err1 {
+    Some(e) => assert_true(e.error_message().contains("encodeUrl"))
+    None => assert_true(false)
+  }
+  let err2 = try {
+    let f = ctx.lookup("encodeUrlComponent")
+    match f {
+      Some(func) =>
+        match func {
+          @value.JsonataValue::Func(f_obj) => {
+            ignore((f_obj.invoke)(args, ctx))
+            None
+          }
+          _ => None
+        }
+      None => None
+    }
+  } catch {
+    e => Some(e)
+  }
+  assert_true(error_has_code(err2, "D3140"))
+  match err2 {
+    Some(e) => assert_true(e.error_message().contains("encodeUrlComponent"))
+    None => assert_true(false)
+  }
+}

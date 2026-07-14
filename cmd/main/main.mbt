@@ -98,12 +98,19 @@ async fn main {
     println(result.stringify(indent=2))
   } catch {
     e => {
-      // 提取 JSONata 官方错误码并在消息前缀输出，便于测试集匹配
+      // 提取 JSONata 官方错误码并在消息前缀输出，便于测试集匹配。
+      // stdout 第一行输出原始 message（未经 Debug 转义），使 audit 脚本
+      // 可对 `error.message` 字段做精确子串匹配——jsonata-js test runner
+      // 通过 `deep.contain(testcase.error)` 校验，本 CLI 以等价的子串匹配实现。
+      // 第二行附 Debug repr 供人工排查（保留 expected/actual/code 等结构化字段），
+      // 同样进入 audit 脚本的 haystack，不破坏以 `错误:` 起始的错误检测约定。
       let code = @error.JsonataError::error_code(e)
+      let msg = @error.JsonataError::error_message(e)
       match code {
-        Some(c) => println("错误: \{c}: \{to_repr(e)}")
-        None => println("错误: \{to_repr(e)}")
+        Some(c) => println("错误: \{c}: \{msg}")
+        None => println("错误: \{msg}")
       }
+      println(to_repr(e))
     }
   }
 }

@@ -149,6 +149,13 @@ def expected_outcome(case: dict[str, Any]) -> tuple[bool, str, Any, str]:
         return True, "result", case["result"], ""
     if case.get("undefinedResult") is True:
         return True, "undefined", None, ""
+    # JSONata-js test runner treats the `error` field as an expected error
+    # structure (see run-test-suite.js#L123-128):
+    #   `expect(...).to.eventually.deep.contain(testcase.error)`
+    # Each key/value in `testcase.error` must appear in the thrown error.
+    # Common keys: `code`, `message`, `token`, `functionName`, `value`.
+    if "error" in case and isinstance(case["error"], dict):
+        return True, "error", case["error"], ""
     if "code" in case:
         return True, "code", case["code"], ""
     if "depth" in case:
@@ -288,26 +295,39 @@ def run_case(
     use_undefined: bool = False,
     max_depth: int | None = None,
 ) -> RunResult:
-    # When the case maps to undefined input (jsonata-js `dataset: null` →
-    # undefined), invoke the CLI with `--no-data` so the root context is
-    # undefined rather than JSON null.
+    """Invoke the Moonata CLI on a single case and capture its textual output.
+
+    Uses ``surrogatepass`` when encoding argv so that official cases containing
+    lone surrogates (e.g. ``function-encodeUrl/case002`` with ``'\\ud800'`` in
+    the expression) reach the CLI byte-for-byte rather than crashing the
+    subprocess layer. Captured stdout/stderr are decoded with ``replace`` so
+    the audit script always produces a printable haystack.
+    """
     extra_args: list[str] = []
     if max_depth is not None and max_depth > 0:
         extra_args.extend(["--max-depth", str(max_depth)])
+
+    def _spawn(cmd_strs: list[str]) -> tuple[int, str, str]:
+        cmd_bytes = [s.encode("utf-8", errors="surrogatepass") for s in cmd_strs]
+        proc = subprocess.run(
+            cmd_bytes,
+            capture_output=True,
+            timeout=timeout,
+            check=False,
+        )
+        stdout = proc.stdout.decode("utf-8", errors="replace").strip()
+        stderr = proc.stderr.decode("utf-8", errors="replace").strip()
+        return proc.returncode, stdout, stderr
+
     if use_undefined:
+        # When the case maps to undefined input (jsonata-js `dataset: null` →
+        # undefined), invoke the CLI with `--no-data` so the root context is
+        # undefined rather than JSON null.
         cmd = [str(exe), expr, "--no-data"] + extra_args
         try:
-            proc = subprocess.run(
-                cmd,
-                text=True,
-                capture_output=True,
-                timeout=timeout,
-                check=False,
-            )
+            rc, stdout, stderr = _spawn(cmd)
         except subprocess.TimeoutExpired:
             return RunResult(ok=False, value=None, detail="timeout", stdout="", stderr="")
-        stdout = proc.stdout.strip()
-        stderr = proc.stderr.strip()
     else:
         with tempfile.NamedTemporaryFile(
             "w",
@@ -319,14 +339,14 @@ def run_case(
             data_path = handle.name
 
         try:
-            proc = subprocess.run(
-                [str(exe), expr, "--file", data_path] + extra_args,
-                text=True,
-                capture_output=True,
-                timeout=timeout,
-                check=False,
+            rc, stdout, stderr = _spawn(
+                [str(exe), expr, "--file", data_path] + extra_args
             )
         except subprocess.TimeoutExpired:
+            try:
+                os.unlink(data_path)
+            except OSError:
+                pass
             return RunResult(ok=False, value=None, detail="timeout", stdout="", stderr="")
         finally:
             try:
@@ -334,15 +354,12 @@ def run_case(
             except OSError:
                 pass
 
-        stdout = proc.stdout.strip()
-        stderr = proc.stderr.strip()
-
-    if proc.returncode != 0:
+    if rc != 0:
         detail = stderr or stdout
         return RunResult(
             ok=False,
             value=None,
-            detail=f"exit {proc.returncode}: {detail}",
+            detail=f"exit {rc}: {detail}",
             stdout=stdout,
             stderr=stderr,
         )
@@ -360,16 +377,61 @@ def run_case(
         )
 
 
+def _error_haystack(run_result: RunResult) -> str:
+    return "\n".join(
+        part for part in [run_result.detail, run_result.stdout, run_result.stderr] if part
+    )
+
+
 def code_matches(expected_code: Any, run_result: RunResult) -> bool:
     if run_result.ok:
         return False
     code = str(expected_code).strip()
     if not code:
         return False
-    haystack = "\n".join(
-        part for part in [run_result.detail, run_result.stdout, run_result.stderr] if part
-    )
-    return code in haystack
+    return code in _error_haystack(run_result)
+
+
+def error_object_matches(
+    expected_error: dict[str, Any], run_result: RunResult
+) -> tuple[bool, str]:
+    """Verify a CLI failure against an `error` object expected by the official suite.
+
+    Mirrors jsonata-js test runner's ``to.eventually.deep.contain(testcase.error)``
+    (see ``run-test-suite.js#L123-128``). The CLI must fail, and every non-empty
+    scalar value in ``expected_error`` must appear as a substring in the
+    combined output (detail + stdout + stderr). This is the same string-contains
+    strategy used for ``code``-kind cases, extended to ``message``/``token``/
+    ``functionName``/``value``.
+
+    Returns ``(matched, reason)``. ``reason`` is empty on success and a short
+    diagnostic (e.g. ``missing-message``, ``expected-error-but-success``) on
+    failure, suitable for inclusion in the failure report.
+    """
+    if run_result.ok:
+        return False, "expected-error-but-success"
+    haystack = _error_haystack(run_result)
+    for key, expected_value in expected_error.items():
+        if expected_value is None:
+            continue
+        # Booleans/numbers serialise to "true"/"false"/digits, which are too
+        # generic to substring-match reliably. The official error structure
+        # only uses string fields in practice, so restrict to those.
+        if isinstance(expected_value, bool):
+            continue
+        if isinstance(expected_value, (int, float)):
+            needle = str(expected_value)
+        elif isinstance(expected_value, str):
+            needle = expected_value
+        else:
+            # Dicts/lists would need structured matching; skip rather than
+            # risk false positives from str(dict).
+            continue
+        if not needle:
+            continue
+        if needle not in haystack:
+            return False, f"missing-{key}"
+    return True, ""
 
 
 def case_id(group_file: Path) -> str:
@@ -485,6 +547,34 @@ def audit(args: argparse.Namespace) -> AuditResult:
                 failures.append(failure)
                 continue
 
+            if expected_kind == "error":
+                matched, mismatch_reason = error_object_matches(
+                    expected_value, run_result
+                )
+                if matched:
+                    passed += 1
+                    continue
+
+                failed += 1
+                fail_by_group[group] += 1
+                failure = {
+                    "case": case_id(entry.group_file),
+                    "group": group,
+                    "expr": wrapped_expr,
+                    "reason": (
+                        mismatch_reason
+                        if not run_result.ok
+                        else "expected-error"
+                    ),
+                    "expected": expected_value,
+                }
+                if not run_result.ok:
+                    failure["actual"] = run_result.detail
+                else:
+                    failure["actual"] = run_result.value
+                failures.append(failure)
+                continue
+
     return AuditResult(
         eligible=eligible,
         passed=passed,
@@ -511,7 +601,26 @@ def print_summary(result: AuditResult, top: int, show_failures: int) -> None:
     if show_failures > 0 and result.failures:
         print("failures")
         for failure in result.failures[:show_failures]:
-            print(json.dumps(failure, ensure_ascii=False, sort_keys=True))
+            safe = _sanitize_for_json(failure)
+            print(json.dumps(safe, ensure_ascii=False, sort_keys=True))
+
+
+def _sanitize_for_json(value: Any) -> Any:
+    """Recursively replace lone surrogates so json.dump can encode to UTF-8.
+
+    The ``function-encodeUrl/case002`` case carries ``'\\ud800'`` in both the
+    expression and the expected ``value`` field. Python's ``json`` module
+    refuses to encode lone surrogates when ``ensure_ascii=False``; we replace
+    them with ``U+FFFD`` so the JSON report is always writable while keeping
+    the surrounding context readable.
+    """
+    if isinstance(value, str):
+        return value.encode("utf-8", errors="replace").decode("utf-8", errors="replace")
+    if isinstance(value, dict):
+        return {k: _sanitize_for_json(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_for_json(v) for v in value]
+    return value
 
 
 def write_json_report(path: Path, result: AuditResult) -> None:
@@ -522,7 +631,7 @@ def write_json_report(path: Path, result: AuditResult) -> None:
         "skip": result.skipped,
         "top_failures": result.fail_by_group.most_common(),
         "skip_reasons": result.skip_by_reason.most_common(),
-        "failures": result.failures,
+        "failures": _sanitize_for_json(result.failures),
     }
     with path.open("w", encoding="utf-8") as handle:
         json.dump(report, handle, ensure_ascii=False, indent=2)

@@ -28,6 +28,9 @@ fn to_number(v : @value.JsonataValue) -> Double raise @error.JsonataError {
 /// 值转数字，失败时携带 JSONata 官方错误码（如 T2001/T2002/D1002）。
 ///
 /// `side` 为 "left" 或 "right"，用于区分 T2001（左侧）与 T2002（右侧）。
+/// `op` 为运算符原文（如 `"+"`、`"*"`），会嵌入错误消息，对齐 jsonata-js
+/// `evaluateNumericExpression` 抛出的 `message`/`token` 字段——官方测试集
+/// `errors/case026` 期望 `token: "+"`，audit 脚本以子串匹配方式校验。
 /// 一元负号使用 `D1002`。
 ///
 /// 对齐 JSONata-js `evaluateNumericExpression` + `isNumeric`：
@@ -38,8 +41,13 @@ fn to_number(v : @value.JsonataValue) -> Double raise @error.JsonataError {
 fn to_number_with_code(
   v : @value.JsonataValue,
   side : String,
+  op? : String = "",
 ) -> Double raise @error.JsonataError {
   let code = if side == "left" { "T2001" } else { "T2002" }
+  // 对齐 jsonata-js：消息中包含运算符原文（如 "The right side of the '+' operator..."），
+  // 使 audit 脚本可对 `token` 字段做子串匹配。
+  let op_repr = if op != "" { " '\{op}'" } else { "" }
+  let msg = "The \{side} side of the\{op_repr} operator must evaluate to a number"
   match v {
     @value.JsonataValue::Json(Json::Number(n, ..)) =>
       if n.is_inf() {
@@ -51,7 +59,7 @@ fn to_number_with_code(
       } else if n.is_nan() {
         // NaN 视为非数字 → T2001/T2002
         raise @error.type_error(
-          "The \{side} side of the operator must evaluate to a number",
+          msg,
           expected=Some("number"),
           actual=None,
           code=Some(code),
@@ -60,10 +68,10 @@ fn to_number_with_code(
         n
       }
     @value.JsonataValue::Sequence(arr) if arr.length() == 1 =>
-      to_number_with_code(arr[0], side)
+      to_number_with_code(arr[0], side, op~)
     _ =>
       raise @error.type_error(
-        "The \{side} side of the operator must evaluate to a number",
+        msg,
         expected=Some("number"),
         actual=None,
         code=Some(code),
