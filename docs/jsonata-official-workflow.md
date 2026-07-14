@@ -136,10 +136,10 @@ skip_reasons
 下方固定快照仍是旧口径下的历史记录；本轮脚本升级后，`skip` 分类会更细，待下一次复跑官方审计后再刷新这里的数字。
 
 
-当前固定快照（2026-07-14，tuple-stream focus/position lineage 与 parent ancestor 链修复后，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-14，tuple-stream focus/position lineage、parent ancestor 链与过滤后全局索引修复后，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
-eligible 1667 pass 1634 fail 33 skip 15
+eligible 1667 pass 1636 fail 31 skip 15
 top_failures
 object-constructor 5
 hof-reduce 3
@@ -147,7 +147,6 @@ regex 3
 tail-recursion 3
 transforms 3
 hof-map 2
-joins 2
 matchers 2
 partial-application 2
 token-conversion 2
@@ -155,7 +154,12 @@ skip_reasons
 no_expected_outcome 15
 ```
 
-本轮复核结果：官方可比对用例 1667 个，1634 个通过、33 个失败、15 个跳过；`parent-operator` 已全绿，`joins` 剩余 2 个位置绑定/索引边界用例。机器可读报告写入 `/tmp/moonata-jsonata-audit.json`。
+本轮复核结果：官方可比对用例 1667 个，1636 个通过、31 个失败、15 个跳过；`parent-operator` 与 `joins` 均已全绿。机器可读报告写入 `/tmp/moonata-jsonata-audit.json`。
+
+本轮修复（tuple-stream 过滤后的索引绑定）：
+- Evaluator: `#$pos` 附着在 Filter 步时，对完整 frame stream 执行一次过滤，避免把范围/索引谓词错误地应用到每个单元素 frame。
+- Evaluator: 过滤后的 tuple stream 按连续全局位置绑定 `#$pos`，修复官方 `joins` 中 `$[[1..4]]#$pos[$pos>=2]` 与 loan/book join 的 `#$ib2` 用例。
+- 门禁：`moon check` 0 warnings，`moon test` 268/268 passed，`moon info`、`moon fmt` 与 `moon build cmd/main --target native` 均通过。
 
 本轮修复（动态 eval、整数 picture、函数链与注释错误码）：
 - 提交：整体 pass 1603→1614 (+11)，fail 64→53 (-11)，通过率 96.2%→96.8%

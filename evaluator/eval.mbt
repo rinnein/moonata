@@ -502,19 +502,37 @@ fn eval_path_frames(
             let indexed_frames : Array[PathFrame] = []
             let global_index = i > start &&
               steps[i - 1].kind is @ast.StepKind::Filter(_)
-            let mut offset = 0
-            for base_frame in frames {
+            // A position binding on a predicate belongs to the input tuple
+            // stream as a whole.  Evaluating the predicate once per frame
+            // would change an index predicate such as `[1..4]` into six
+            // one-element predicates and lose every match.  Keep the whole
+            // stream together for Filter; other steps retain per-frame
+            // evaluation so nested paths keep their local index semantics.
+            if step.kind is @ast.StepKind::Filter(_) {
               let step_frames = eval_step_frames(
                 step,
-                [base_frame],
+                frames,
                 ctx,
                 grouped=false,
               )
               for j, frame in step_frames {
-                let index = if global_index { offset + j } else { j }
-                indexed_frames.push(bind_frame_index(frame, pos_name, index))
+                indexed_frames.push(bind_frame_index(frame, pos_name, j))
               }
-              offset = offset + step_frames.length()
+            } else {
+              let mut offset = 0
+              for base_frame in frames {
+                let step_frames = eval_step_frames(
+                  step,
+                  [base_frame],
+                  ctx,
+                  grouped=false,
+                )
+                for j, frame in step_frames {
+                  let index = if global_index { offset + j } else { j }
+                  indexed_frames.push(bind_frame_index(frame, pos_name, index))
+                }
+                offset = offset + step_frames.length()
+              }
             }
             frames = indexed_frames
             map_was_grouped = false

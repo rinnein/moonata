@@ -20,13 +20,14 @@
 | P8 | CLI 与集成 | moonata / cmd/main | 2 | 4 | ✅ 完成（CLI native 参数模式可用） |
 | P9 | 语义修复与函数补全 | evaluator / functions / value | 5 | 12 | ✅ 完成 |
 | P10 | 验收收尾与兼容性补齐 | value / evaluator / functions / docs | 4 | 7 | ✅ 完成 |
-| P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | ✅ 可比对官方用例全通过（1251/1251） |
+| P11 | 官方测试集全量兼容推进 | parser / evaluator / functions / docs | 滚动 | 待评估 | 🟡 持续推进（1636/1667 通过） |
 | 合计 | | | **26** | **66** | |
 
-> 当前固定快照（2026-07-12，字符串函数签名严格校验 + parser S0203 + 偏函数 signature 修正，使用 `scripts/jsonata_official_audit.py` 审计）：
+> 当前固定快照（2026-07-14，tuple-stream 过滤后全局索引绑定修复，使用 `scripts/jsonata_official_audit.py` 审计）：
 >
-> - `moon test` 为 262/262 通过（+13 新增回归断言）；`moon check` 0e0w；`moon info` 通过；`moon fmt` 已执行。
-> - JSONata 官方可比对审计为 `eligible 1667 / pass 1591 / fail 76 / skip 15`（通过率 95.4%）。
+> - `moon test` 为 268/268 通过；`moon check` 0 warnings；`moon info`、`moon fmt` 与 native CLI 构建均通过。
+> - JSONata 官方可比对审计为 `eligible 1667 / pass 1636 / fail 31 / skip 15`（通过率 98.1%）。
+> - Top failures：`object-constructor` 5、`hof-reduce` 3、`regex` 3、`tail-recursion` 3、`transforms` 3；skip 原因：`no_expected_outcome` 15。
 > - 修复内容：
 >   - Parser: `expect()` 在输入末尾抛 S0203（Expected ... before end of expression），非末尾仍抛 S0202（对齐 JSONata-js parser 的 `advance` 错误码分支）
 >   - Functions: `$replace` 启用复杂签名 `s(sf)(sf)n?`，严格校验参数数量与类型（T0410）；空 pattern 抛 D3010；负 limit 抛 D3011；可选 `n?` 缺省时 validate_args 追加的 Undefined 视为未提供
@@ -40,20 +41,20 @@
 
 ### 1.1 当前暂停边界
 
-P11 已完成日期时间 picture 修复、Lambda 签名语法与范围表达式修复、Lambda 闭包与反引号字段名修复（`closures` 可比对用例 2/2）、字符串字面量谓词过滤修复（`conditionals` 可比对用例 7/7）、简单数组选择器逐项索引修复（`simple-array-selectors` 可比对用例 23/23，`flattening` 失败降至 4）、多索引数组选择器修复（`multiple-array-selectors` 可比对用例 3/3，`joins` 失败降至 10）、tuple stream 位置绑定传播修复（`sorting` 可比对用例 18/18 全绿，`joins` 失败降至 7）、`$keys` 对象序列修复（`function-keys` 可比对用例 3/3）、`$spread` 非对象与对象序列修复（`function-spread` 可比对用例 3/3）、`$sift` predicate 三参和空结果省略修复（`function-sift` 可比对用例 5/5）、递归通配容器保留与去重修复（`descendent-operator` 可比对用例 15/15）、`$reverse` 数组返回与数组构造展开修复（`function-reverse` 可比对用例 3/3）、整数 picture 修复、`$string` 序列化修复（`function-string` 可比对用例 26/26）、`&` 字符串拼接 undefined 与序列字符串化修复（`string-concat` 可比对用例 12/12）、无空格二元减法修复（`lambdas` 可比对用例 11/12）、比较运算修复（`comparison-operators` 可比对用例 41/41）、`$average` 与数字拼接修复（`function-average` 可比对用例 5/5）、`$zip` 可变参数修复（`function-zip` 可比对用例 6/6）、`in` 运算符修复（`inclusion-operator` 可比对用例 9/9）、`$ceil` 函数别名修复（`function-ceil` 可比对用例 3/3）、`$formatBase` 兼容修复（`function-formatBase` 可比对用例 6/6）、`$formatNumber` zero-digit 与负数子图修复（`function-formatNumber` 可比对用例 26/26）、`$fromMillis` picture 与空括号修复（`function-fromMillis` 可比对用例 88/88）、`$join` 默认分隔符与链式调用修复（`function-join` 可比对用例 7/7）、函数调用默认上下文实参修复（`context` 可比对用例 4/4）、`$split` 空分隔符与 limit 修复（`function-split` 可比对用例 11/11）、`$shuffle` 数组函数修复（`function-shuffle` 可比对用例 3/3）、`$single` predicate 修复（`hof-single` 可比对用例 6/6）、通用 date picture parser 实现（`function-tomillis` 从 34 → 17 失败，支持 word number/roman numeral/ordinal 等格式）、parent-operator 父级链路修复（`parent-operator` 可比对用例 14/20）、链式赋值与块级作用域修复（`variables` 可比对用例 6/6 全绿）、URL 百分号编码/解码函数实现（`function-decodeUrl`/`function-encodeUrl`/`function-decodeUrlComponent`/`function-encodeUrlComponent` 各 1/1 全绿）、transforms per-item update 求值与递归下降匹配修复、joins tuple stream group 聚合 reduce 修复、map 后位置谓词重置与重复父级跳过修正、undefined/null 传播 + HOF 兼容 + 函数验证完善（`function-signatures` 可比对用例 30/30）、JSONata 函数签名系统完整实现（`function-signatures` 可比对用例 41/41 全绿）、JSONata 错误码系统实现（`errors` 失败从 23 → 9，`range-operator` 全绿 25/25）、`$formatNumber` picture 完整校验实现（`function-formatNumber` 全绿 45/45）、比较运算 T2010/T2009 + 算术运算严格类型校验 + $single D3138/D3139 + $string D3001/D1001（`comparison-operators`/`hof-single`/`numeric-operators` 全绿）、词法错误码 S0102/S0103/S0104 + date picture D3133/D3134/D3135（`literals`/`function-fromMillis` 全绿），后续继续优先处理官方失败数最高的 group：
+P11 已完成日期时间 picture 修复、Lambda 签名语法与范围表达式修复、Lambda 闭包与反引号字段名修复、路径/谓词/函数兼容性修复、tuple-stream 位置绑定传播与过滤后全局索引修复；`parent-operator` 与 `joins` 已全绿。当前继续优先处理官方失败数最高的 group：
 
 | 排名 | 官方 group | 失败数 |
 | --- | --- | --- |
-| 1 | `parent-operator` | 13 |
-| 2 | `function-tomillis` | 9 |
-| 3 | `joins` | 9 |
-| 4 | `object-constructor` | 5 |
-| 5 | `function-eval` | 3 |
-| 6 | `hof-reduce` | 3 |
-| 7 | `regex` | 3 |
-| 8 | `sorting` | 3 |
-| 9 | `tail-recursion` | 3 |
-| 10 | `transforms` | 3 |
+| 1 | `object-constructor` | 5 |
+| 2 | `hof-reduce` | 3 |
+| 3 | `regex` | 3 |
+| 4 | `tail-recursion` | 3 |
+| 5 | `transforms` | 3 |
+| 6 | `hof-map` | 2 |
+| 7 | `matchers` | 2 |
+| 8 | `partial-application` | 2 |
+| 9 | `token-conversion` | 2 |
+| 10 | `errors` | 1 |
 
 跳过项仅表示当前 CLI 审计 harness 无法直接比较，不表示通过或失败：`no_expected_outcome 15`。
 

@@ -91,14 +91,14 @@ docs: update official test status
 
 ## 兼容性状态
 
-固定快照：2026-07-12，字符串函数签名严格校验 + parser S0203 + 偏函数 signature 修正 阶段。
+固定快照：2026-07-14，tuple-stream 过滤后全局索引绑定修复阶段。
 
 ```text
-本地测试：moon test 262/262
-官方可比对审计：eligible 1667, pass 1591, fail 76, skip 15
-通过率：95.4%
+本地测试：moon test 268/268
+官方可比对审计：eligible 1667, pass 1636, fail 31, skip 15
+通过率：98.1%
 ```
 
-Top failures: parent-operator(13), function-tomillis(9), joins(9), object-constructor(5), function-eval(3), hof-reduce(3), regex(3), sorting(3), tail-recursion(3), transforms(3)
+Top failures: object-constructor(5), hof-reduce(3), regex(3), tail-recursion(3), transforms(3), hof-map(2), matchers(2), partial-application(2), token-conversion(2), errors(1)
 
 官方测试集审计流程与跳过策略记录在 `docs/jsonata-official-workflow.md`。
