@@ -126,10 +126,22 @@ _build/native/debug/build/cmd/main/main.exe '<expr>' --file '<tmp-json-data>'
 - 失败最多的前 10 个 group。
 - skip 原因计数。
 
-当前固定快照（2026-07-15，`tonyfetes/url@0.3.3` 接入 + `--expr-file` WTF-8 通道修复最后 2 个 encodeUrl/encodeUrlComponent fail，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-15，embedding-extending + guardrails 功能落地，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
 eligible 1682 pass 1682 fail 0 skip 0
 top_failures
 skip_reasons
 ```
+
+### 8.4 Embedding-Extending 与 Guardrails 扩展点
+
+Moonata 在 `moonata.mbt` facade 暴露与 JSONata 官方文档对齐的嵌入与护栏 API：
+
+- `evaluate_with_bindings(expr, data, bindings)` 对齐 `expression.evaluate(input, bindings)`
+- `evaluate_with_options(expr, data, options)` / `evaluate_undefined_with_options(expr, options)` 对齐 `jsonata(str, options).evaluate(input)`
+- `compile(expr)` 返回的 `Compiled` 支持 `assign(name, value)`、`register_function(name, arity, signature, invoke)`、`run_with_options(data, options)`、`run_with_bindings(data, bindings)` 方法，对齐 `expression.assign` / `expression.registerFunction`
+- `EvalOptions` 结构体携带 `stack` / `timeout` / `sequence` / `max_steps` 四个可选项，对应 JSONata `guardrails` 文档中的 `stack`（D1011）、`timeout`（D1012）、`sequence`（D2015）护栏
+- 旧路径 `evaluate` / `evaluate_with_max_depth` 保持 `U1001` 错误码不变，对齐 jsonata-js test runner 的 `timeboxExpression` 语义
+
+`RegexEngine` 选项未实现——MoonBit 标准库 `moonbitlang/regexp@0.3.5` 已提供 ReDoS 安全的正则引擎，未来可通过 `EvalOptions::regex_engine` 扩展点接入第三方检测。

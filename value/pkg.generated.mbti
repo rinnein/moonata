@@ -7,6 +7,12 @@ import {
 }
 
 // Values
+pub let default_max_depth : Int
+
+pub let default_max_sequence : Int
+
+pub let default_max_steps : Int
+
 pub fn flatten_sequence(Array[JsonataValue]) -> Array[JsonataValue]
 
 pub fn validate_function_args(String, Array[JsonataValue], JsonataValue) -> Array[JsonataValue] raise @error.JsonataError
@@ -21,6 +27,10 @@ pub struct EvalContext {
   max_depth : Int
   mut steps : Int
   max_steps : Int
+  max_sequence : Int
+  depth_exceeded_code : String
+  steps_exceeded_code : String
+  sequence_exceeded_code : String
   mut current : JsonataValue
   mut parent : JsonataValue
   mut ancestors : Array[JsonataValue]
@@ -29,12 +39,14 @@ pub fn EvalContext::ancestors(Self) -> Array[JsonataValue]
 pub fn EvalContext::bind(Self, String, JsonataValue) -> Unit
 pub fn EvalContext::bindings_snapshot(Self) -> Map[String, JsonataValue]
 pub fn EvalContext::capture(Self) -> Self
+pub fn EvalContext::check_sequence_length(Self, Int) -> Unit raise @error.JsonataError
 pub fn EvalContext::current(Self) -> JsonataValue
 pub fn EvalContext::enter(Self) -> Unit raise @error.JsonataError
 pub fn EvalContext::exit(Self) -> Unit
 pub fn EvalContext::inherit_missing_bindings_from(Self, Self) -> Unit
 pub fn EvalContext::lookup(Self, String) -> JsonataValue?
 pub fn EvalContext::new(JsonataValue) -> Self
+pub fn EvalContext::new_with_guardrails(JsonataValue, max_depth? : Int, max_steps? : Int, max_sequence? : Int, depth_exceeded_code? : String, steps_exceeded_code? : String, sequence_exceeded_code? : String) -> Self
 pub fn EvalContext::new_with_limits(JsonataValue, max_depth? : Int, max_steps? : Int) -> Self
 pub fn EvalContext::parent(Self) -> JsonataValue
 pub fn EvalContext::restore_bindings(Self, Map[String, JsonataValue]) -> Unit

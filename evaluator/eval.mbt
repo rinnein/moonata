@@ -250,6 +250,14 @@ pub fn eval(
   try {
     let r = eval_inner(ast, ctx)
     ctx.exit()
+    // 序列长度护栏：对齐 JSONata `guardrails` 文档 `sequence` 选项。
+    // 在 eval 边界检查返回的 Sequence 长度，覆盖大多数中间/最终序列构造场景。
+    // 当 `max_sequence <= 0`（默认）时为 no-op。
+    match r {
+      @value.JsonataValue::Sequence(arr) =>
+        ctx.check_sequence_length(arr.length())
+      _ => ()
+    }
     r
   } catch {
     e => {
@@ -2131,7 +2139,12 @@ fn access_map(
   }
   match results.length() {
     0 => @value.JsonataValue::Undefined
-    _ => @value.JsonataValue::Sequence(results)
+    _ => {
+      // 序列长度护栏：access_map 是 path map 步骤的主要序列构造点，
+      // 诸如 `[1..N].([1..N])` 的爆炸式序列在此处累积，需在 eval 边界外额外检查。
+      ctx.check_sequence_length(results.length())
+      @value.JsonataValue::Sequence(results)
+    }
   }
 }
 

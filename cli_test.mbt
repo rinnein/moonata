@@ -4,8 +4,12 @@ test "parse_cli_config: expr only" {
   assert_eq(config.expr, "1 + 2")
   assert_true(config.data == None)
   assert_true(config.file == None)
+  assert_true(config.expr_file == None)
   assert_eq(config.no_data, false)
   assert_eq(config.max_depth, -1)
+  assert_true(config.stack == None)
+  assert_true(config.timeout == None)
+  assert_true(config.sequence == None)
 }
 
 ///|
@@ -26,6 +30,13 @@ test "parse_cli_config: expr with --file" {
 }
 
 ///|
+test "parse_cli_config: --expr-file" {
+  let config = parse_cli_config(["--expr-file", "expr.txt"])
+  assert_eq(config.expr, "")
+  assert_true(config.expr_file == Some("expr.txt"))
+}
+
+///|
 test "parse_cli_config: --no-data flag" {
   let config = parse_cli_config(["name", "--no-data"])
   assert_eq(config.expr, "name")
@@ -36,6 +47,24 @@ test "parse_cli_config: --no-data flag" {
 test "parse_cli_config: --max-depth integer" {
   let config = parse_cli_config(["name", "--max-depth", "302"])
   assert_eq(config.max_depth, 302)
+}
+
+///|
+test "parse_cli_config: --stack integer (guardrails)" {
+  let config = parse_cli_config(["name", "--stack", "500"])
+  assert_true(config.stack == Some(500))
+}
+
+///|
+test "parse_cli_config: --timeout integer (guardrails)" {
+  let config = parse_cli_config(["name", "--timeout", "1000"])
+  assert_true(config.timeout == Some(1000))
+}
+
+///|
+test "parse_cli_config: --sequence integer (guardrails)" {
+  let config = parse_cli_config(["name", "--sequence", "1000000"])
+  assert_true(config.sequence == Some(1000000))
 }
 
 ///|
@@ -64,10 +93,30 @@ test "parse_cli_config: combined flags" {
 }
 
 ///|
+test "parse_cli_config: combined guardrails" {
+  let config = parse_cli_config([
+    "$sum($.items.price)", "--stack", "500", "--timeout", "1000", "--sequence", "1000000",
+  ])
+  assert_eq(config.expr, "$sum($.items.price)")
+  assert_true(config.stack == Some(500))
+  assert_true(config.timeout == Some(1000))
+  assert_true(config.sequence == Some(1000000))
+}
+
+///|
 test "parse_cli_config: --max-depth non-integer raises" {
   try parse_cli_config(["name", "--max-depth", "abc"]) catch {
     _ => return
   } noraise {
     _ => fail("expected --max-depth to reject non-integer")
+  }
+}
+
+///|
+test "parse_cli_config: --stack non-integer raises" {
+  try parse_cli_config(["name", "--stack", "abc"]) catch {
+    _ => return
+  } noraise {
+    _ => fail("expected --stack to reject non-integer")
   }
 }

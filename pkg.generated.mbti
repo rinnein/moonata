@@ -5,6 +5,7 @@ import {
   "moonbitlang/core/argparse",
   "rinnein/moonata/ast",
   "rinnein/moonata/error",
+  "rinnein/moonata/value",
 }
 
 // Values
@@ -18,7 +19,13 @@ pub fn evaluate_undefined(String) -> Json raise @error.JsonataError
 
 pub fn evaluate_undefined_with_max_depth(String, Int) -> Json raise @error.JsonataError
 
+pub fn evaluate_undefined_with_options(String, EvalOptions) -> Json raise @error.JsonataError
+
+pub fn evaluate_with_bindings(String, Json, Map[String, Json]) -> Json raise @error.JsonataError
+
 pub fn evaluate_with_max_depth(String, Json, Int) -> Json raise @error.JsonataError
+
+pub fn evaluate_with_options(String, Json, EvalOptions) -> Json raise @error.JsonataError
 
 pub fn parse_cli_config(ArrayView[String]) -> CliConfig raise
 
@@ -29,17 +36,38 @@ pub struct CliConfig {
   expr : String
   data : String?
   file : String?
+  expr_file : String?
   no_data : Bool
   max_depth : Int
+  stack : Int?
+  timeout : Int?
+  sequence : Int?
 } derive(Eq)
 
 pub(all) struct Compiled {
   ast : @ast.Ast
+  mut assigned_bindings : Map[String, @value.JsonataValue]
 }
+pub fn Compiled::assign(Self, String, Json) -> Unit
+pub fn Compiled::register_function(Self, String, arity~ : Int, signature~ : String?, invoke~ : (Array[Json], @value.EvalContext) -> Json raise @error.JsonataError) -> Unit
 pub fn Compiled::run(Self, Json) -> Json raise @error.JsonataError
+pub fn Compiled::run_with_bindings(Self, Json, Map[String, Json]) -> Json raise @error.JsonataError
+pub fn Compiled::run_with_options(Self, Json, EvalOptions) -> Json raise @error.JsonataError
+
+pub struct EvalOptions {
+  stack : Int?
+  timeout : Int?
+  sequence : Int?
+  max_steps : Int?
+} derive(Eq)
+pub fn EvalOptions::build_context(Self, @value.JsonataValue) -> @value.EvalContext
+pub fn EvalOptions::default() -> Self
+pub fn EvalOptions::new(stack? : Int?, timeout? : Int?, sequence? : Int?, max_steps? : Int?) -> Self
 
 // Type aliases
 pub using @ast {type Ast}
+
+pub using @value {type EvalContext}
 
 pub using @error {type JsonataError}
 

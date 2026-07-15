@@ -7,8 +7,12 @@ pub struct CliConfig {
   expr : String
   data : String? // 内联 JSON 字符串
   file : String? // JSON 文件路径
+  expr_file : String? // 表达式文件路径（WTF-8 解码，保留 lone surrogate）
   no_data : Bool // 使用 undefined 上下文（对齐 dataset:null → undefined 语义）
   max_depth : Int // -1 表示未设置；>0 时传入求值器限制递归深度
+  stack : Int? // guardrails stack 选项（>0 启用 D1011）
+  timeout : Int? // guardrails timeout 选项（毫秒，>0 启用 D1012）
+  sequence : Int? // guardrails sequence 选项（>0 启用 D2015）
 } derive(Eq)
 
 ///|
@@ -23,7 +27,11 @@ pub struct CliConfig {
 ///   以 `-` 开头的表达式（如 `-1 + 2`）。
 /// - `--data <json>`：内联 JSON 数据。
 /// - `--file <path>`：JSON 文件路径。
+/// - `--expr-file <path>`：表达式文件路径（WTF-8 解码，保留 lone surrogate）。
 /// - `--max-depth <n>`：最大递归深度（对齐 jsonata-js test runner 的 maxDepth）。
+/// - `--stack <n>`：guardrails stack 选项（超限抛 D1011，对齐 JSONata 官方文档）。
+/// - `--timeout <ms>`：guardrails timeout 选项（毫秒，超限抛 D1012）。
+/// - `--sequence <n>`：guardrails sequence 选项（超限抛 D2015）。
 /// - `--no-data`：使用 undefined 上下文求值。
 /// - `--help` / `-h`：由 argparse 内建提供。
 pub fn cli_command() -> @argparse.Command {
@@ -42,9 +50,29 @@ pub fn cli_command() -> @argparse.Command {
         about="对指定 JSON 文件求值（文件路径）",
       ),
       @argparse.OptionArg(
+        "expr-file",
+        long="expr-file",
+        about="从文件读取表达式（WTF-8 解码，保留 lone surrogate）",
+      ),
+      @argparse.OptionArg(
         "max-depth",
         long="max-depth",
         about="指定最大递归深度（对齐 jsonata-js test runner）",
+      ),
+      @argparse.OptionArg(
+        "stack",
+        long="stack",
+        about="guardrails: 最大递归深度（超限抛 D1011）",
+      ),
+      @argparse.OptionArg(
+        "timeout",
+        long="timeout",
+        about="guardrails: 最大执行时间毫秒（超限抛 D1012）",
+      ),
+      @argparse.OptionArg(
+        "sequence",
+        long="sequence",
+        about="guardrails: 最大序列长度（超限抛 D2015）",
       ),
     ],
     flags=[
@@ -57,8 +85,8 @@ pub fn cli_command() -> @argparse.Command {
     positionals=[
       @argparse.PositionArg(
         "expr",
-        about="JSONata 表达式",
-        num_args=@argparse.ValueRange::single(),
+        about="JSONata 表达式（与 --expr-file 互斥；二者均无时显示帮助）",
+        num_args=@argparse.ValueRange::ValueRange(lower=0, upper=1),
         allow_hyphen_values=true,
       ),
     ],
@@ -71,7 +99,8 @@ pub fn cli_command() -> @argparse.Command {
 ///
 /// - 由 argparse 处理 `--help`/`-h`（打印帮助并 exit 0）与参数校验错误
 ///   （抛出已格式化的 `ArgError`，调用方可 catch 后直接打印）。
-/// - `--max-depth` 的整型校验由本函数完成，非法值抛出 `Failure`。
+/// - `--max-depth` / `--stack` / `--timeout` / `--sequence` 的整型校验由本函数完成，
+///   非法值抛出 `Failure`。
 pub fn parse_cli_config(argv : ArrayView[String]) -> CliConfig raise {
   let matches = @argparse.parse(cli_command(), argv~)
   let values : Map[String, Array[String]] = matches.values
@@ -88,6 +117,10 @@ pub fn parse_cli_config(argv : ArrayView[String]) -> CliConfig raise {
     Some([f, ..]) => Some(f)
     _ => None
   }
+  let expr_file = match values.get("expr-file") {
+    Some([f, ..]) => Some(f)
+    _ => None
+  }
   let max_depth = match values.get("max-depth") {
     Some([s, ..]) =>
       @string.parse_int(s) catch {
@@ -95,6 +128,33 @@ pub fn parse_cli_config(argv : ArrayView[String]) -> CliConfig raise {
       }
     _ => -1
   }
+  let stack = match values.get("stack") {
+    Some([s, ..]) =>
+      Some(
+        @string.parse_int(s) catch {
+          _ => fail("--stack 需要整数参数")
+        },
+      )
+    _ => None
+  }
+  let timeout = match values.get("timeout") {
+    Some([s, ..]) =>
+      Some(
+        @string.parse_int(s) catch {
+          _ => fail("--timeout 需要整数参数")
+        },
+      )
+    _ => None
+  }
+  let sequence = match values.get("sequence") {
+    Some([s, ..]) =>
+      Some(
+        @string.parse_int(s) catch {
+          _ => fail("--sequence 需要整数参数")
+        },
+      )
+    _ => None
+  }
   let no_data = matches.flags.get("no-data").unwrap_or(false)
-  { expr, data, file, no_data, max_depth }
+  { expr, data, file, expr_file, no_data, max_depth, stack, timeout, sequence }
 }

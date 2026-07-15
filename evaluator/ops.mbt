@@ -80,7 +80,7 @@ fn eval_binary(
     "*" => arith_op(lhs, rhs, "*")
     "/" => arith_op(lhs, rhs, "/")
     "%" => arith_op(lhs, rhs, "%")
-    ".." => range_op(lhs, rhs)
+    ".." => range_op(lhs, rhs, ctx)
     "&" => concat_or_merge(lhs, rhs)
     "=" => compare_eq(lhs, rhs)
     "!=" => compare_neq(lhs, rhs)
@@ -136,6 +136,7 @@ fn in_op(
 fn range_op(
   lhs : @value.JsonataValue,
   rhs : @value.JsonataValue,
+  ctx : @value.EvalContext,
 ) -> @value.JsonataValue raise @error.JsonataError {
   // T2003: The left side of the range operator (..) must evaluate to an integer
   // T2004: The right side of the range operator (..) must evaluate to an integer
@@ -237,6 +238,8 @@ fn range_op(
       items.push(@value.JsonataValue::Json(Json::number(i.to_double())))
     }
   }
+  // 序列长度护栏：range 是单次构造最大序列的操作，需在返回前检查
+  ctx.check_sequence_length(items.length())
   @value.JsonataValue::Sequence(items)
 }
 
@@ -597,6 +600,8 @@ fn eval_construct(
 
   // If any non-JSON values, return Sequence to preserve functions/regexes
   if has_non_json {
+    // 序列长度护栏：构造数组时若展开后元素数超限则抛 D2015
+    ctx.check_sequence_length(evaluated.length())
     return @value.JsonataValue::Sequence(evaluated)
   }
 

@@ -142,13 +142,32 @@ skip_reasons
 下方固定快照仍是旧口径下的历史记录；本轮脚本升级后，`skip` 分类会更细，待下一次复跑官方审计后再刷新这里的数字。
 
 
-当前固定快照（2026-07-15，`tonyfetes/url@0.3.3` 接入 + `--expr-file` WTF-8 通道修复最后 2 个 encodeUrl/encodeUrlComponent fail，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-15，embedding-extending + guardrails 功能落地，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
 eligible 1682 pass 1682 fail 0 skip 0
 top_failures
 skip_reasons
 ```
+
+本轮新增（embedding-extending + guardrails 功能落地，对齐 JSONata 官方文档 `embedding-extending` 与 `guardrails`）：
+- 提交：整体 eligible 1682 / pass 1682 / fail 0 / skip 0 不变（官方测试集 100% 通过），新增 27 个本地回归测试（moon test 314→336，全绿）
+- 门禁：`moon check --deny-warn` 0e0w，`moon test --deny-warn` 336/336 passed，`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native --deny-warn` 通过
+- 修复内容（同时修复了上一个 commit `d90709e` 遗留的 `cmd/main/main.mbt` 编译错误——`config` 未绑定）：
+  - **CLI 修复**：`cmd/main/main.mbt` 上一个 commit 试图改用 `parse_cli_config` 但未完成，导致 9 个 `config is unbound` 编译错误 + 2 个 `unused variable` 警告。本轮补齐：将 `--expr-file` 标志纳入 `CliConfig` 与 `cli_command()` 声明，`main.mbt` 改用 `@moonata.parse_cli_config(args[1:])` 装配，`--expr-file` 通过 `try { @fs.read_file(...) } catch { ... }` 读取（`@fs.read_file` 返回 `&@io.Data` 而非 `Result`，原代码用 `Ok/Err` 模式匹配是错的）
+  - **embedding-extending（对齐 https://docs.jsonata.org/embedding-extending）**：
+    - Facade: 新增 `evaluate_with_bindings(expr, data, bindings)` 对齐 `expression.evaluate(input, bindings)`；新增 `evaluate_with_options(expr, data, options)` 与 `evaluate_undefined_with_options(expr, options)` 对齐 `jsonata(str, options).evaluate(input)`
+    - `Compiled`：新增 `assign(name, value)` 对齐 `expression.assign`，永久绑定值；新增 `register_function(name, arity, signature, invoke)` 对齐 `expression.registerFunction(name, impl, signature)`，闭包接收 `Array[Json]` + `EvalContext` 返回 `Json`（Moonata 内部转换为 `JsonataValue::Func`）；新增 `run_with_options(data, options)` 与 `run_with_bindings(data, bindings)`；`Compiled` 新增 `mut assigned_bindings` 字段持久化 `assign`/`register_function` 注册的绑定
+    - 签名语法：复用既有 `value/signature.mbt` 的 `parse_function_signature`，支持 `<nn:n>`、`<a<s>s?:s>`、`<s-:n>` 等完整 JSONata 签名语法（含类型符号 `b/n/s/l/a/o/f/j/x/u`、修饰符 `+/?/-`、参数化类型 `a<s>`）
+  - **guardrails（对齐 https://docs.jsonata.org/guardrails）**：
+    - `EvalContext` 新增 `max_sequence`、`depth_exceeded_code`、`steps_exceeded_code`、`sequence_exceeded_code` 字段；`enter()` / `tick()` 使用可配置错误码（默认 `U1001` 向后兼容 jsonata-js test runner，启用 guardrails 时改用 `D1011`/`D1012`）；新增 `check_sequence_length(n)` 方法抛 `D2015`
+    - `EvalContext::new_with_guardrails(...)` 构造函数支持完整护栏配置
+    - `default_max_depth` / `default_max_steps` / `default_max_sequence` 改为 `pub let` 供 facade 选项构造使用
+    - Facade: 新增 `EvalOptions` 结构体（`stack` / `timeout` / `sequence` / `max_steps` 四个可选项）+ `EvalOptions::default()` + `EvalOptions::new(...)` + `EvalOptions::build_context(root)` 工厂方法；`stack>0` 启用 D1011，`timeout>0` 启用 D1012（MoonBit 无原生 wall-clock 超时，使用 `timeout_ms * 1000` 作为 `max_steps` 近似），`sequence>0` 启用 D2015
+    - 序列护栏注入点：`eval()` 边界（检查返回的 `Sequence` 长度）、`access_map` 累积完成处、`eval_construct` 展开后、`range_op` 构造前——覆盖大多数中间/最终序列构造场景
+    - CLI: 新增 `--stack <n>` / `--timeout <ms>` / `--sequence <n>` 三个标志，对应 `EvalOptions` 的三个选项；`has_guardrails` 时调用 `evaluate_with_options` / `evaluate_undefined_with_options`，否则保留原有 `evaluate_with_max_depth` / `evaluate` 路径（向后兼容 U1001 语义）
+    - `RegexEngine` 选项未实现（MoonBit 标准库 `moonbitlang/regexp@0.3.5` 已提供 ReDoS 安全的正则引擎，未来可通过 `EvalOptions::regex_engine` 扩展点接入第三方检测）
+  - **回归测试**：新增 `embedding_guardrails_test.mbt`（22 个测试），覆盖 embedding（bindings 注入、`Compiled::assign` 持久化、`Compiled::register_function` 无签名/带签名/类型校验失败/高阶函数、`run_with_bindings` 临时覆盖）与 guardrails（`stack` D1011、`sequence` D2015、`stack+sequence` 组合、`Compiled::run_with_options`、U1001 向后兼容）
 
 本轮修复（`tonyfetes/url@0.3.3` 接入 + `--expr-file` WTF-8 通道 + lexer lone surrogate 保留）：
 - 提交：整体 eligible 1682 不变，pass 1680→1682 (+2)，fail 2→0 (-2)，skip 0 不变；通过率（pass/eligible）99.88%→100%，**非通过总数（fail + skip）由 2 降至 0**

@@ -1,17 +1,20 @@
 ///|
 /// Moonata CLI 入口（native 目标）。
 ///
-/// 本文件仅做装配：读 argv → 调用库包 `parse_cli_config` → 执行 `run`。
+/// 本文件仅做装配：读 argv → 调用库包 `parse_cli_config` → 执行求值。
 /// 参数解析、命令声明与测试见根包 `cli.mbt` / `cli_test.mbt`。
 ///
 /// 用法：
-///   moonata '<expr>'                    # 对 null 求值
-///   moonata '<expr>' --data '<json>'   # 对指定 JSON 数据求值
-///   moonata '<expr>' --file '<file>'   # 对指定 JSON 文件求值
-///   moonata '<expr>' --no-data         # 对 undefined 上下文求值
-///   moonata '<expr>' --max-depth <n>   # 指定最大递归深度（对齐 jsonata-js test runner）
-///   moonata --expr-file '<file>'       # 从文件读取表达式（WTF-8 解码，保留 lone surrogate）
-///   moonata --help                      # 显示帮助
+///   moonata '<expr>'                            # 对 null 求值
+///   moonata '<expr>' --data '<json>'           # 对指定 JSON 数据求值
+///   moonata '<expr>' --file '<file>'           # 对指定 JSON 文件求值
+///   moonata '<expr>' --no-data                 # 对 undefined 上下文求值
+///   moonata '<expr>' --max-depth <n>           # 指定最大递归深度（对齐 jsonata-js test runner）
+///   moonata '<expr>' --stack <n>               # guardrails: stack（D1011）
+///   moonata '<expr>' --timeout <ms>            # guardrails: timeout（D1012）
+///   moonata '<expr>' --sequence <n>            # guardrails: sequence（D2015）
+///   moonata --expr-file '<file>'               # 从文件读取表达式（WTF-8 解码，保留 lone surrogate）
+///   moonata --help                              # 显示帮助
 ///
 /// `--expr-file` 读取文件原始字节并以 WTF-8 解码为 MoonBit 字符串，使
 /// `function-encodeUrl/case002` 等 case 中通过 `surrogatepass` 写入的
@@ -23,92 +26,70 @@ async fn main {
     print_usage()
     return
   }
-  // 解析参数
-  let mut expr = ""
-  let mut expr_from_file = ""
-  let mut data_str = ""
-  let mut use_undefined = false
-  let mut max_depth : Int = -1
-  let mut i = 1
-  while i < args.length() {
-    let arg = args[i]
-    match arg {
-      "--help" | "-h" => {
-        print_usage()
-        return
-      }
-      "--expr-file" => {
-        i += 1
-        if i < args.length() {
-          let file_path = args[i]
-          let file_content = @fs.read_file(file_path) catch {
-            _ => {
-              println("错误: 无法读取表达式文件 \{file_path}")
-              return
-            }
-          }
-          // 以原始字节读取，使用 WTF-8 解码保留 lone surrogate
-          expr_from_file = wtf8_decode(file_content.binary())
-        }
-      }
-      "--data" => {
-        i += 1
-        if i < args.length() {
-          data_str = args[i]
-        }
-      }
-      "--file" => {
-        i += 1
-        if i < args.length() {
-          let file_path = args[i]
-          let file_content = @fs.read_file(file_path) catch {
-            _ => {
-              println("错误: 无法读取文件 \{file_path}")
-              return
-            }
-          }
-          data_str = file_content.text()
-        }
-      }
-      "--no-data" =>
-        // 对 undefined 上下文求值（对齐 jsonata-js `dataset: null` → undefined 语义）
-        use_undefined = true
-      "--max-depth" => {
-        i += 1
-        if i < args.length() {
-          try {
-            max_depth = @string.parse_int(args[i])
-          } catch {
-            _ => {
-              println("错误: --max-depth 需要整数参数")
-              return
-            }
-          }
-        }
-      }
-      _ => if expr == "" { expr = arg }
+  // 解析参数（argparse 自动处理 --help/-h）
+  let config = @moonata.parse_cli_config(args[1:]) catch {
+    e => {
+      // argparse 抛出的 ArgError 已含格式化消息
+      println("错误: \{e}")
+      return
     }
-    i += 1
   }
   // --expr-file 优先于位置参数
-  if expr_from_file != "" {
-    expr = expr_from_file
+  let expr = match config.expr_file {
+    Some(file_path) =>
+      try {
+        let content = @fs.read_file(file_path)
+        wtf8_decode(content.binary())
+      } catch {
+        _ => {
+          println("错误: 无法读取表达式文件 \{file_path}")
+          return
+        }
+      }
+    None => config.expr
   }
   if expr == "" {
     println("错误: 未提供表达式")
     print_usage()
     return
   }
+  // 读取数据
+  let data_str = match config.file {
+    Some(file_path) =>
+      try {
+        let content = @fs.read_file(file_path)
+        content.text()
+      } catch {
+        _ => {
+          println("错误: 无法读取文件 \{file_path}")
+          return
+        }
+      }
+    None =>
+      match config.data {
+        Some(s) => s
+        None => "null"
+      }
+  }
+  // 构造 guardrails 选项
+  let options = @moonata.EvalOptions::new(
+    stack=config.stack,
+    timeout=config.timeout,
+    sequence=config.sequence,
+  )
+  let has_guardrails = config.stack != None ||
+    config.timeout != None ||
+    config.sequence != None
   // 求值
   try {
     let result = if config.no_data {
-      if config.max_depth > 0 {
-        @moonata.evaluate_undefined_with_max_depth(
-          config.expr,
-          config.max_depth,
-        )
+      // undefined 上下文
+      if has_guardrails {
+        @moonata.evaluate_undefined_with_options(expr, options)
+      } else if config.max_depth > 0 {
+        @moonata.evaluate_undefined_with_max_depth(expr, config.max_depth)
       } else {
-        @moonata.evaluate_undefined(config.expr)
+        @moonata.evaluate_undefined(expr)
       }
     } else {
       // 解析 JSON 数据
@@ -118,14 +99,12 @@ async fn main {
           return
         }
       }
-      if config.max_depth > 0 {
-        @moonata.evaluate_with_max_depth(
-          config.expr,
-          json_data,
-          config.max_depth,
-        )
+      if has_guardrails {
+        @moonata.evaluate_with_options(expr, json_data, options)
+      } else if config.max_depth > 0 {
+        @moonata.evaluate_with_max_depth(expr, json_data, config.max_depth)
       } else {
-        @moonata.evaluate(config.expr, json_data)
+        @moonata.evaluate(expr, json_data)
       }
     }
     println(result.stringify(indent=2))
@@ -162,15 +141,34 @@ fn print_usage() -> Unit {
   println("Moonata - JSONata 查询/转换语言 (MoonBit 实现)")
   println("")
   println("用法:")
-  println("  moonata '<expr>'                    对 null 求值表达式")
-  println("  moonata '<expr>' --data '<json>'    对指定 JSON 数据求值")
-  println("  moonata '<expr>' --file '<file>'    对指定 JSON 文件求值")
-  println("  moonata '<expr>' --no-data          对 undefined 上下文求值")
-  println("  moonata '<expr>' --max-depth <n>    指定最大递归深度")
   println(
-    "  moonata --expr-file '<file>'        从文件读取表达式 (WTF-8 解码)",
+    "  moonata '<expr>'                            对 null 求值表达式",
   )
-  println("  moonata --help                      显示此帮助")
+  println(
+    "  moonata '<expr>' --data '<json>'            对指定 JSON 数据求值",
+  )
+  println(
+    "  moonata '<expr>' --file '<file>'            对指定 JSON 文件求值",
+  )
+  println(
+    "  moonata '<expr>' --no-data                  对 undefined 上下文求值",
+  )
+  println(
+    "  moonata '<expr>' --max-depth <n>            指定最大递归深度",
+  )
+  println(
+    "  moonata '<expr>' --stack <n>                guardrails: 最大递归深度 (D1011)",
+  )
+  println(
+    "  moonata '<expr>' --timeout <ms>             guardrails: 最大执行时间毫秒 (D1012)",
+  )
+  println(
+    "  moonata '<expr>' --sequence <n>             guardrails: 最大序列长度 (D2015)",
+  )
+  println(
+    "  moonata --expr-file '<file>'                从文件读取表达式 (WTF-8 解码)",
+  )
+  println("  moonata --help                              显示此帮助")
   println("")
   println("示例:")
   println("  moonata '1 + 2'")
