@@ -2,15 +2,12 @@
 package "rinnein/moonata"
 
 import {
-  "moonbitlang/core/argparse",
   "rinnein/moonata/ast",
   "rinnein/moonata/error",
   "rinnein/moonata/value",
 }
 
 // Values
-pub fn cli_command() -> @argparse.Command
-
 pub fn compile(String) -> Compiled raise @error.JsonataError
 
 pub fn evaluate(String, Json) -> Json raise @error.JsonataError
@@ -27,23 +24,9 @@ pub fn evaluate_with_max_depth(String, Json, Int) -> Json raise @error.JsonataEr
 
 pub fn evaluate_with_options(String, Json, EvalOptions) -> Json raise @error.JsonataError
 
-pub fn parse_cli_config(ArrayView[String]) -> CliConfig raise
-
 // Errors
 
 // Types and methods
-pub struct CliConfig {
-  expr : String
-  data : String?
-  file : String?
-  expr_file : String?
-  no_data : Bool
-  max_depth : Int
-  stack : Int?
-  timeout : Int?
-  sequence : Int?
-} derive(Eq)
-
 pub(all) struct Compiled {
   ast : @ast.Ast
   mut assigned_bindings : Map[String, @value.JsonataValue]

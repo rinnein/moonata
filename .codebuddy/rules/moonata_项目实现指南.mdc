@@ -126,7 +126,7 @@ _build/native/debug/build/cmd/main/main.exe '<expr>' --file '<tmp-json-data>'
 - 失败最多的前 10 个 group。
 - skip 原因计数。
 
-当前固定快照（2026-07-15，embedding-extending + guardrails 功能落地，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-15，CLI 参数解析移入 cmd/main 包，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
 eligible 1682 pass 1682 fail 0 skip 0

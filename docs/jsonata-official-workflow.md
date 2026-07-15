@@ -142,13 +142,24 @@ skip_reasons
 下方固定快照仍是旧口径下的历史记录；本轮脚本升级后，`skip` 分类会更细，待下一次复跑官方审计后再刷新这里的数字。
 
 
-当前固定快照（2026-07-15，embedding-extending + guardrails 功能落地，使用 `scripts/jsonata_official_audit.py` 审计）：
+当前固定快照（2026-07-15，CLI 参数解析移入 cmd/main 包，使用 `scripts/jsonata_official_audit.py` 审计）：
 
 ```text
 eligible 1682 pass 1682 fail 0 skip 0
 top_failures
 skip_reasons
 ```
+
+本轮重构（CLI 参数解析移入 `cmd/main` 包，从 facade 公共 API 中剥离）：
+- 提交：整体 eligible 1682 / pass 1682 / fail 0 / skip 0 不变（官方测试集 100% 通过），本地测试 336→321（CLI 解析测试随文件移动到 `cmd/main`，根包测试数减少）
+- 门禁：`moon check --deny-warn` 0e0w，`moon test --deny-warn` 321/321 passed，`moon fmt` 与 `moon info` 已执行，`moon build cmd/main --target native --deny-warn` 通过
+- 重构内容：
+  - 移动：`cli.mbt` 与 `cli_test.mbt` 从根 facade 包移至 `cmd/main/` 包，`CliConfig` / `cli_command` / `parse_cli_config` 改为包内私有（去掉 `pub`），不再属于 facade 公共 API
+  - Facade 清理：根 `moon.pkg` 移除 `moonbitlang/core/argparse` 与 `moonbitlang/core/string` 依赖（仅 `cli.mbt` 使用）；`pkg.generated.mbti` 不再导出 `cli_command` / `parse_cli_config` / `CliConfig`
+  - `cmd/main/moon.pkg` 新增 `moonbitlang/core/argparse` 依赖
+  - `cmd/main/main.mbt`：`@moonata.parse_cli_config(args[1:])` 改为本包内直接调用 `parse_cli_config(args[1:])`，CLI 参数解析不再穿透 facade 边界
+  - 直接调用 argparse：`parse_cli_config` 内部通过 `@argparse.parse(cli_command(), argv~)` 完成全部参数解析，无手动 argv 切片处理；`--help` / `-h` 由 argparse 内建处理
+  - 文档：`docs/architecture.md` 更新包架构图与职责表，标注 CLI 解析位于 `cmd/main` 包内
 
 本轮新增（embedding-extending + guardrails 功能落地，对齐 JSONata 官方文档 `embedding-extending` 与 `guardrails`）：
 - 提交：整体 eligible 1682 / pass 1682 / fail 0 / skip 0 不变（官方测试集 100% 通过），新增 27 个本地回归测试（moon test 314→336，全绿）

@@ -1,8 +1,8 @@
 ///|
 /// Moonata CLI 入口（native 目标）。
 ///
-/// 本文件仅做装配：读 argv → 调用库包 `parse_cli_config` → 执行求值。
-/// 参数解析、命令声明与测试见根包 `cli.mbt` / `cli_test.mbt`。
+/// 本文件仅做装配：读 argv → 直接调用 `@argparse` 解析 → 执行求值。
+/// 参数解析、命令声明与测试见本包 `cli.mbt` / `cli_test.mbt`。
 ///
 /// 用法：
 ///   moonata '<expr>'                            # 对 null 求值
@@ -27,7 +27,7 @@ async fn main {
     return
   }
   // 解析参数（argparse 自动处理 --help/-h）
-  let config = @moonata.parse_cli_config(args[1:]) catch {
+  let config = parse_cli_config(args[1:]) catch {
     e => {
       // argparse 抛出的 ArgError 已含格式化消息
       println("错误: \{e}")

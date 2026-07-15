@@ -1,9 +1,10 @@
 ///|
 /// Moonata CLI 配置：由 `parse_cli_config` 从 argv 解析得到的类型化配置。
 ///
-/// 遵循 `moonbitlang/moonbit-docs` 的 cli-quickstart 模式——将参数解析与
-/// 业务逻辑放在库包中，保持 `cmd/main` 仅做装配。
-pub struct CliConfig {
+/// 仅在 `cmd/main` 可执行包内使用，不属于 facade 公共 API。
+/// 参数解析通过 `moonbitlang/core/argparse` 完成，本结构体仅承载 argparse
+/// 解析后的强类型字段，供 `main.mbt` 装配调用。
+struct CliConfig {
   expr : String
   data : String? // 内联 JSON 字符串
   file : String? // JSON 文件路径
@@ -34,7 +35,7 @@ pub struct CliConfig {
 /// - `--sequence <n>`：guardrails sequence 选项（超限抛 D2015）。
 /// - `--no-data`：使用 undefined 上下文求值。
 /// - `--help` / `-h`：由 argparse 内建提供。
-pub fn cli_command() -> @argparse.Command {
+fn cli_command() -> @argparse.Command {
   @argparse.Command(
     "moonata",
     about="Moonata - JSONata 查询/转换语言 (MoonBit 实现)",
@@ -95,13 +96,13 @@ pub fn cli_command() -> @argparse.Command {
 }
 
 ///|
-/// 将 argv 解析为 `CliConfig`。
+/// 将 argv 解析为 `CliConfig`，直接基于 `@argparse.parse` 完成。
 ///
 /// - 由 argparse 处理 `--help`/`-h`（打印帮助并 exit 0）与参数校验错误
 ///   （抛出已格式化的 `ArgError`，调用方可 catch 后直接打印）。
 /// - `--max-depth` / `--stack` / `--timeout` / `--sequence` 的整型校验由本函数完成，
 ///   非法值抛出 `Failure`。
-pub fn parse_cli_config(argv : ArrayView[String]) -> CliConfig raise {
+fn parse_cli_config(argv : ArrayView[String]) -> CliConfig raise {
   let matches = @argparse.parse(cli_command(), argv~)
   let values : Map[String, Array[String]] = matches.values
   // 位置参数 expr 由 argparse 保证存在（single() + arg_required_else_help）

@@ -128,10 +128,10 @@ docs: update official test status
 
 ## 兼容性状态
 
-固定快照：2026-07-15，embedding-extending + guardrails 功能落地阶段。
+固定快照：2026-07-15，CLI 参数解析移入 cmd/main 包阶段。
 
 ```text
-本地测试：moon test 336/336
+本地测试：moon test 321/321
 官方可比对审计：eligible 1682, pass 1682, fail 0, skip 0
 通过率：100%
 ```
